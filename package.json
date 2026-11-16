@@ -1,0 +1,26 @@
+{
+  "name": "kanu",
+  "private": true,
+  "type": "module",
+  "description": "卡奴：Discord Activity 卡牌经营游戏",
+  "engines": {
+    "node": ">=22"
+  },
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -n server,client -c blue,green \"npm run dev -w @kanu/server\" \"npm run dev -w @kanu/client\"",
+    "tunnel": "cloudflared tunnel --url http://localhost:5173",
+    "build": "npm run build -w @kanu/client",
+    "start": "npm run start -w @kanu/server",
+    "test": "node scripts/test.mjs",
+    "typecheck": "tsc -p packages/shared && tsc -p packages/server && tsc -p packages/client"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "concurrently": "^10.0.7",
+    "typescript": "~6.0.3",
+    "vitest": "^5.1.0"
+  }
+}

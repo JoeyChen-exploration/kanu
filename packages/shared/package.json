@@ -1,0 +1,9 @@
+{
+  "name": "@kanu/shared",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./balance": "./src/balance.ts",
+    "./types": "./src/types.ts"
+  }
+}

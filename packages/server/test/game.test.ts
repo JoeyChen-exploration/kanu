@@ -144,8 +144,8 @@ describe('品相和评级（DESIGN 5.2）', () => {
 
 describe('价格（DESIGN 5、7、9.2）', () => {
   it('没封壳的卡按未评级系数 0.85，和真实品相无关（FR-APPR-5）', () => {
-    expect(publicPrice({ rarity: 'SSR', style: 'standard', publicGrade: null })).toBe(1275);
-    expect(publicPrice({ rarity: 'SSR', style: 'gold', publicGrade: null })).toBe(3825);
+    expect(publicPrice({ rarity: 'SSR', style: 'standard', publicGrade: null })).toBe(1870);
+    expect(publicPrice({ rarity: 'SSR', style: 'gold', publicGrade: null })).toBe(5610);
   });
 
   it('封壳卡按评级系数', () => {
@@ -154,12 +154,12 @@ describe('价格（DESIGN 5、7、9.2）', () => {
   });
 
   it('鉴定费', () => {
-    expect(loupeFee('SSR')).toBe(90);
+    expect(loupeFee('SSR')).toBe(125);
     expect(labFee('N', 'standard')).toBe(10);
     expect(gradingFee('UR', 'gold')).toBe(2700);
   });
 
   it('摊位费按 DESIGN 7 的表', () => {
-    expect([1, 2, 3, 4, 5, 6, 7, 8].map(rentForWeek)).toEqual([1000, 1250, 1563, 1953, 2441, 3052, 3815, 4768]);
+    expect([1, 2, 3, 4, 5, 6, 7, 8].map(rentForWeek)).toEqual([2500, 3125, 3906, 4883, 6104, 7629, 9537, 11921]);
   });
 });

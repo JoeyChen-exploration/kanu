@@ -5,13 +5,17 @@
 // 顾客模型（MVP 的四类，按 balance.ts 的出现率重新归一）：
 //   居民：60% 的概率需求能对上玩家手里的某张 N / R（DESIGN 的需求命中率），随机挑一张卖；
 //   富人：60% 的概率需求能对上玩家手里的某张 SR 以上，随机挑一张卖；
-//   收藏家：只收封壳卡，这个策略不送评，所以卖不出；
+//   收藏家：60% 的概率需求能对上玩家手里某张没封壳的 COLLECTOR.rawMinRarity 以上（这个策略不送评），随机挑一张卖；
 //   中间人：按基准价 40% 收未鉴定卡，玩家库存超过 30 张时把最便宜的一张卖给他。
 // 讨价还价：玩家按"市场价 × 顾客类型系数"开价；心理价位够就成交，不够就按心理价位的 90%–100% 成交。
+// 开包：每天开 N 包，周五起留够这周的租金再开。整周守着租金不开包的打法开局就开不出包（1,500 < 第一周租金 2,500），注定破产，不列。
 // 交租：钱不够先把最值钱的卡按市场价 50% 抵押（简化成不赎回），还不够就破产。
 // 买店：交完租后手上有 SHOP_PRICE + 2,000 就买。
+//
+// 2026-11-17 定的目标（每天 2 包、周五起留租金）：破产率约 15%、买店率约 70%、每周交租前净赚中位约 10,000 信用点（约 1,000 金币）。
+// 没算进去的：送评、鉴定、科技树、顾客的具体标签、抵押赎回、新闻和供需。
 import {
-  COUNTER, CUSTOMER, CUSTOMER_TYPES, EXCHANGE, PACKS, PLAYER, RARITY, SEASON, SHOP_PRICE,
+  COLLECTOR, COUNTER, CUSTOMER, CUSTOMER_TYPES, EXCHANGE, PACKS, PLAYER, RARITY, RENT, SEASON, SHOP_PRICE,
   atLeast, type CustomerType, type Rarity, type Style,
 } from '@kanu/shared/balance';
 import { openPack } from '../packages/server/src/game/cards.ts';
@@ -26,11 +30,14 @@ const arg = (name: string, def: number) => {
 };
 const SEASONS = arg('seasons', 1000);
 const SEED = arg('seed', 1);
-// 调参用（不改 balance.ts 先试效果）：--per-slot 每时段顾客数、--hit 需求命中率（0–1）、--collector-raw 1 = 收藏家也收没封壳的 SR 以上
+// 调参用（不改 balance.ts 先试效果）：--per-slot 每时段顾客数、--hit 需求命中率（0–1）、--only-main 1 只跑主策略
 COUNTER.perSlot = arg('per-slot', COUNTER.perSlot);
 COUNTER.demandHitPpm = Math.round(arg('hit', COUNTER.demandHitPpm / 1e6) * 1e6);
-const COLLECTOR_RAW = arg('collector-raw', 0) === 1;
 const ONLY_MAIN = arg('only-main', 0) === 1;
+// --shop 买店价、--rent-base 第 1 周租金、--rent-growth 每周倍率
+const SHOP = arg('shop', SHOP_PRICE);
+RENT.base = arg('rent-base', RENT.base);
+RENT.growth = arg('rent-growth', RENT.growth);
 // --price SR=800,SSR=2500：临时改某几档的基准价
 const priceArg = process.argv.indexOf('--price');
 if (priceArg >= 0) for (const kv of String(process.argv[priceArg + 1]).split(',')) { const [r, v] = kv.split('='); RARITY[r as Rarity].basePrice = Number(v); }
@@ -87,8 +94,11 @@ function season(rng: Rng, packsPerDay: number, reserveFromDay: number): SeasonRe
         if (type === 'resident' && chance(rng, COUNTER.demandHitPpm)) {
           card = takeRandom(rng, inv, (c) => !atLeast(c.rarity, 'SR'));
           if (card) price = sell(rng, card, type);
-        } else if ((type === 'rich' || (COLLECTOR_RAW && type === 'collector')) && chance(rng, COUNTER.demandHitPpm)) {
+        } else if (type === 'rich' && chance(rng, COUNTER.demandHitPpm)) {
           card = takeRandom(rng, inv, (c) => atLeast(c.rarity, 'SR'));
+          if (card) price = sell(rng, card, type);
+        } else if (type === 'collector' && chance(rng, COUNTER.demandHitPpm)) {
+          card = takeRandom(rng, inv, (c) => atLeast(c.rarity, COLLECTOR.rawMinRarity));
           if (card) price = sell(rng, card, type);
         } else if (type === 'middleman' && inv.length > MIDDLEMAN_STOCK) {
           inv.sort((a, b) => a.value - b.value);
@@ -110,7 +120,7 @@ function season(rng: Rng, packsPerDay: number, reserveFromDay: number): SeasonRe
         credits -= due; week += 1;
       }
     }
-    if (!shopWeek && credits >= SHOP_PRICE + SHOP_BUFFER) { credits -= SHOP_PRICE; shopWeek = w; }
+    if (!shopWeek && credits >= SHOP + SHOP_BUFFER) { credits -= SHOP; shopWeek = w; }
   }
   return { bankrupts, shopWeek, weeklyNet, endCredits: credits };
 }
@@ -119,7 +129,7 @@ const pct = (xs: number[], p: number) => { const s = [...xs].sort((a, b) => a - 
 const fmt = (n: number) => Math.round(n).toLocaleString('en-US');
 
 console.log(`卡奴经济模拟：只走正规，${SEASONS} 个赛季 × ${SEASON.weeks} 周，种子 ${SEED}\n`);
-for (const [packsPerDay, reserveFromDay, label] of (ONLY_MAIN ? [[2, 5, '周五起才留租金']] : [[2, 0, '整周留租金'], [2, 5, '周五起才留租金'], [5, 5, '周五起才留租金']]) as ReadonlyArray<readonly [number, number, string]>) {
+for (const [packsPerDay, reserveFromDay, label] of (ONLY_MAIN ? [[2, 5, '周五起才留租金']] : [[2, 5, '周五起才留租金'], [5, 5, '周五起才留租金']]) as ReadonlyArray<readonly [number, number, string]>) {
   const rng = seeded(SEED);
   const rs = Array.from({ length: SEASONS }, () => season(rng, packsPerDay, reserveFromDay));
   const nets = rs.flatMap((r) => r.weeklyNet);

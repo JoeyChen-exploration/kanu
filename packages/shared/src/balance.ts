@@ -8,8 +8,9 @@ export type Rarity = (typeof RARITIES)[number];
 export const RARITY: Record<Rarity, { name: string; basePrice: number; perSeries: number }> = {
   N: { name: '普通', basePrice: 25, perSeries: 20 },
   R: { name: '稀有', basePrice: 100, perSeries: 14 },
-  SR: { name: '超稀有', basePrice: 400, perSeries: 8 },
-  SSR: { name: '特级稀有', basePrice: 1500, perSeries: 5 },
+  // 2026-11-17 模拟调参：SR 400 → 600、SSR 1,500 → 2,200，抬高中位玩家的周收入（目标中位约 1,000 金币）
+  SR: { name: '超稀有', basePrice: 600, perSeries: 8 },
+  SSR: { name: '特级稀有', basePrice: 2200, perSeries: 5 },
   UR: { name: '极稀有', basePrice: 6000, perSeries: 3 },
   LR: { name: '传说', basePrice: 20000, perSeries: 2 },
   MR: { name: '神话', basePrice: 60000, perSeries: 1 },
@@ -123,6 +124,7 @@ export const CUSTOMER: Record<CustomerType, {
   detect: { low_fake: number; high_fake: number };
 }> = {
   resident: { name: '下层区居民', ppm: 350_000, mvp: true, priceCoef: 0.8, patience: 4, detect: { low_fake: 300_000, high_fake: 100_000 } },
+  // 收藏家收 SR 以上的卡，封壳的不限稀有度但要评分够高（见 COLLECTOR）
   collector: { name: '收藏家', ppm: 200_000, mvp: true, priceCoef: 1.2, patience: 2, detect: { low_fake: 800_000, high_fake: 500_000 } },
   rich: { name: '上层区富人', ppm: 150_000, mvp: true, priceCoef: 1.4, patience: 3, detect: { low_fake: 100_000, high_fake: 50_000 } },
   middleman: { name: '黑市中间人', ppm: 150_000, mvp: true, priceCoef: 0.4, patience: 3, detect: { low_fake: 0, high_fake: 0 } },
@@ -145,19 +147,27 @@ export const COUNTER = {
   fakeCaughtRepLoss: 5,
 };
 
+/**
+ * 收藏家收什么（2026-11-17 模拟调参：原来只收封壳卡，保守玩家碰不到两成多的顾客，周收入中位太低）：
+ * 没封壳的卡要 rawMinRarity 及以上；封壳卡不限稀有度，但评分要 ≥ gradedMinGrade。
+ */
+export const COLLECTOR = { rawMinRarity: 'SR' as Rarity, gradedMinGrade: 9 };
+
 export const REPUTATION = { start: 50, min: 0, max: 100 };
 
 // ---------- 房租、店铺、破产、抵押（DESIGN 7） ----------
 export const RENT = {
   /** 第 n 周摊位费 = base × growth^(n−1)，四舍五入到整数 */
-  base: 1000,
+  // 2026-11-17 模拟调参：1,000 → 2,500，把保守玩家的破产率拉到约 15%
+  base: 2500,
   growth: 1.25,
   /** 每周日悉尼时间几点扣 */
   dueWeekday: 0,
   dueHour: 20,
   graceHours: 24,
 };
-export const SHOP_PRICE = 15_000;
+/** 2026-11-17 模拟调参：15,000 → 40,000，买店率约 70%（整季租金约 49,600，越早买越省） */
+export const SHOP_PRICE = 40_000;
 export const PAWN = { loanPct: 0.5, redeemPct: 0.6, days: 7 };
 
 export const PLAYER = {

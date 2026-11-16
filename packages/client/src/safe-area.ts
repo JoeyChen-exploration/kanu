@@ -1,7 +1,10 @@
 // 手机顶上的灵动岛 / 刘海、底下的主屏指示条。照搬旺财牌局 client/src/safe-area.js 的做法（服主 10-26 真机调过）：
 // Discord 手机版的小活动是整屏的，系统的 env(safe-area-inset-*) 多半拿不到，
-// 就看页面是不是占满整个屏幕、竖着拿：iPhone 顶 56、底 18；其他触屏手机顶 28；电脑、横屏、没占满屏幕都是 0。
+// 就看页面是不是占满整个屏幕、竖着拿：iPhone 顶 IOS_TOP、底 18；其他触屏手机顶 28；电脑、横屏、没占满屏幕都是 0。
 // 算好写到 :root 的 --island-top / --island-bottom，样式里用 max(16px, var(--island-top)) 往下让。
+
+/** 2026-11-17 卡奴 M0 真机实测：牌局用的 56 在卡奴首页仍被灵动岛挡住，加到 72 */
+const IOS_TOP = 72;
 
 function measure() {
   const probe = document.createElement('div');
@@ -18,7 +21,7 @@ function measure() {
   const ios = /iPhone|iPod/.test(navigator.userAgent);
   const touch = matchMedia('(pointer: coarse)').matches;
   return {
-    top: Math.max(env.top, full && tall ? (ios ? 56 : touch ? 28 : 0) : 0),
+    top: Math.max(env.top, full && tall ? (ios ? IOS_TOP : touch ? 28 : 0) : 0),
     bottom: Math.max(env.bottom, full && tall && ios ? 18 : 0),
   };
 }

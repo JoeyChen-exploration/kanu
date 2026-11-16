@@ -1,0 +1,19 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+data/
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+*.db
+coverage/
+*.log
+*.tsbuildinfo
+.DS_Store
+
+# Claude Code：本机配置（兄弟仓库的绝对路径）和钩子运行时的标记文件
+.claude/settings.local.json
+.claude/hooks/.pending-sync-check

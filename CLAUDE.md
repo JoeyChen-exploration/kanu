@@ -37,8 +37,11 @@ Discord Activity 卡牌经营游戏：玩家在 Discord 里打开网页小程序
 - 不提交 `.env` 和 `data/`。
 - 上面几条由 `.claude/hooks/guard.mjs` 自动拦截：在 main 上改文件或 commit、推 main、写兄弟仓库、提交 `.env` / `data/`。
 
-## 常用命令（脚手架搭好后补全）
+## 常用命令
 
-- `npm run dev`：本地开发（前端 + 服务器 + cloudflared 隧道）
-- `npm test`：单元测试
-- `npm run sim`：经济模拟
+- `npm run dev`：本地开发，同时起服务器（4790）和 Vite 前端（5173）
+- `npm run tunnel`：另开一个终端，cloudflared 把 5173 暴露成 https 地址，填进 Developer Portal 的 URL Mapping
+- `npm test`：单元测试（vitest；Windows 小写盘符的问题由 scripts/test.mjs 处理）
+- `npm run typecheck`：三个包的类型检查
+- `npm run build`：构建前端到 packages/client/dist，服务器启动时如果有就托管它
+- `npm run sim`：经济模拟（M1 加）

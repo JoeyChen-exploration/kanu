@@ -2,7 +2,7 @@
 
 跑在 Discord 里的卡牌经营小游戏（Discord Activity）。玩家在空间站下层区开一间卡牌店：抽卡进货、鉴定真伪、卖给 NPC 顾客，凑每周上涨的摊位费，最终买下整间店。赛季内赚到的信用点可以单向兑换成旺财（oceania-bot）的服务器金币。
 
-> 状态：设计阶段，代码还没开工（下一步是 SRS 里程碑 M0：跑通登录）。
+> 状态：M0 进行中（脚手架、Discord 登录、首页显示信用点和金币余额）。
 
 ## 文档
 
@@ -58,12 +58,14 @@ kanu/
 ```
 
 ```bash
-cp .env.example .env   # 填 Discord 应用、会话密钥、旺财接口等，见 SRS 第 10 节
+cp .env.example .env   # 默认 DEV_AUTH=1、WALLET_MODE=mock，不填 Discord 也能在浏览器里跑
 npm install
-npm run dev            # 前端 + 服务器 + 隧道（脚手架搭好后可用）
+npm run dev            # 服务器 http://127.0.0.1:4790 + 前端 http://localhost:5173
 npm test               # 单元测试
-npm run sim            # 经济模拟，改了 balance.ts 必跑
+npm run typecheck      # 类型检查
 ```
+
+**在 Discord 里跑**：在 Developer Portal 建应用、开 Activities，`.env` 填 `DISCORD_CLIENT_ID` / `DISCORD_CLIENT_SECRET`，另开终端 `npm run tunnel`，把打印出来的 `*.trycloudflare.com` 填进 URL Mapping 的根路径 `/`。
 
 联调金币兑换时，用旺财的 `node scripts/wallet-flow-drill.mjs --serve` 起一个本地 control-server，不要连生产钱包。卡奴不 import 旺财的任何代码，只通过 HTTP 调 `/wallet/*`。
 

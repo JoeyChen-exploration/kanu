@@ -159,6 +159,11 @@ describe('价格（DESIGN 5、7、9.2）', () => {
     expect(gradingFee('UR', 'gold')).toBe(2700);
   });
 
+  it('摊位费第 8 周封顶（软赛季，周数不清零）', () => {
+    expect(rentForWeek(9)).toBe(rentForWeek(8));
+    expect(rentForWeek(30)).toBe(11921);
+  });
+
   it('摊位费按 DESIGN 7 的表', () => {
     expect([1, 2, 3, 4, 5, 6, 7, 8].map(rentForWeek)).toEqual([2500, 3125, 3906, 4883, 6104, 7629, 9537, 11921]);
   });

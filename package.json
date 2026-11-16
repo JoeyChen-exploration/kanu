@@ -16,7 +16,8 @@
     "start": "npm run start -w @kanu/server",
     "test": "node scripts/test.mjs",
     "typecheck": "tsc -p packages/shared && tsc -p packages/server && tsc -p packages/client",
-    "sim": "tsx scripts/sim.ts"
+    "sim": "tsx scripts/sim.ts",
+    "sim:collect": "tsx scripts/collect-sim.ts"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",

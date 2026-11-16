@@ -35,7 +35,7 @@ export function gradingFee(rarity: Rarity, style: Style): number {
   return Math.max(APPRAISAL.grading.min, Math.round(RARITY[rarity].basePrice * STYLE[style].mult * APPRAISAL.grading.pct));
 }
 
-/** 第 n 周摊位费 = base × growth^(n−1)（每个玩家自己的第几周，破产后从 1 重算） */
+/** 第 n 周摊位费 = base × growth^(min(n, capWeek)−1)（每个玩家自己的第几周，从头开始后从 1 重算） */
 export function rentForWeek(week: number): number {
-  return Math.round(RENT.base * RENT.growth ** (Math.max(1, week) - 1));
+  return Math.round(RENT.base * RENT.growth ** (Math.min(Math.max(1, week), RENT.capWeek) - 1));
 }

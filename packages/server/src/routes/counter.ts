@@ -18,7 +18,8 @@ import {
   rollCustomer, rollCustomerCount, type Demand, type SellableCard, type SellablePack,
 } from '../game/customers.ts';
 import { loadLines, type LineEvent } from '../content.ts';
-import { showcaseEffects, showcaseScore } from '../game/showcase.ts';
+import { grandChancePpm, showcaseEffects, showcaseScore } from '../game/showcase.ts';
+import { chance } from '../game/rng.ts';
 
 const lines = loadLines();
 
@@ -83,9 +84,11 @@ export function registerCounterRoutes(app: FastifyInstance, deps: Deps, now: () 
     if (!rows.some((c) => c.status === 'waiting') && rows.length < player.day_customer_count) {
       const series = repo.allSeries().map((s) => ({ id: s.id, name: s.name, price: PACKS[s.kind].price }));
       const templates = repo.allTemplates().map((x) => ({ id: x.id, name: x.name, rarity: x.rarity, tags: JSON.parse(x.tags) as string[] }));
-      const forceType = rows.length >= player.day_customer_count - extra ? 'collector' as const : undefined;
-      // 珍藏柜是门面：按顾客进门那一刻柜里的卡算展示分，抬高预算、心理价位和耐心
-      const showcase = showcaseEffects(showcaseScore(repo.showcaseCards(ownerId).map((x) => ({ rarity: x.rarity as Rarity, style: x.style }))));
+      // 珍藏柜是门面：按顾客进门那一刻柜里的卡算展示分，抬高预算、心理价位和耐心；分够高还可能引来大藏家
+      const score = showcaseScore(repo.showcaseCards(ownerId).map((x) => ({ rarity: x.rarity as Rarity, style: x.style })));
+      const showcase = showcaseEffects(score);
+      const forceType: CustomerType | undefined = rows.length >= player.day_customer_count - extra ? 'collector'
+        : grandChancePpm(score) > 0 && chance(rng, grandChancePpm(score)) ? 'grand' : undefined;
       const c = rollCustomer(rng, { inventory: repo.sellableCards(ownerId).map(toSellable), packs: sellablePacks(ownerId), templates, series, typicalPrice, forceType, showcase });
       repo.insertCustomer({
         owner_id: ownerId, day_key: day, slot: 0, seat: rows.length, type: c.type, demand: JSON.stringify(c.demand), float: c.float,

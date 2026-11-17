@@ -2,7 +2,7 @@
 // 数字全部从 balance.ts 读，调了数值手册跟着变。只讲公开规则，不写顾客心理价位怎么算、品相掉没掉这类隐藏信息。
 import { useRef, useState, type ReactNode } from 'react';
 import {
-  ANNOUNCE, BINDER_KINDS, BINDERS, COUNTER, CUSTOMER, CUSTOMER_TYPES, EXCHANGE, LOOSE, PACKS, PITY, RARITIES, RARITY,
+  ANNOUNCE, BINDER_KINDS, GRAND_COLLECTOR, BINDERS, COUNTER, CUSTOMER, CUSTOMER_TYPES, EXCHANGE, LOOSE, PACKS, PITY, RARITIES, RARITY,
   RENT, SERIAL_LIMIT, SHOP_PRICE, SHOWCASE, STARTER_BINDER, STORE, STYLE, STYLES, UNGRADED_MULT, type CustomerWants,
 } from '@kanu/shared/balance';
 import { Card, GameDayContext, fmt } from './Card.tsx';
@@ -30,6 +30,7 @@ const CUSTOMER_NOTE: Partial<Record<string, string>> = {
   speculator: '炒卡的，只想低价收好卡，耐心很差。',
   streamer: '要没拆的卡包，回去直播开箱，按卡包价加价收。',
   middleman: '什么卡都收，但只给很低的价，不问来路。',
+  grand: '高级客人。珍藏柜展示分够高才会上门，只看 UR 以上，出价是富人的两倍，但耐心少、眼光毒。',
 };
 
 function wantsText(w: CustomerWants) {
@@ -49,7 +50,8 @@ const WEAR_SAMPLES = [
 ];
 
 const counterDays = Object.keys(COUNTER.customersPerDayDist).map(Number);
-const mvpTypes = CUSTOMER_TYPES.filter((t) => CUSTOMER[t].mvp);
+/** 手册里介绍的客人：MVP 的几类 + 珍藏柜引来的大藏家 */
+const mvpTypes = CUSTOMER_TYPES.filter((t) => CUSTOMER[t].mvp || t === 'grand');
 
 const PAGES: Array<{ title: string; body: ReactNode }> = [
   {
@@ -201,6 +203,7 @@ const PAGES: Array<{ title: string; body: ReactNode }> = [
         <ul>
           <li>柜里的卡越稀有，<b>展示分</b>越高（{RARITIES.filter((r) => SHOWCASE.rarityScore[r] > 0).map((r) => `${r} ${SHOWCASE.rarityScore[r]}`).join('、')}，特殊风格再乘倍数）。</li>
           <li>每 {SHOWCASE.pointsPerPct} 分，客人的预算和出价 <b>+1%</b>，最多 +{SHOWCASE.maxPriceBonus * 100}%；到 {SHOWCASE.patienceAt} 分，每位客人耐心 <b>+{SHOWCASE.patienceBonus}</b>。</li>
+          <li>展示分到 {GRAND_COLLECTOR.minScore} 分以上，有几率引来 🎩 <b>大藏家</b>，分越高越常来。</li>
           <li>柜里的卡有客人要也能直接卖，但卖掉展示分就掉了。</li>
           <li>店倒闭从头开始时，柜里的卡会<b>留下来</b>；不能拿去抵押；不占卡册格子。</li>
         </ul>

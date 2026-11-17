@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { RARITIES, RARITY } from '@kanu/shared/balance';
+import { PACKS, RARITIES, RARITY } from '@kanu/shared/balance';
 import type { Repo, SeriesContent } from './db/index.ts';
 
 export const CONTENT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'content', 'series');
@@ -12,13 +12,16 @@ export function loadSeries(dir = CONTENT_DIR): SeriesContent[] {
     .map((f) => JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')) as SeriesContent);
 }
 
-/** 每个稀有度的张数要和 DESIGN 3.2 对上，否则开包的模板下标会越界 */
+/** 每个稀有度的张数要和这类卡包的构成（PACKS[kind].composition，DESIGN 3.2）对上，否则开包的模板下标会越界 */
 export function checkSeries(s: SeriesContent): string[] {
   const errors: string[] = [];
+  if (s.kind !== 'themed' && s.kind !== 'premium') return [`${s.id} 的 kind 要是 themed 或 premium`];
+  const want = PACKS[s.kind].composition;
   for (const r of RARITIES) {
     const n = s.cards.filter((c) => c.rarity === r).length;
-    if (n !== RARITY[r].perSeries) errors.push(`${s.id} 的 ${r} 有 ${n} 张，应该是 ${RARITY[r].perSeries} 张`);
+    if (n !== want[r]) errors.push(`${s.id}（${PACKS[s.kind].name}）的 ${r} 有 ${n} 张，应该是 ${want[r]} 张`);
   }
+  for (const c of s.cards) if (!RARITY[c.rarity]) errors.push(`${c.id} 的稀有度 ${c.rarity} 不认识`);
   const ids = new Set<string>();
   for (const c of s.cards) {
     if (ids.has(c.id)) errors.push(`${c.id} 重复`);

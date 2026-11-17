@@ -2,10 +2,10 @@
 // 用法：npm run sim [-- --seasons 1000 --seed 1]
 //
 // 现在只有"只走正规"策略：只开正规包、不鉴定、不送评、不点科技树、不兑金币。
-// 顾客模型（MVP 的四类，按 balance.ts 的出现率重新归一）：
-//   居民：60% 的概率需求能对上玩家手里的某张 N / R（DESIGN 的需求命中率），随机挑一张卖；
-//   富人：60% 的概率需求能对上玩家手里的某张 SR 以上，随机挑一张卖；
-//   收藏家：60% 的概率需求能对上玩家手里某张没封壳的 COLLECTOR.rawMinRarity 以上（这个策略不送评），随机挑一张卖；
+// 顾客模型（MVP 的 9 类，按 balance.ts 的出现率重新归一，需求按 CUSTOMER[type].wants）：
+//   要卡的：需求命中率（demandHitPpm）的概率对上玩家手里某张符合稀有度的卡，随机挑一张卖（学生对特殊风格加价）；
+//           怀旧老顾客点名的那张也按命中率算；
+//   开箱主播要没拆的卡包：这个策略买了就拆，手上没有卡包，卖不出；
 //   中间人：按基准价 40% 收未鉴定卡，玩家库存超过 30 张时把最便宜的一张卖给他。
 // 讨价还价：玩家按"市场价 × 顾客类型系数"开价；心理价位够就成交，不够就按心理价位的 90%–100% 成交。
 // 开包：每天开 N 包，周五起留够这周的租金再开。整周守着租金不开包的打法开局就开不出包（1,500 < 第一周租金 2,500），注定破产，不列。
@@ -15,12 +15,13 @@
 // 2026-11-17 定的目标（每天 2 包、周五起留租金）：破产率约 15%、买店率约 70%、每周交租前净赚中位约 10,000 信用点（约 1,000 金币）。
 // 没算进去的：送评、鉴定、科技树、顾客的具体标签、抵押赎回、新闻和供需。
 import {
-  COLLECTOR, COUNTER, CUSTOMER, CUSTOMER_TYPES, EXCHANGE, PACKS, PLAYER, RARITY, RENT, SEASON, SHOP_PRICE,
-  atLeast, type CustomerType, type Rarity, type Style,
+  COUNTER, CUSTOMER, CUSTOMER_TYPES, EXCHANGE, PACKS, PLAYER, RARITY, RENT, SEASON, SHOP_PRICE,
+  type CustomerType, type Rarity, type Style,
 } from '@kanu/shared/balance';
 import { openPack } from '../packages/server/src/game/cards.ts';
 import { publicPrice, rentForWeek } from '../packages/server/src/game/price.ts';
 import { between, chance, pickPpm, seeded, type Rng } from '../packages/server/src/game/rng.ts';
+import { rollCustomerCount } from '../packages/server/src/game/customers.ts';
 
 interface Card { rarity: Rarity; style: Style; value: number }
 
@@ -31,7 +32,8 @@ const arg = (name: string, def: number) => {
 const SEASONS = arg('seasons', 1000);
 const SEED = arg('seed', 1);
 // 调参用（不改 balance.ts 先试效果）：--per-day 每个营业日顾客数、--hit 需求命中率（0–1）、--only-main 1 只跑主策略
-COUNTER.customersPerDay = arg('per-day', COUNTER.customersPerDay);
+// --per-day：把每天的平均顾客数改成这个数（在随机分布上整体加减）
+const PER_DAY_SHIFT = arg('per-day', COUNTER.customersPerDay) - COUNTER.customersPerDay;
 COUNTER.demandHitPpm = Math.round(arg('hit', COUNTER.demandHitPpm / 1e6) * 1e6);
 const ONLY_MAIN = arg('only-main', 0) === 1;
 // --shop 买店价、--rent-base 第 1 周租金、--rent-growth 每周倍率
@@ -47,7 +49,9 @@ const SHOP_BUFFER = 2000;
 const MIDDLEMAN_STOCK = 30;
 
 function sell(rng: Rng, card: Card, type: CustomerType): number {
-  const ask = card.value * CUSTOMER[type].priceCoef;
+  const w = CUSTOMER[type].wants;
+  const bonus = w.kind === 'card' && w.styleBonus && card.style !== 'standard' ? w.styleBonus : 1;
+  const ask = card.value * CUSTOMER[type].priceCoef * bonus;
   const mind = ask * between(rng, COUNTER.floatMin, COUNTER.floatMax);
   return Math.round(mind >= ask ? ask : mind * between(rng, 0.9, 1));
 }
@@ -80,30 +84,28 @@ function season(rng: Rng, packsPerDay: number, reserveFromDay: number): SeasonRe
     let income = 0, spent = 0;
     for (let day = 0; day < 7; day += 1) {
       const reserve = shopWeek || day < reserveFromDay ? 0 : rentForWeek(week);
-      const n = Math.max(0, Math.min(packsPerDay, Math.floor((credits - reserve) / PACKS.normal.price)));
+      const n = Math.max(0, Math.min(packsPerDay, Math.floor((credits - reserve) / PACKS.themed.price)));
       for (let p = 0; p < n; p += 1) {
-        credits -= PACKS.normal.price; spent += PACKS.normal.price;
-        const r = openPack(rng, { packType: 'normal', pityCount: pity, serialAvailable: () => true });
+        credits -= PACKS.themed.price; spent += PACKS.themed.price;
+        const r = openPack(rng, { packType: 'themed', pityCount: pity, serialAvailable: () => true });
         pity = r.pityCount;
         for (const c of r.cards) inv.push({ rarity: c.rarity, style: c.style, value: publicPrice({ rarity: c.rarity, style: c.style, publicGrade: null }) });
       }
-      for (let k = 0; k < COUNTER.customersPerDay; k += 1) {
+      const todayCustomers = rollCustomerCount(rng, PER_DAY_SHIFT);
+      for (let k = 0; k < todayCustomers; k += 1) {
         const type = pickPpm(rng, MVP_TYPES, (t) => CUSTOMER[t].ppm);
         let card: Card | null = null;
         let price = 0;
-        if (type === 'resident' && chance(rng, COUNTER.demandHitPpm)) {
-          card = takeRandom(rng, inv, (c) => !atLeast(c.rarity, 'SR'));
+        const wants = CUSTOMER[type].wants;
+        if (type === 'middleman') {
+          if (inv.length > MIDDLEMAN_STOCK) {
+            inv.sort((a, b) => a.value - b.value);
+            card = inv.shift()!;
+            price = Math.round(RARITY[card.rarity].basePrice * CUSTOMER.middleman.priceCoef);
+          }
+        } else if (wants.kind === 'card' && chance(rng, COUNTER.demandHitPpm)) {
+          card = takeRandom(rng, inv, (c) => wants.rarities.includes(c.rarity));
           if (card) price = sell(rng, card, type);
-        } else if (type === 'rich' && chance(rng, COUNTER.demandHitPpm)) {
-          card = takeRandom(rng, inv, (c) => atLeast(c.rarity, 'SR'));
-          if (card) price = sell(rng, card, type);
-        } else if (type === 'collector' && chance(rng, COUNTER.demandHitPpm)) {
-          card = takeRandom(rng, inv, (c) => atLeast(c.rarity, COLLECTOR.rawMinRarity));
-          if (card) price = sell(rng, card, type);
-        } else if (type === 'middleman' && inv.length > MIDDLEMAN_STOCK) {
-          inv.sort((a, b) => a.value - b.value);
-          card = inv.shift()!;
-          price = Math.round(RARITY[card.rarity].basePrice * CUSTOMER.middleman.priceCoef);
         }
         credits += price; income += price;
       }

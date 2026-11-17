@@ -60,13 +60,54 @@ export interface CardView {
   createdAt: number;
 }
 
+// ---------- 进货和卡包（DESIGN 4，2026-11-17 卡包重做） ----------
+
+export interface StorePack {
+  seriesId: string;
+  name: string;
+  /** themed 主题包 / premium 典藏包 */
+  kind: string;
+  kindName: string;
+  price: number;
+  /** 这种卡包里一共几张卡（图鉴） */
+  cardCount: number;
+  /** 各稀有度的爆率（百分比，给玩家看的） */
+  odds: Array<{ rarity: string; percent: number }>;
+}
+
+export interface StoreResponse {
+  ok: true;
+  packs: StorePack[];
+  /** 本营业日电脑订货还能买几包；测试账号是 null（不限） */
+  packsLeftToday: number | null;
+}
+
+export interface BuyPacksResponse {
+  ok: true;
+  credits: number;
+  packsLeftToday: number | null;
+  /** 新买到的卡包 id（原封不动放进库存） */
+  packIds: number[];
+}
+
+export interface SealedPackGroup {
+  seriesId: string;
+  name: string;
+  kind: string;
+  /** 这一种还没拆的卡包 id */
+  ids: number[];
+}
+
+export interface SealedPacksResponse {
+  ok: true;
+  groups: SealedPackGroup[];
+}
+
 export interface OpenPackResponse {
   ok: true;
   cards: CardView[];
-  credits: number;
   pityCount: number;
   pityTriggered: boolean;
-  packsLeftToday: number;
 }
 
 export interface InventoryResponse {
@@ -104,7 +145,8 @@ export interface CustomerView {
   typeName: string;
   /** 最近一句台词 */
   line: string;
-  demand: { rarities: string[]; tag: string | null; text: string };
+  /** 想要什么：card 要卡（text 是"火属性的 SR 以上的卡"或"「霓虹龙·影」"），pack 要没拆的卡包 */
+  demand: { kind: 'card' | 'pack'; text: string };
   budgetLow: number;
   budgetHigh: number;
   patience: number;
@@ -116,9 +158,14 @@ export interface CustomerView {
 
 export interface CounterResponse {
   ok: true;
-  customers: CustomerView[];
   /** 第几个营业日（玩家自己推进，打烊 +1） */
   day: number;
+  /** 眼前这一位；没人了是 null */
+  current: CustomerView | null;
+  /** 今天已经接待过的（成交、走人、请走），最新的在最后 */
+  served: CustomerView[];
+  /** 今天的顾客都接待完了，可以打烊。今天一共来几位不告诉玩家 */
+  done: boolean;
 }
 
 export interface EndDayResponse {
@@ -130,12 +177,17 @@ export interface EndDayResponse {
 export interface EligibleCardsResponse {
   ok: true;
   cards: Array<{ card: CardView; quickPrice: number }>;
+  /** 开箱主播要的是没拆的卡包 */
+  packs: Array<{ id: number; seriesId: string; name: string; kind: string; quickPrice: number }>;
 }
 
 export interface OfferResponse {
   ok: true;
   outcome: 'deal' | 'counter' | 'too_high' | 'left' | 'caught';
   customer: CustomerView;
+  /** 这位走了以后进门的下一位（没有了是 null） */
+  next: CustomerView | null;
+  done: boolean;
   /** 成交价（deal 时） */
   price: number | null;
   credits: number;

@@ -1,12 +1,13 @@
 // 柜台页（FR-CTR-1～5）：顾客一位一位进门（学深空当铺）。只看得到眼前这一位，处理完下一位才进来，
 // 不知道下一位是谁、今天还剩几位。挑卡（或卡包）→ 开价 / 接受还价 / 快速出售 / 请走。都接待完就能打烊。
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { COUNTER, STORE } from '@kanu/shared/balance';
-import type { CardAppraisalResponse, CardView, CounterBinderPageResponse, CounterResponse, CustomerView, EligibleCardsResponse, EndDayResponse, MeResponse, OfferResponse } from '@kanu/shared/types';
+import type { CardAppraisalResponse, CardView, InspectionView, CounterBinderPageResponse, CounterResponse, CustomerView, EligibleCardsResponse, EndDayResponse, MeResponse, OfferResponse } from '@kanu/shared/types';
 import { api, newIdempotencyKey } from '../api.ts';
 import { Card, fmt } from '../Card.tsx';
 import { DragGhost, FloatWindow, useDrag } from '../drag.tsx';
 import { inspectionText } from '../appraisalText.ts';
+import { FakeGuide, LoupeLens } from '../Loupe.tsx';
 import { PHONE_ZONE, dropOnPhone } from '../Phone.tsx';
 
 export const AVATAR: Record<string, string> = {
@@ -26,6 +27,8 @@ export function Counter({ onChange }: { onChange: (patch: Partial<MeResponse>) =
   const [openBinders, setOpenBinders] = useState<OpenBinder[]>([]);
   /** 柜台台面上摆着的东西也放在这一层：换客人时留着 */
   const [table, setTable] = useState<Item[]>([]);
+  /** 假卡识别手册（道具浮窗）开着没有 */
+  const [guide, setGuide] = useState(false);
 
   const load = () => api<CounterResponse>('/counter').then(setData).catch((e: Error) => setErr(e.message));
   useEffect(() => { void load(); }, []);
@@ -65,7 +68,7 @@ export function Counter({ onChange }: { onChange: (patch: Partial<MeResponse>) =
 
       {data.current && (
         <Deal key={data.current.id} customer={data.current} onChange={onChange} onDone={afterResult} onUpdate={(c) => setData({ ...data, current: c })}
-          openBinders={openBinders} setOpenBinders={setOpenBinders} table={table} setTable={setTable} />
+          openBinders={openBinders} setOpenBinders={setOpenBinders} table={table} setTable={setTable} guide={guide} setGuide={setGuide} />
       )}
 
       {data.done && (
@@ -88,6 +91,7 @@ export function Counter({ onChange }: { onChange: (patch: Partial<MeResponse>) =
         </details>
       )}
       {err && <p className="error">{err}</p>}
+      {guide && <FakeGuide onClose={() => setGuide(false)} />}
     </section>
   );
 }
@@ -118,7 +122,7 @@ const MATCH_FIRST_KEY = 'kanu.counter.matchFirst';
 const readMatchFirst = () => { try { return localStorage.getItem(MATCH_FIRST_KEY) !== '0'; } catch { return true; } };
 
 /** 柜台卡册浮窗的内容：一页 3 × 3，符合这位顾客的高亮、能拖上台面（轻点也行），不符合的变暗 */
-function BinderPicker({ customerId, binder, onPick, bind, draggingId, onTable }: {
+function BinderPicker({ customerId, binder, onPick, bind, draggingId, onTable, onCards }: {
   customerId: number;
   binder: { id: number | 'showcase'; name: string };
   onPick: (item: Item) => void;
@@ -126,6 +130,8 @@ function BinderPicker({ customerId, binder, onPick, bind, draggingId, onTable }:
   draggingId: number | null;
   /** 已经摆在台面上的卡（卡册里标"已在台面"） */
   onTable: Set<number>;
+  /** 把这一页的卡报上去（放大镜的镜片要用卡面） */
+  onCards: (cards: CardView[]) => void;
 }) {
   const [matchFirst, setMatchFirst] = useState(readMatchFirst);
   const [page, setPage] = useState(1);
@@ -143,6 +149,7 @@ function BinderPicker({ customerId, binder, onPick, bind, draggingId, onTable }:
     setPage(1);
   };
   const cards = data?.cards ?? [];
+  useEffect(() => { onCards(cards.map((c) => c.card)); }, [data]);
   return (
     <>
       <div className="picker-head">
@@ -202,7 +209,10 @@ const keyOf = (it: Item) => `${it.kind}-${it.id}`;
  * 点台面上的一样选中它 → 调价 → 按"开价 / 接受还价 / 快速出售"。台面上的东西换客人时留着，
  * 不符合新客人要求的变暗。台面上留了客人那一侧，以后客人卖卡给你时，他的卡也摆在台面上。
  */
-function Deal({ customer, onChange, onDone, onUpdate, openBinders, setOpenBinders, table, setTable }: {
+/** 放大镜在一张卡上停多久算查验（毫秒，界面手感，不是游戏数值） */
+const LOUPE_DWELL_MS = 300;
+
+function Deal({ customer, onChange, onDone, onUpdate, openBinders, setOpenBinders, table, setTable, guide, setGuide }: {
   customer: CustomerView;
   onChange: (patch: Partial<MeResponse>) => void;
   onDone: (text: string) => void;
@@ -213,6 +223,9 @@ function Deal({ customer, onChange, onDone, onUpdate, openBinders, setOpenBinder
   /** 台面上的东西；放在上一层，换客人时留着 */
   table: Item[];
   setTable: (f: (xs: Item[]) => Item[]) => void;
+  /** 假卡识别手册开着没有（放在上一层，换客人时不关） */
+  guide: boolean;
+  setGuide: (v: boolean) => void;
 }) {
   const [stock, setStock] = useState<EligibleCardsResponse | null>(null);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
@@ -261,28 +274,43 @@ function Deal({ customer, onChange, onDone, onUpdate, openBinders, setOpenBinder
   });
   const sourceBind = (it: Item): BindProps => bind({ item: it, from: 'source' });
 
-  // 放大镜（柜台上的道具，学深空当铺）：把放大镜拖到卡上查验。每张卡只查一次，结论不变，只有自己知道
-  const [looks, setLooks] = useState<Record<number, string>>({});
+  // 放大镜（柜台上的道具，学深空当铺）：拿着放大镜在卡上停一下（或松手）就是查验。每张卡只查一次，结论不变，只有自己知道。
+  // 镜片里是这张卡的放大卡面 + 按结论画的细节（Loupe.tsx）
+  const [looks, setLooks] = useState<Record<number, InspectionView | null>>({});
+  /** 看得到的卡（台面、卡册浮窗里的），镜片要用卡面 */
+  const seen = useRef(new Map<number, CardView>());
+  for (const it of table) if (it.kind === 'card') seen.current.set(it.id, it.card);
+  const asking = useRef(new Set<number>());
   const inspectCard = async (cardId: number) => {
+    if (looks[cardId] || asking.current.has(cardId)) return;
+    asking.current.add(cardId);
     try {
       const r = await api<CardAppraisalResponse>(`/cards/${cardId}/inspect`, { method: 'POST', body: {} });
       if (r.inspection) {
-        const text = inspectionText(r.inspection);
-        setLooks((m) => ({ ...m, [cardId]: text }));
-        setNote(`🔍「${r.card.name}」：${text}`);
+        setLooks((m) => ({ ...m, [cardId]: r.inspection }));
+        setNote(`🔍「${r.card.name}」：${inspectionText(r.inspection)}`);
       }
-    } catch (e) { setNote((e as Error).message); }
+    } catch (e) { setNote((e as Error).message); } finally { asking.current.delete(cardId); }
   };
   const loupe = useDrag<'loupe'>((_, zone) => { if (zone.startsWith('card-')) void inspectCard(Number(zone.slice(5))); });
+  // 在一张卡上停 LOUPE_DWELL_MS 就算查验（不用松手），镜片里马上出现细节
+  const hoverId = loupe.drag?.zone?.startsWith('card-') ? Number(loupe.drag.zone.slice(5)) : null;
+  useEffect(() => {
+    if (hoverId === null) return;
+    const t = window.setTimeout(() => void inspectCard(hoverId), LOUPE_DWELL_MS);
+    return () => window.clearTimeout(t);
+  }, [hoverId]);
   // 台面上的卡以前查过的，把结论也带出来
   useEffect(() => {
     for (const it of table) {
       if (it.kind !== 'card' || looks[it.id] !== undefined) continue;
       api<CardAppraisalResponse>(`/cards/${it.id}/appraisal`)
-        .then((r) => setLooks((m) => ({ ...m, [it.id]: r.inspection ? inspectionText(r.inspection) : '' })))
+        .then((r) => setLooks((m) => ({ ...m, [it.id]: r.inspection })))
         .catch(() => {});
     }
   }, [table]);
+  const lensRect = hoverId !== null ? document.querySelector(`[data-drop="card-${hoverId}"] .card`)?.getBoundingClientRect() ?? null : null;
+  const lensCard = hoverId !== null ? seen.current.get(hoverId) ?? null : null;
 
   const send = async (path: 'offer' | 'quick', p?: number) => {
     if (!selected) return;
@@ -345,6 +373,7 @@ function Deal({ customer, onChange, onDone, onUpdate, openBinders, setOpenBinder
           <div className="counter-side customer-side" aria-hidden />
           {/* 放大镜：柜台上的道具，按住拖到卡上查验 */}
           <button className={loupe.drag ? 'loupe-tool lifted' : 'loupe-tool'} title="放大镜：拖到卡上查验" aria-label="放大镜" {...loupe.bind('loupe')}>🔍</button>
+          <button className="guide-tool" title="假卡识别手册" aria-label="假卡识别手册" onClick={() => setGuide(!guide)}>📕</button>
           <div className="counter-side my-side">
             {table.length === 0 && <p className="counter-empty">{fromSource ? '松手放到柜台上' : '把要卖的卡拖到柜台上，可以摆好几张'}</p>}
             {table.map((it) => {
@@ -356,7 +385,7 @@ function Deal({ customer, onChange, onDone, onUpdate, openBinders, setOpenBinder
                 <button key={k} className={cls} onClick={() => select(it)} {...bind({ item: it, from: 'table' })} data-drop={it.kind === 'card' ? `card-${it.id}` : undefined}>
                   <ItemArt item={it} />
                   <span className="cell-price">{ok ? `快卖 ${fmt(wanted.get(k)!)}` : '这位不要'}</span>
-                  {it.kind === 'card' && looks[it.id] && <span className="look-chip">🔍 {looks[it.id]}</span>}
+                  {it.kind === 'card' && looks[it.id] && <span className="look-chip">🔍 {inspectionText(looks[it.id]!)}</span>}
                 </button>
               );
             })}
@@ -436,13 +465,17 @@ function Deal({ customer, onChange, onDone, onUpdate, openBinders, setOpenBinder
           onClose={() => setOpenBinders((xs) => xs.filter((x) => x.id !== b.id))}>
           <BinderPicker customerId={customer.id} binder={b} onPick={place} bind={sourceBind}
             draggingId={drag?.item.item.kind === 'card' ? drag.item.item.id : null}
-            onTable={new Set(table.filter((t) => t.kind === 'card').map((t) => t.id))} />
+            onTable={new Set(table.filter((t) => t.kind === 'card').map((t) => t.id))}
+            onCards={(cs) => { for (const c of cs) seen.current.set(c.id, c); }} />
         </FloatWindow>
       ))}
+      {loupe.drag && lensRect && lensCard && (
+        <LoupeLens x={loupe.drag.x} y={loupe.drag.y} rect={lensRect} card={lensCard} inspection={looks[lensCard.id] ?? null} />
+      )}
       {loupe.drag && (
         <DragGhost x={loupe.drag.x} y={loupe.drag.y}>
           <span className="loupe-ghost" aria-hidden>🔍</span>
-          <span className="ghost-hint">{loupe.drag.zone?.startsWith('card-') ? '松手查验这张卡' : '拖到要查验的卡上'}</span>
+          {!lensCard && <span className="ghost-hint">拿到要查验的卡上停一下</span>}
         </DragGhost>
       )}
       {drag && (

@@ -283,12 +283,18 @@ h2 small { color: var(--muted); font-weight: normal; font-size: 13px; margin-lef
 }
 .counter-side { min-height: 24px; padding: 10px 12px; }
 .customer-side { min-height: 18px; border-bottom: 1px dashed #5a4330; }
-.my-side { min-height: 110px; display: flex; align-items: center; justify-content: center; }
-.counter-empty { margin: 0; color: #c9b08a; font-size: 14px; text-align: center; }
-.counter-item { display: flex; align-items: center; gap: 12px; width: 100%; }
-.counter-item .card, .counter-item .pack-art { width: 76px; flex: none; }
-.counter-item-info { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; }
-.counter-item-info .hint { color: #c9b08a; }
+.my-side { min-height: 120px; display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: center; gap: 10px; }
+.counter-empty { margin: auto 0; color: #c9b08a; font-size: 14px; text-align: center; }
+.table-item { width: 68px; flex: none; background: none; border: none; padding: 0; border-radius: 10px; }
+.table-item .pack-art { width: 100%; }
+.table-item .cell-price { color: #f5d28a; text-align: center; }
+.table-item.on { box-shadow: 0 0 0 2px var(--accent), 0 0 14px color-mix(in srgb, var(--accent) 60%, transparent); transform: translateY(-4px); }
+.table-item.unwanted { opacity: 0.45; filter: grayscale(0.7); }
+.table-item.unwanted .cell-price { color: #c9b08a; }
+.table-item.dragging { opacity: 0.25; }
+.table-tip { font-size: 12px; margin: 0 0 8px; }
+.offer-box { background: var(--panel-2); border-radius: 12px; padding: 10px 12px; margin-bottom: 8px; }
+.offer-title { margin: 0 0 4px; }
 .counter-sources { margin-top: 14px; }
 .picker-head { justify-content: space-between; }
 

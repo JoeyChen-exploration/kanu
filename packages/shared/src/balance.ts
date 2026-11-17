@@ -206,6 +206,8 @@ export const COUNTER = {
   demandHitPpm: 600_000,
   /** 卖假卡被识破扣的信誉 */
   fakeCaughtRepLoss: 5,
+  /** 柜台台面最多摆几样（只影响界面，不进经济模拟；2026-11-17 用户要求台面能摆很多张） */
+  tableSlots: 8,
 };
 
 /**

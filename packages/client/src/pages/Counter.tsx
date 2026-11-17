@@ -1,7 +1,7 @@
 // 柜台页（FR-CTR-1～5）：顾客一位一位进门（学深空当铺）。只看得到眼前这一位，处理完下一位才进来，
 // 不知道下一位是谁、今天还剩几位。挑卡（或卡包）→ 开价 / 接受还价 / 快速出售 / 请走。都接待完就能打烊。
 import { useEffect, useState } from 'react';
-import { STORE } from '@kanu/shared/balance';
+import { COUNTER, STORE } from '@kanu/shared/balance';
 import type { CardView, CounterBinderPageResponse, CounterResponse, CustomerView, EligibleCardsResponse, EndDayResponse, MeResponse, OfferResponse } from '@kanu/shared/types';
 import { api, newIdempotencyKey } from '../api.ts';
 import { Card, fmt } from '../Card.tsx';
@@ -22,6 +22,8 @@ export function Counter({ onChange }: { onChange: (patch: Partial<MeResponse>) =
   const [err, setErr] = useState('');
   /** 打开的卡册浮窗放在这一层：下一位客人进门时浮窗不关，内容按新客人重新高亮 */
   const [openBinders, setOpenBinders] = useState<OpenBinder[]>([]);
+  /** 柜台台面上摆着的东西也放在这一层：换客人时留着 */
+  const [table, setTable] = useState<Item[]>([]);
 
   const load = () => api<CounterResponse>('/counter').then(setData).catch((e: Error) => setErr(e.message));
   useEffect(() => { void load(); }, []);
@@ -49,14 +51,15 @@ export function Counter({ onChange }: { onChange: (patch: Partial<MeResponse>) =
 
   if (!data) return <section className="page"><p className="hint">开门中…</p>{err && <p className="error">{err}</p>}</section>;
 
+  // 整个柜台页是"拿回来"的区域：台面上的东西拖到台面外面任何地方都算拿回来
   return (
-    <section className="page">
+    <section className="page counter-page" data-drop="back">
       <h2>柜台 · 第 {data.day} 天 <small>已接待 {data.served.length} 位</small></h2>
       {msg && <p className="deal-msg">{msg}</p>}
 
       {data.current && (
         <Deal key={data.current.id} customer={data.current} onChange={onChange} onDone={afterResult} onUpdate={(c) => setData({ ...data, current: c })}
-          openBinders={openBinders} setOpenBinders={setOpenBinders} />
+          openBinders={openBinders} setOpenBinders={setOpenBinders} table={table} setTable={setTable} />
       )}
 
       {data.done && (
@@ -113,7 +116,7 @@ function BinderPicker({ customerId, binder, onPick, bind, draggingId }: {
   customerId: number;
   binder: { id: number | 'showcase'; name: string };
   onPick: (item: Item) => void;
-  bind: (item: Item) => ReturnType<ReturnType<typeof useDrag<Item>>['bind']>;
+  bind: (item: Item) => BindProps;
   draggingId: number | null;
 }) {
   const [matchFirst, setMatchFirst] = useState(readMatchFirst);
@@ -177,12 +180,18 @@ function SourceButton({ cover, coverClass, name, sub, matchCount, on, onClick }:
   );
 }
 
+/** 拖着的东西：从哪里拖起来的（货源 / 台面），拖回去时要知道 */
+type Dragging = { item: Item; from: 'source' | 'table' };
+type BindProps = ReturnType<ReturnType<typeof useDrag<Dragging>>['bind']>;
+const keyOf = (it: Item) => `${it.kind}-${it.id}`;
+
 /**
  * 眼前这一位。交互原则（DESIGN 4.5，2026-11-17 用户定）：东西靠拖，结果靠按钮确认。
- * 把要卖的卡从卡册浮窗（或卡包）拖到柜台台面上 → 调价 → 按"开价 / 接受还价 / 快速出售"。
- * 台面上留了客人那一侧，以后客人卖卡给你时，他的卡也摆在台面上。
+ * 柜台台面能摆好几样（COUNTER.tableSlots）：从卡册浮窗 / 卡包列表拖上来，从台面拖到别处就是拿回来。
+ * 点台面上的一样选中它 → 调价 → 按"开价 / 接受还价 / 快速出售"。台面上的东西换客人时留着，
+ * 不符合新客人要求的变暗。台面上留了客人那一侧，以后客人卖卡给你时，他的卡也摆在台面上。
  */
-function Deal({ customer, onChange, onDone, onUpdate, openBinders, setOpenBinders }: {
+function Deal({ customer, onChange, onDone, onUpdate, openBinders, setOpenBinders, table, setTable }: {
   customer: CustomerView;
   onChange: (patch: Partial<MeResponse>) => void;
   onDone: (text: string) => void;
@@ -190,10 +199,12 @@ function Deal({ customer, onChange, onDone, onUpdate, openBinders, setOpenBinder
   /** 柜台上同时打开的卡册浮窗（id 0 = 桌面散放，showcase = 珍藏柜）；放在上一层，换客人时不关 */
   openBinders: OpenBinder[];
   setOpenBinders: (f: (xs: OpenBinder[]) => OpenBinder[]) => void;
+  /** 台面上的东西；放在上一层，换客人时留着 */
+  table: Item[];
+  setTable: (f: (xs: Item[]) => Item[]) => void;
 }) {
   const [stock, setStock] = useState<EligibleCardsResponse | null>(null);
-  const [onCounter, setOnCounter] = useState<Item | null>(null);
-  const isOpen = (id: number | 'showcase') => openBinders.some((b) => b.id === id);
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [price, setPrice] = useState('');
   const [step, setStep] = useState(10);
   const [busy, setBusy] = useState(false);
@@ -205,28 +216,54 @@ function Deal({ customer, onChange, onDone, onUpdate, openBinders, setOpenBinder
     api<EligibleCardsResponse>(`/counter/${customer.id}/cards`).then(setStock).catch((e: Error) => setNote(e.message));
   }, [customer.id]);
 
-  /** 放上台面：开价先填市场价（卡包填快卖价），玩家再调 */
-  const place = (item: Item) => {
-    setOnCounter(item);
-    setPrice(String(item.kind === 'card' ? item.price : item.quickPrice));
+  // 这位客人要不要台面上的每一样：按服务器给的"符合的卡 / 卡包"对一遍，顺便换成这位客人的快卖价
+  const wanted = new Map<string, number>();
+  for (const c of stock?.cards ?? []) wanted.set(`card-${c.card.id}`, c.quickPrice);
+  for (const p of stock?.packs ?? []) wanted.set(`pack-${p.id}`, p.quickPrice);
+  const selected = table.find((it) => keyOf(it) === selectedKey && wanted.has(keyOf(it))) ?? null;
+  const selectedQuick = selected ? wanted.get(keyOf(selected)) ?? selected.quickPrice : 0;
+
+  const select = (it: Item) => {
+    if (!wanted.has(keyOf(it))) { setNote(`${customer.typeName}不要「${it.name}」`); return; }
+    setSelectedKey(keyOf(it));
+    setPrice(String(it.kind === 'card' ? it.price : wanted.get(keyOf(it)) ?? it.quickPrice));
     setNote('');
   };
-  const { drag, bind } = useDrag<Item>((item, zone) => { if (zone === 'counter') place(item); });
+  /** 放上台面（已经在台面上就只是选中它） */
+  const place = (it: Item) => {
+    if (!table.some((x) => keyOf(x) === keyOf(it))) {
+      if (table.length >= COUNTER.tableSlots) { setNote(`台面最多摆 ${COUNTER.tableSlots} 样，先拖回去几样`); return; }
+      setTable((xs) => [...xs, it]);
+    }
+    select(it);
+  };
+  const takeBack = (it: Item) => {
+    setTable((xs) => xs.filter((x) => keyOf(x) !== keyOf(it)));
+    if (selectedKey === keyOf(it)) setSelectedKey(null);
+  };
+  // 拖到台面 = 放上去；台面上的拖到别处（卡册浮窗、货源、页面空白处）= 拿回来
+  const { drag, bind } = useDrag<Dragging>(({ item, from }, zone) => {
+    if (zone === 'counter' && from === 'source') place(item);
+    else if (zone !== 'counter' && from === 'table') takeBack(item);
+  });
+  const sourceBind = (it: Item): BindProps => bind({ item: it, from: 'source' });
 
   const send = async (path: 'offer' | 'quick', p?: number) => {
-    if (!onCounter) return;
+    if (!selected) return;
     setBusy(true);
     setNote('');
     try {
-      const item = onCounter.kind === 'pack' ? { packId: onCounter.id } : { instanceId: onCounter.id };
+      const item = selected.kind === 'pack' ? { packId: selected.id } : { instanceId: selected.id };
       const r = await api<OfferResponse>(`/counter/${customer.id}/${path}`, {
         method: 'POST', idempotencyKey: newIdempotencyKey(), body: { ...item, ...(p !== undefined ? { price: p } : {}) },
       });
       onChange({ credits: r.credits, reputation: r.reputation });
       if (r.outcome === 'counter') { setNote(`对方还价 ${fmt(r.customer.counterPrice ?? 0)}`); onUpdate(r.customer); }
       else if (r.outcome === 'too_high') { setNote('对方嫌太贵了'); onUpdate(r.customer); }
-      else if (r.outcome === 'deal') onDone(`成交！「${onCounter.name}」卖了 ${fmt(r.price ?? 0)} 信用点`);
-      else if (r.outcome === 'caught') onDone('被识破是假货！信誉下降');
+      else if (r.outcome === 'deal') {
+        takeBack(selected); // 卖掉了，从台面上拿走
+        onDone(`成交！「${selected.name}」卖了 ${fmt(r.price ?? 0)} 信用点`);
+      } else if (r.outcome === 'caught') onDone('被识破是假货！信誉下降');
       else onDone(`${customer.typeName}走了`);
     } catch (e) {
       setNote((e as Error).message);
@@ -248,63 +285,70 @@ function Deal({ customer, onChange, onDone, onUpdate, openBinders, setOpenBinder
   };
 
   const empty = stock && stock.cards.length === 0 && stock.packs.length === 0;
-  const dropClass = drag ? (drag.zone === 'counter' ? ' drop-target drop-over' : ' drop-target') : '';
-  /** 列表里点一项：没开就打开浮窗，开着就关掉 */
+  const fromSource = drag?.item.from === 'source';
+  const dropClass = fromSource ? (drag?.zone === 'counter' ? ' drop-target drop-over' : ' drop-target') : '';
   const open = (id: number | 'showcase', name: string) =>
     setOpenBinders((xs) => (xs.some((x) => x.id === id) ? xs.filter((x) => x.id !== id) : [...xs, { id, name }]));
+  const isOpen = (id: number | 'showcase') => openBinders.some((b) => b.id === id);
+  const draggingKey = drag ? keyOf(drag.item.item) : null;
 
   return (
     <div className="visitor">
-      <div className="visitor-head">
-        <span className="visitor-avatar" aria-hidden>{AVATAR[customer.type] ?? '🙂'}</span>
-        <div>
-          <b>{customer.typeName}</b> <Patience c={customer} />
-          <p className="bubble">{customer.line}</p>
-          <p className="hint">想要：{customer.demand.text} · 预算约 {fmt(customer.budgetLow)}–{fmt(customer.budgetHigh)}</p>
-        </div>
-      </div>
-
-      {/* 柜台台面：上半是客人那一侧（以后客人卖卡时摆在这里），下半是你放上来的东西 */}
-      <div className={`counter-top${dropClass}`} data-drop="counter">
-        <div className="counter-side customer-side" aria-hidden />
-        <div className="counter-side my-side">
-          {onCounter
-            ? (
-              <div className="counter-item">
-                <ItemArt item={onCounter} />
-                <div className="counter-item-info">
-                  <b>{onCounter.name}</b>
-                  <span className="hint">{onCounter.kind === 'pack' ? '没拆的卡包' : `市场价约 ${fmt(onCounter.price)}`}</span>
-                  <button className="chip" onClick={() => setOnCounter(null)}>拿回</button>
-                </div>
-              </div>
-            )
-            : <p className="counter-empty">{drag ? '松手放到柜台上' : '把要卖的卡拖到柜台上'}</p>}
-        </div>
-      </div>
-
-      {onCounter && (
-        <>
-          <div className="price-input">
-            <span>开价</span>
-            <button className="step-btn" aria-label={`减 ${step}`} disabled={!price || Number(price) <= 1} onClick={() => bump(-step)}>−</button>
-            <input inputMode="numeric" aria-label="开价" value={price} onChange={(e) => setPrice(e.target.value.replace(/\D/g, ''))} />
-            <button className="step-btn" aria-label={`加 ${step}`} onClick={() => bump(step)}>+</button>
+      <div className="deal-main">
+        <div className="visitor-head">
+          <span className="visitor-avatar" aria-hidden>{AVATAR[customer.type] ?? '🙂'}</span>
+          <div>
+            <b>{customer.typeName}</b> <Patience c={customer} />
+            <p className="bubble">{customer.line}</p>
+            <p className="hint">想要：{customer.demand.text} · 预算约 {fmt(customer.budgetLow)}–{fmt(customer.budgetHigh)}</p>
           </div>
-          <div className="step-choices">
-            <span className="hint">每次加减</span>
-            {STEPS.map((s) => (
-              <button key={s} className={step === s ? 'chip on' : 'chip'} onClick={() => setStep(s)}>{fmt(s)}</button>
-            ))}
+        </div>
+
+        {/* 柜台台面：上半是客人那一侧（以后客人卖卡时摆在这里），下半是你放上来的东西 */}
+        <div className={`counter-top${dropClass}`} data-drop="counter">
+          <div className="counter-side customer-side" aria-hidden />
+          <div className="counter-side my-side">
+            {table.length === 0 && <p className="counter-empty">{fromSource ? '松手放到柜台上' : '把要卖的卡拖到柜台上，可以摆好几张'}</p>}
+            {table.map((it) => {
+              const k = keyOf(it);
+              const ok = wanted.has(k);
+              const cls = `table-item draggable${selected && keyOf(selected) === k ? ' on' : ''}${ok ? '' : ' unwanted'}${draggingKey === k ? ' dragging' : ''}`;
+              return (
+                <button key={k} className={cls} onClick={() => select(it)} {...bind({ item: it, from: 'table' })}>
+                  <ItemArt item={it} />
+                  <span className="cell-price">{ok ? `快卖 ${fmt(wanted.get(k)!)}` : '这位不要'}</span>
+                </button>
+              );
+            })}
           </div>
-          <button className="primary" disabled={busy || !price} onClick={() => send('offer', Number(price))}>开价 {price ? fmt(Number(price)) : ''}</button>
-          {customer.counterPrice !== null && (
-            <button className="secondary" disabled={busy} onClick={() => send('offer', customer.counterPrice!)}>接受还价 {fmt(customer.counterPrice)}</button>
-          )}
-          <button className="secondary" disabled={busy} onClick={() => send('quick')}>快速出售 {fmt(onCounter.quickPrice)}（必定成交）</button>
-        </>
-      )}
-      {note && <p className="deal-msg">{note}</p>}
+        </div>
+        {table.length > 0 && <p className="hint table-tip">点一张选中它再开价；拖到台面外面就是拿回来（台面 {table.length} / {COUNTER.tableSlots}）</p>}
+
+        {selected && (
+          <div className="offer-box">
+            <p className="offer-title"><b>{selected.name}</b> <span className="hint">{selected.kind === 'pack' ? '没拆的卡包' : `市场价约 ${fmt(selected.price)}`}</span></p>
+            <div className="price-input">
+              <span>开价</span>
+              <button className="step-btn" aria-label={`减 ${step}`} disabled={!price || Number(price) <= 1} onClick={() => bump(-step)}>−</button>
+              <input inputMode="numeric" aria-label="开价" value={price} onChange={(e) => setPrice(e.target.value.replace(/\D/g, ''))} />
+              <button className="step-btn" aria-label={`加 ${step}`} onClick={() => bump(step)}>+</button>
+            </div>
+            <div className="step-choices">
+              <span className="hint">每次加减</span>
+              {STEPS.map((s) => (
+                <button key={s} className={step === s ? 'chip on' : 'chip'} onClick={() => setStep(s)}>{fmt(s)}</button>
+              ))}
+            </div>
+            <button className="primary" disabled={busy || !price} onClick={() => send('offer', Number(price))}>开价 {price ? fmt(Number(price)) : ''}</button>
+            {customer.counterPrice !== null && (
+              <button className="secondary" disabled={busy} onClick={() => send('offer', customer.counterPrice!)}>接受还价 {fmt(customer.counterPrice)}</button>
+            )}
+            <button className="secondary" disabled={busy} onClick={() => send('quick')}>快速出售 {fmt(selectedQuick)}（必定成交）</button>
+          </div>
+        )}
+        {note && <p className="deal-msg">{note}</p>}
+        <button className="secondary" disabled={busy} onClick={dismiss}>请他离开</button>
+      </div>
 
       {stock && (
         <div className="counter-sources">
@@ -316,7 +360,7 @@ function Deal({ customer, onChange, onDone, onUpdate, openBinders, setOpenBinder
                 {stock.packs.map((p) => {
                   const item: Item = { kind: 'pack', id: p.id, name: p.name, price: p.quickPrice, quickPrice: p.quickPrice, packKind: p.kind };
                   return (
-                    <button key={`p${p.id}`} className={drag?.item.kind === 'pack' && drag.item.id === p.id ? 'cell draggable dragging' : 'cell draggable'} onClick={() => place(item)} {...bind(item)}>
+                    <button key={`p${p.id}`} className={draggingKey === keyOf(item) ? 'cell draggable dragging' : 'cell draggable'} onClick={() => place(item)} {...sourceBind(item)}>
                       <ItemArt item={item} />
                       <span className="cell-price">快卖 {fmt(p.quickPrice)}</span>
                     </button>
@@ -347,19 +391,21 @@ function Deal({ customer, onChange, onDone, onUpdate, openBinders, setOpenBinder
         </div>
       )}
 
-      <button className="secondary" disabled={busy} onClick={dismiss}>请他离开</button>
-
       {openBinders.map((b, i) => (
         <FloatWindow key={String(b.id)} id={`counter-binder-${b.id}`} cascade={i} className="float-binder" title={b.name}
           onClose={() => setOpenBinders((xs) => xs.filter((x) => x.id !== b.id))}>
-          <BinderPicker customerId={customer.id} binder={b} onPick={place} bind={bind}
-            draggingId={drag?.item.kind === 'card' ? drag.item.id : null} />
+          <BinderPicker customerId={customer.id} binder={b} onPick={place} bind={sourceBind}
+            draggingId={drag?.item.item.kind === 'card' ? drag.item.item.id : null} />
         </FloatWindow>
       ))}
       {drag && (
         <DragGhost x={drag.x} y={drag.y}>
-          <ItemArt item={drag.item} />
-          <span className="ghost-hint">{drag.zone === 'counter' ? '松手放到柜台上' : '拖到柜台上'}</span>
+          <ItemArt item={drag.item.item} />
+          <span className="ghost-hint">
+            {drag.item.from === 'source'
+              ? (drag.zone === 'counter' ? '松手放到柜台上' : '拖到柜台上')
+              : (drag.zone === 'counter' ? '拖到台面外面拿回来' : '松手拿回来')}
+          </span>
         </DragGhost>
       )}
     </div>

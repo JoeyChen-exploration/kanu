@@ -100,8 +100,6 @@ export type CustomerStatus = 'waiting' | 'sold' | 'left' | 'dismissed';
 
 export interface CustomerView {
   id: number;
-  /** 第几个时段（0 早、1 中、2 晚） */
-  slot: number;
   type: string;
   typeName: string;
   /** 最近一句台词 */
@@ -119,8 +117,14 @@ export interface CustomerView {
 export interface CounterResponse {
   ok: true;
   customers: CustomerView[];
-  /** 下一批顾客几点来（毫秒时间戳），今天没有了是 null */
-  nextSlotAt: number | null;
+  /** 第几个营业日（玩家自己推进，打烊 +1） */
+  day: number;
+}
+
+export interface EndDayResponse {
+  ok: true;
+  /** 打烊后进入的新营业日 */
+  day: number;
 }
 
 export interface EligibleCardsResponse {
@@ -147,8 +151,10 @@ export interface MeResponse {
   wallet: WalletView;
   /** 连续多少包正规包没出 SSR 以上（保底进度） */
   pityCount: number;
-  /** 今天还能开几包正规包 */
+  /** 本营业日还能开几包正规包 */
   packsLeftToday: number;
+  /** 第几个营业日 */
+  gameDay: number;
   /** 测试账号（DEV_AUTH=1 且在 DEV_UNLIMITED_IDS 里）才是 true：前端显示测试工具 */
   devTools: boolean;
 }

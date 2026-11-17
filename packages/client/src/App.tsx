@@ -109,7 +109,7 @@ function Shop({ me, onChange }: { me: MeResponse; onChange: (p: Partial<MeRespon
           <span className="value">{me.wallet.coins === null ? '暂时查不到' : !me.wallet.opened ? '还没开户' : fmt(me.wallet.coins)}</span>
         </div>
         <div className="stat"><span className="label">信誉</span><span className="value">{me.reputation}</span></div>
-        <div className="stat"><span className="label">摊位</span><span className="value">第 {me.weekNo} 周</span></div>
+        <div className="stat"><span className="label">营业</span><span className="value">第 {me.gameDay} 天</span></div>
       </section>
       <p className="hint">去"进货"开包，再到"柜台"把卡卖给顾客。鉴定和房租还在装修。</p>
       {me.devTools && <DevTools onChange={onChange} />}

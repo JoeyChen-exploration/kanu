@@ -69,17 +69,15 @@ describe('开包（FR-PACK-1～5）', () => {
     expect((repo.db.prepare('SELECT COUNT(*) AS n FROM card_instances').get() as { n: number }).n).toBe(0);
   });
 
-  it('每天限购 5 包，按悉尼日计（FR-PACK-3）', async () => {
-    let t = NOW;
-    const { app, repo } = setup({ now: () => t });
+  it('每个营业日限购 5 包，打烊进入下一天后重新计（FR-PACK-3）', async () => {
+    const { app, repo } = setup();
     cleanup = () => app.close();
     const h = await login(app);
     repo.db.prepare('UPDATE players SET credits = 100000').run();
     for (let i = 0; i < PACKS.normal.dailyLimit; i += 1) expect((await open(app, h)).statusCode).toBe(200);
     const sixth = await open(app, h);
     expect(sixth.json().code).toBe('daily_limit');
-    // NOW 是悉尼时间晚上 7 点；过 6 小时就是第二天凌晨 1 点（会话 24 小时有效，还没过期）
-    t += 6 * 3600e3;
+    repo.advanceDay('123456789012345678');
     expect((await open(app, h)).statusCode).toBe(200);
   });
 

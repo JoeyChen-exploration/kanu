@@ -6,7 +6,7 @@ import { ANNOUNCE, PACKS, RARITIES, SERIAL_LIMIT, STYLE, atLeast, type Rarity } 
 import type { CardView, OpenPackResponse } from '@kanu/shared/types';
 import { ApiError, fail, idempotencyKey, type Deps } from '../app.ts';
 import { openPack } from '../game/cards.ts';
-import { sydneyDay } from '../time.ts';
+import { dayKey } from '../db/index.ts';
 
 const escapeMd = (s: string) => s.replace(/[\\*_`~|>]/g, '\\$&');
 
@@ -40,7 +40,7 @@ export function registerPackRoutes(app: FastifyInstance, deps: Deps, now: () => 
       const player = repo.getPlayer(userId);
       if (!player) throw new ApiError(401, 'unauthorized', '请重新打开卡奴登录');
       const pack = PACKS.normal;
-      const day = sydneyDay(t);
+      const day = dayKey(player.game_day);
       const used = repo.packsOpenedToday(userId, day);
       // 测试账号（DEV_UNLIMITED_IDS，只在 DEV_AUTH=1 时有）：不限购、不扣钱
       const unlimited = deps.config.devUnlimitedIds.has(userId);

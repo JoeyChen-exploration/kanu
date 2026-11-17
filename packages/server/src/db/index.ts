@@ -101,12 +101,20 @@ const MIGRATIONS: string[] = [
      created_at    INTEGER NOT NULL,
      UNIQUE (owner_id, sydney_day, slot, seat)
    );`,
+
+  // 4：营业日改成玩家自己推进（2026-11-17）。"哪一天"用 day_key 表示（营业日写成 g12），不再是悉尼日期
+  `ALTER TABLE players ADD COLUMN game_day INTEGER NOT NULL DEFAULT 1;
+   ALTER TABLE customers RENAME COLUMN sydney_day TO day_key;
+   ALTER TABLE daily_usage RENAME COLUMN sydney_day TO day_key;`,
 ];
+
+/** 营业日在 customers、daily_usage 里的键 */
+export const dayKey = (gameDay: number) => `g${gameDay}`;
 
 export interface CustomerRow {
   id: number;
   owner_id: string;
-  sydney_day: string;
+  day_key: string;
   slot: number;
   seat: number;
   type: string;
@@ -129,6 +137,7 @@ export interface PlayerRow {
   reputation: number;
   week_no: number;
   pity_count: number;
+  game_day: number;
   created_at: number;
 }
 
@@ -214,11 +223,11 @@ function createRepo(db: Database.Database) {
     markCollected: db.prepare('INSERT INTO collection (discord_id, template_id, first_at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING'),
 
     getUsage: db.prepare<[string, string], { packs_normal: number; packs_black: number }>(
-      'SELECT packs_normal, packs_black FROM daily_usage WHERE discord_id = ? AND sydney_day = ?',
+      'SELECT packs_normal, packs_black FROM daily_usage WHERE discord_id = ? AND day_key = ?',
     ),
     bumpNormal: db.prepare(
-      `INSERT INTO daily_usage (discord_id, sydney_day, packs_normal) VALUES (?, ?, 1)
-       ON CONFLICT(discord_id, sydney_day) DO UPDATE SET packs_normal = packs_normal + 1`,
+      `INSERT INTO daily_usage (discord_id, day_key, packs_normal) VALUES (?, ?, 1)
+       ON CONFLICT(discord_id, day_key) DO UPDATE SET packs_normal = packs_normal + 1`,
     ),
 
     getIdem: db.prepare<[string, string], { response: string }>('SELECT response FROM idempotency WHERE discord_id = ? AND key = ?'),
@@ -287,6 +296,7 @@ function createRepo(db: Database.Database) {
       return Number(r.lastInsertRowid);
     },
 
+    advanceDay: (discordId: string) => db.prepare('UPDATE players SET game_day = game_day + 1 WHERE discord_id = ?').run(discordId),
     packsOpenedToday: (discordId: string, day: string) => q.getUsage.get(discordId, day)?.packs_normal ?? 0,
     bumpNormalPacks: (discordId: string, day: string) => q.bumpNormal.run(discordId, day),
 
@@ -333,14 +343,14 @@ function createRepo(db: Database.Database) {
 
     // ---- 柜台顾客（FR-CTR-1～3） ----
     customersFor: (ownerId: string, day: string) =>
-      db.prepare('SELECT * FROM customers WHERE owner_id = ? AND sydney_day = ? ORDER BY slot, seat').all(ownerId, day) as CustomerRow[],
+      db.prepare('SELECT * FROM customers WHERE owner_id = ? AND day_key = ? ORDER BY slot, seat').all(ownerId, day) as CustomerRow[],
     getCustomer: (ownerId: string, id: number) =>
       (db.prepare('SELECT * FROM customers WHERE id = ? AND owner_id = ?').get(id, ownerId) as CustomerRow | undefined) ?? null,
     insertCustomer(c: Omit<CustomerRow, 'id' | 'status' | 'counter_price'>): number {
       const r = db.prepare(
-        `INSERT INTO customers (owner_id, sydney_day, slot, seat, type, demand, float, patience, line, budget_low, budget_high, created_at)
+        `INSERT INTO customers (owner_id, day_key, slot, seat, type, demand, float, patience, line, budget_low, budget_high, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).run(c.owner_id, c.sydney_day, c.slot, c.seat, c.type, c.demand, c.float, c.patience, c.line, c.budget_low, c.budget_high, c.created_at);
+      ).run(c.owner_id, c.day_key, c.slot, c.seat, c.type, c.demand, c.float, c.patience, c.line, c.budget_low, c.budget_high, c.created_at);
       return Number(r.lastInsertRowid);
     },
     updateCustomer: (id: number, c: { patience: number; status: string; line: string; counter_price: number | null }) =>

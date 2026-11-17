@@ -3,15 +3,10 @@ import { COUNTER, CUSTOMER, PLAYER, REPUTATION } from '@kanu/shared/balance';
 import type { CounterResponse, EligibleCardsResponse, OfferResponse } from '@kanu/shared/types';
 import { evaluateOffer, mindPrice, quickPrice, rollCustomer } from '../src/game/customers.ts';
 import { seeded, type Rng } from '../src/game/rng.ts';
-import { sydneyDay } from '../src/time.ts';
+import { dayKey } from '../src/db/index.ts';
 import { HIDDEN_KEYS, NOW, findKeys, idem, login, setup } from './helpers.ts';
 
 const UID = '123456789012345678';
-const H = 3600e3;
-// NOW 是悉尼时间 2027-01-15 19:00
-const AT_0700 = NOW - 12 * H;
-const AT_1330 = NOW - 5.5 * H;
-const NEXT_DAY_0830 = NOW + 13.5 * H;
 const HIDDEN = [...HIDDEN_KEYS, 'float', 'mind'];
 
 let cleanup: (() => Promise<void>) | null = null;
@@ -22,7 +17,7 @@ function seedSale(repo: ReturnType<typeof setup>['repo'], opts: { type?: string;
   const cardId = repo.insertCard({ templateId: opts.template ?? 'NEO-043', ownerId: UID, authenticity: opts.authenticity ?? 'real', grade: '7', origin: 'legit', style: 'standard', serialNo: null, now: NOW });
   const type = opts.type ?? 'rich';
   const customerId = repo.insertCustomer({
-    owner_id: UID, sydney_day: sydneyDay(NOW), slot: 2, seat: 9, type,
+    owner_id: UID, day_key: dayKey(1), slot: 0, seat: 9, type,
     demand: JSON.stringify({ rarities: opts.rarities ?? ['SR', 'SSR', 'UR', 'LR', 'MR'], tag: null }),
     float: opts.float ?? 1, patience: CUSTOMER[type as 'rich'].patience, line: '你好', budget_low: 1, budget_high: 2, created_at: NOW,
   });
@@ -32,36 +27,49 @@ function seedSale(repo: ReturnType<typeof setup>['repo'], opts: { type?: string;
 const offer = (app: ReturnType<typeof setup>['app'], h: Record<string, string>, customerId: number, instanceId: number, price: number, key = idem()) =>
   app.inject({ method: 'POST', url: `/api/counter/${customerId}/offer`, headers: { ...h, ...key }, payload: { instanceId, price } });
 
-describe('顾客生成（FR-CTR-1～3）', () => {
-  it('按悉尼时段到点才来，每时段 2 位', async () => {
-    let t = AT_0700;
-    const { app } = setup({ now: () => t });
+describe('营业日和顾客生成（FR-CTR-1～3）', () => {
+  it('第一次打开柜台一次来 6 位，再打开还是同一批', async () => {
+    const { app } = setup();
     cleanup = () => app.close();
     const h = await login(app);
-    const early = (await app.inject({ method: 'GET', url: '/api/counter', headers: h })).json() as CounterResponse;
-    expect(early.customers).toHaveLength(0);
-    expect(early.nextSlotAt).toBe(AT_0700 + H);
-    t = AT_1330;
-    const noon = (await app.inject({ method: 'GET', url: '/api/counter', headers: h })).json() as CounterResponse;
-    expect(noon.customers).toHaveLength(2 * COUNTER.perSlot);
-    t = NOW;
-    const evening = (await app.inject({ method: 'GET', url: '/api/counter', headers: h })).json() as CounterResponse;
-    expect(evening.customers).toHaveLength(3 * COUNTER.perSlot);
-    expect(evening.nextSlotAt).toBeNull();
-    // 已经来的顾客不会重新生成
-    expect(evening.customers.slice(0, 4).map((c) => c.id)).toEqual(noon.customers.map((c) => c.id));
+    const a = (await app.inject({ method: 'GET', url: '/api/counter', headers: h })).json() as CounterResponse;
+    expect(a.day).toBe(1);
+    expect(a.customers).toHaveLength(COUNTER.customersPerDay);
+    const b = (await app.inject({ method: 'GET', url: '/api/counter', headers: h })).json() as CounterResponse;
+    expect(b.customers.map((c) => c.id)).toEqual(a.customers.map((c) => c.id));
   });
 
-  it('跨天作废，第二天是新的一批（FR-CTR-2）', async () => {
-    let t = NOW;
-    const { app } = setup({ now: () => t });
+  it('还有顾客在等不能打烊；都请走后打烊进入下一天，来新的一批，旧顾客不能再接待', async () => {
+    const { app, repo } = setup();
     cleanup = () => app.close();
     const h = await login(app);
-    const today = (await app.inject({ method: 'GET', url: '/api/counter', headers: h })).json() as CounterResponse;
-    t = NEXT_DAY_0830;
-    const tomorrow = (await app.inject({ method: 'GET', url: '/api/counter', headers: h })).json() as CounterResponse;
-    expect(tomorrow.customers).toHaveLength(COUNTER.perSlot);
-    expect(tomorrow.customers.some((c) => today.customers.some((x) => x.id === c.id))).toBe(false);
+    const endDay = () => app.inject({ method: 'POST', url: '/api/day/end', headers: { ...h, ...idem() } });
+    expect((await endDay()).json().code).toBe('not_open');
+    const day1 = (await app.inject({ method: 'GET', url: '/api/counter', headers: h })).json() as CounterResponse;
+    expect((await endDay()).json().code).toBe('customers_waiting');
+    for (const c of day1.customers) await app.inject({ method: 'POST', url: `/api/counter/${c.id}/dismiss`, headers: h });
+    const ended = (await endDay()).json();
+    expect(ended).toMatchObject({ ok: true, day: 2 });
+    expect(repo.getPlayer(UID)!.game_day).toBe(2);
+    const day2 = (await app.inject({ method: 'GET', url: '/api/counter', headers: h })).json() as CounterResponse;
+    expect(day2.day).toBe(2);
+    expect(day2.customers).toHaveLength(COUNTER.customersPerDay);
+    expect(day2.customers.some((c) => day1.customers.some((x) => x.id === c.id))).toBe(false);
+    const old = await app.inject({ method: 'GET', url: `/api/counter/${day1.customers[0]!.id}/cards`, headers: h });
+    expect(old.statusCode).toBe(404);
+    expect((await app.inject({ method: 'GET', url: '/api/me', headers: h })).json().gameDay).toBe(2);
+  });
+
+  it('打烊用幂等 key：同一个 key 重发只推进一天', async () => {
+    const { app, repo } = setup();
+    cleanup = () => app.close();
+    const h = await login(app);
+    const day1 = (await app.inject({ method: 'GET', url: '/api/counter', headers: h })).json() as CounterResponse;
+    for (const c of day1.customers) await app.inject({ method: 'POST', url: `/api/counter/${c.id}/dismiss`, headers: h });
+    const key = idem();
+    await app.inject({ method: 'POST', url: '/api/day/end', headers: { ...h, ...key } });
+    await app.inject({ method: 'POST', url: '/api/day/end', headers: { ...h, ...key } });
+    expect(repo.getPlayer(UID)!.game_day).toBe(2);
   });
 
   it('MVP 只有四类顾客，需求和预算区间都有', () => {

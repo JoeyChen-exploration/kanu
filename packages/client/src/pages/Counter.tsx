@@ -1,18 +1,18 @@
-// 柜台页（FR-CTR-1～5）：早中晚三批顾客；点顾客 → 挑卡 → 开价 / 快速出售 / 接受还价。
+// 柜台页（FR-CTR-1～5）：一个营业日 6 位顾客一次到店；点顾客 → 挑卡 → 开价 / 快速出售 / 接受还价。
+// 顾客都接待完（或请走）就能打烊，进入下一个营业日（学深空当铺，2026-11-17）。
 import { useEffect, useState } from 'react';
-import type { CounterResponse, CustomerView, EligibleCardsResponse, MeResponse, OfferResponse } from '@kanu/shared/types';
+import { PACKS } from '@kanu/shared/balance';
+import type { CounterResponse, CustomerView, EligibleCardsResponse, EndDayResponse, MeResponse, OfferResponse } from '@kanu/shared/types';
 import { api, newIdempotencyKey } from '../api.ts';
 import { Card, fmt } from '../Card.tsx';
 
 const AVATAR: Record<string, string> = { resident: '🧑‍🔧', collector: '🧐', rich: '🤵', middleman: '🕶️' };
-const SLOT_NAME = ['早上', '中午', '晚上'];
 const STATUS: Record<string, string> = { sold: '已成交', left: '已离开', dismissed: '已请走' };
-
-const hm = (t: number) => new Date(t).toLocaleTimeString('zh-CN', { timeZone: 'Australia/Sydney', hour: '2-digit', minute: '2-digit' });
 
 export function Counter({ onChange }: { onChange: (patch: Partial<MeResponse>) => void }) {
   const [data, setData] = useState<CounterResponse | null>(null);
   const [active, setActive] = useState<CustomerView | null>(null);
+  const [closing, setClosing] = useState(false);
   const [err, setErr] = useState('');
 
   const load = () => api<CounterResponse>('/counter').then(setData).catch((e: Error) => setErr(e.message));
@@ -23,35 +23,42 @@ export function Counter({ onChange }: { onChange: (patch: Partial<MeResponse>) =
     setActive(c.status === 'waiting' ? c : null);
   };
 
+  const endDay = async () => {
+    setClosing(true);
+    setErr('');
+    try {
+      const r = await api<EndDayResponse>('/day/end', { method: 'POST', body: {}, idempotencyKey: newIdempotencyKey() });
+      onChange({ gameDay: r.day, packsLeftToday: PACKS.normal.dailyLimit });
+      await load();
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setClosing(false);
+    }
+  };
+
   const waiting = data?.customers.filter((c) => c.status === 'waiting').length ?? 0;
 
   return (
     <section className="page">
-      <h2>柜台 <small>{waiting} 位在等</small></h2>
-      {data?.nextSlotAt && <p className="hint">下一批顾客悉尼时间 {hm(data.nextSlotAt)} 到。</p>}
-      {data && data.customers.length === 0 && <p className="hint">还没开门，早上 8 点（悉尼时间）第一批顾客才来。</p>}
-      {[0, 1, 2].map((slot) => {
-        const list = data?.customers.filter((c) => c.slot === slot) ?? [];
-        if (!list.length) return null;
-        return (
-          <div key={slot}>
-            <h3 className="slot-title">{SLOT_NAME[slot]}</h3>
-            {list.map((c) => (
-              <button key={c.id} className={`customer${c.status === 'waiting' ? '' : ' done'}`} disabled={c.status !== 'waiting'} onClick={() => setActive(c)}>
-                <span className="customer-avatar" aria-hidden>{AVATAR[c.type] ?? '🙂'}</span>
-                <span className="customer-body">
-                  <span className="customer-head">
-                    <b>{c.typeName}</b>
-                    {c.status === 'waiting' ? <Patience c={c} /> : <span className="badge">{STATUS[c.status]}</span>}
-                  </span>
-                  <span className="bubble">{c.line}</span>
-                  <span className="customer-meta">想要：{c.demand.text} · 预算约 {fmt(c.budgetLow)}–{fmt(c.budgetHigh)}</span>
-                </span>
-              </button>
-            ))}
-          </div>
-        );
-      })}
+      <h2>柜台 · 第 {data?.day ?? '-'} 天 <small>{waiting} 位在等</small></h2>
+      {data?.customers.map((c) => (
+        <button key={c.id} className={`customer${c.status === 'waiting' ? '' : ' done'}`} disabled={c.status !== 'waiting'} onClick={() => setActive(c)}>
+          <span className="customer-avatar" aria-hidden>{AVATAR[c.type] ?? '🙂'}</span>
+          <span className="customer-body">
+            <span className="customer-head">
+              <b>{c.typeName}</b>
+              {c.status === 'waiting' ? <Patience c={c} /> : <span className="badge">{STATUS[c.status]}</span>}
+            </span>
+            <span className="bubble">{c.line}</span>
+            <span className="customer-meta">想要：{c.demand.text} · 预算约 {fmt(c.budgetLow)}–{fmt(c.budgetHigh)}</span>
+          </span>
+        </button>
+      ))}
+      {data && waiting === 0 && (
+        <button className="primary" disabled={closing} onClick={endDay}>{closing ? '打烊中…' : `打烊，进入第 ${data.day + 1} 天`}</button>
+      )}
+      {data && waiting > 0 && <p className="hint">客人都接待完（或者请走）就能打烊，进入下一天。</p>}
       {err && <p className="error">{err}</p>}
       {active && <Deal customer={active} onClose={() => setActive(null)} onUpdate={update} onChange={onChange} />}
     </section>

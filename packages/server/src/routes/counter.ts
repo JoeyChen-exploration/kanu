@@ -1,18 +1,19 @@
 // 柜台（SRS FR-CTR-1～5、7）：
-//   GET  /api/counter                 今天已经到点的顾客（打开柜台时按需生成，不靠定时任务）
+//   GET  /api/counter                 本营业日的顾客（第一次打开时一次生成 6 位，不靠定时任务）
 //   GET  /api/counter/:id/cards       这位顾客能接受的卡 + 每张的快速出售价
 //   POST /api/counter/:id/offer       { instanceId, price } 开价
 //   POST /api/counter/:id/quick       { instanceId } 快速出售（按浮动下限算，必定成交）
 //   POST /api/counter/:id/dismiss     请顾客离开
+//   POST /api/day/end                 打烊：顾客都接待完（或请走）后进入下一个营业日
+// 营业日由玩家自己推进（2026-11-17 改，学深空当铺），不按悉尼时间。
 // 写操作都在一个事务里，要求幂等 key。心理价位和个人浮动永远不出现在响应里。
 import type { FastifyInstance } from 'fastify';
 import { COUNTER, CUSTOMER, PACKS, RARITIES, RARITY, REPUTATION, type CustomerType, type Rarity } from '@kanu/shared/balance';
-import type { CardView, CounterResponse, CustomerView, EligibleCardsResponse, OfferResponse } from '@kanu/shared/types';
+import type { CardView, CounterResponse, CustomerView, EligibleCardsResponse, EndDayResponse, OfferResponse } from '@kanu/shared/types';
 import { ApiError, fail, idempotencyKey, type Deps } from '../app.ts';
-import type { CustomerRow } from '../db/index.ts';
+import { dayKey, type CustomerRow } from '../db/index.ts';
 import { detectFake, evaluateOffer, matches, mindPrice, quickPrice, rollCustomer, type Demand, type SellableCard } from '../game/customers.ts';
 import { loadLines, type LineEvent } from '../content.ts';
-import { sydneyDay, sydneyHour, todaySydneyHourAt } from '../time.ts';
 
 const lines = loadLines();
 
@@ -36,7 +37,6 @@ export function toCustomerView(row: CustomerRow): CustomerView {
   const type = row.type as CustomerType;
   return {
     id: row.id,
-    slot: row.slot,
     type,
     typeName: CUSTOMER[type].name,
     line: row.line,
@@ -56,39 +56,57 @@ export function registerCounterRoutes(app: FastifyInstance, deps: Deps, now: () 
   const say = (type: string, ev: LineEvent, vars: Record<string, string> = {}) =>
     pick(lines.byType[type]?.[ev] ?? ['……']).replace(/\{(\w+)\}/g, (_, k: string) => vars[k] ?? '');
 
-  /** 生成今天已经到点、还没生成的顾客（FR-CTR-1）；跨天的不再出现（FR-CTR-2） */
+  /** 本营业日的顾客：第一次打开柜台时一次生成 customersPerDay 位（FR-CTR-1）；打烊后的不再出现（FR-CTR-2） */
   const ensureCustomers = repo.db.transaction((ownerId: string, t: number) => {
-    const day = sydneyDay(t);
-    const hour = sydneyHour(t);
+    const player = repo.getPlayer(ownerId)!;
+    const day = dayKey(player.game_day);
     const existing = repo.customersFor(ownerId, day);
+    if (existing.length >= COUNTER.customersPerDay) return { day: player.game_day, rows: existing };
     const inventory = repo.sellableCards(ownerId).map(toSellable);
     const allTags = [...new Set(repo.allTemplates().filter((x) => x.series_id === deps.currentSeries).flatMap((x) => JSON.parse(x.tags) as string[]))];
-    COUNTER.slotHours.forEach((h, slot) => {
-      if (hour < h) return;
-      for (let seat = 0; seat < COUNTER.perSlot; seat += 1) {
-        if (existing.some((c) => c.slot === slot && c.seat === seat)) continue;
-        const c = rollCustomer(rng, { inventory, allTags, typicalPrice });
-        const text = demandText(c.type, c.demand);
-        repo.insertCustomer({
-          owner_id: ownerId, sydney_day: day, slot, seat, type: c.type, demand: JSON.stringify(c.demand), float: c.float,
-          patience: c.patience, line: say(c.type, 'greet', { demand: text }), budget_low: c.budgetLow, budget_high: c.budgetHigh, created_at: t,
-        });
-      }
-    });
-    return repo.customersFor(ownerId, day);
+    for (let seat = 0; seat < COUNTER.customersPerDay; seat += 1) {
+      if (existing.some((c) => c.seat === seat)) continue;
+      const c = rollCustomer(rng, { inventory, allTags, typicalPrice });
+      const text = demandText(c.type, c.demand);
+      repo.insertCustomer({
+        owner_id: ownerId, day_key: day, slot: 0, seat, type: c.type, demand: JSON.stringify(c.demand), float: c.float,
+        patience: c.patience, line: say(c.type, 'greet', { demand: text }), budget_low: c.budgetLow, budget_high: c.budgetHigh, created_at: t,
+      });
+    }
+    return { day: player.game_day, rows: repo.customersFor(ownerId, day) };
   });
 
   app.get('/api/counter', async (req, reply) => {
     if (!req.user) return fail(reply, 401, 'unauthorized', '请重新打开卡奴登录');
-    const t = now();
-    const rows = ensureCustomers(req.user.id, t);
-    const next = COUNTER.slotHours.map((h) => todaySydneyHourAt(t, h)).find((x) => x !== null) ?? null;
-    return { ok: true, customers: rows.map(toCustomerView), nextSlotAt: next } satisfies CounterResponse;
+    const { day, rows } = ensureCustomers(req.user.id, now());
+    return { ok: true, customers: rows.map(toCustomerView), day } satisfies CounterResponse;
+  });
+
+  /** 打烊：还有顾客在等就不行；进入下一个营业日（房租在 M5 按 RENT.everyDays 接上） */
+  app.post('/api/day/end', async (req, reply) => {
+    if (!req.user) return fail(reply, 401, 'unauthorized', '请重新打开卡奴登录');
+    const key = idempotencyKey(req);
+    if (!key) return fail(reply, 400, 'missing_idempotency_key', '请求缺少幂等 key，请刷新后再试');
+    const userId = req.user.id;
+    return repo.db.transaction((): EndDayResponse => {
+      const replay = repo.getIdempotent<EndDayResponse>(userId, key);
+      if (replay) return replay;
+      const player = repo.getPlayer(userId)!;
+      const today = repo.customersFor(userId, dayKey(player.game_day));
+      if (today.length < COUNTER.customersPerDay) throw new ApiError(400, 'not_open', '今天还没开门，先去柜台看看顾客');
+      if (today.some((c) => c.status === 'waiting')) throw new ApiError(400, 'customers_waiting', '还有顾客在等，接待完或请走再打烊');
+      repo.advanceDay(userId);
+      repo.logEvent(userId, now(), 'day_end', { day: player.game_day });
+      const response: EndDayResponse = { ok: true, day: player.game_day + 1 };
+      repo.putIdempotent(userId, key, response, now());
+      return response;
+    })();
   });
 
   const waitingCustomer = (ownerId: string, id: number) => {
     const c = repo.getCustomer(ownerId, id);
-    if (!c || c.sydney_day !== sydneyDay(now())) throw new ApiError(404, 'not_found', '这位顾客已经不在了');
+    const player = repo.getPlayer(ownerId);
+    if (!c || !player || c.day_key !== dayKey(player.game_day)) throw new ApiError(404, 'not_found', '这位顾客已经不在了');
     if (c.status !== 'waiting') throw new ApiError(400, 'gone', '这位顾客已经走了');
     return c;
   };

@@ -30,8 +30,8 @@ const arg = (name: string, def: number) => {
 };
 const SEASONS = arg('seasons', 1000);
 const SEED = arg('seed', 1);
-// 调参用（不改 balance.ts 先试效果）：--per-slot 每时段顾客数、--hit 需求命中率（0–1）、--only-main 1 只跑主策略
-COUNTER.perSlot = arg('per-slot', COUNTER.perSlot);
+// 调参用（不改 balance.ts 先试效果）：--per-day 每个营业日顾客数、--hit 需求命中率（0–1）、--only-main 1 只跑主策略
+COUNTER.customersPerDay = arg('per-day', COUNTER.customersPerDay);
 COUNTER.demandHitPpm = Math.round(arg('hit', COUNTER.demandHitPpm / 1e6) * 1e6);
 const ONLY_MAIN = arg('only-main', 0) === 1;
 // --shop 买店价、--rent-base 第 1 周租金、--rent-growth 每周倍率
@@ -87,7 +87,7 @@ function season(rng: Rng, packsPerDay: number, reserveFromDay: number): SeasonRe
         pity = r.pityCount;
         for (const c of r.cards) inv.push({ rarity: c.rarity, style: c.style, value: publicPrice({ rarity: c.rarity, style: c.style, publicGrade: null }) });
       }
-      for (let k = 0; k < COUNTER.slotHours.length * COUNTER.perSlot; k += 1) {
+      for (let k = 0; k < COUNTER.customersPerDay; k += 1) {
         const type = pickPpm(rng, MVP_TYPES, (t) => CUSTOMER[t].ppm);
         let card: Card | null = null;
         let price = 0;

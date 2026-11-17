@@ -3,7 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import { PACKS } from '@kanu/shared/balance';
 import type { MeResponse } from '@kanu/shared/types';
 import { fail, type Deps } from '../app.ts';
-import { sydneyDay } from '../time.ts';
+import { dayKey } from '../db/index.ts';
 
 export function registerMeRoutes(app: FastifyInstance, deps: Deps, now: () => number) {
   app.get('/api/me', async (req, reply) => {
@@ -11,7 +11,7 @@ export function registerMeRoutes(app: FastifyInstance, deps: Deps, now: () => nu
     const player = deps.repo.getPlayer(req.user.id);
     if (!player) return fail(reply, 401, 'unauthorized', '请重新打开卡奴登录');
     const wallet = await deps.wallet.balance(req.user.id);
-    const used = deps.repo.packsOpenedToday(req.user.id, sydneyDay(now()));
+    const used = deps.repo.packsOpenedToday(req.user.id, dayKey(player.game_day));
     const body: MeResponse = {
       ok: true,
       user: { id: player.discord_id, name: player.display_name, avatar: player.avatar },
@@ -21,6 +21,7 @@ export function registerMeRoutes(app: FastifyInstance, deps: Deps, now: () => nu
       wallet,
       pityCount: player.pity_count,
       packsLeftToday: Math.max(0, PACKS.normal.dailyLimit - used),
+      gameDay: player.game_day,
       devTools: deps.config.devUnlimitedIds.has(req.user.id),
     };
     return body;

@@ -160,3 +160,6 @@ h2 small { color: var(--muted); font-weight: normal; font-size: 13px; margin-lef
 .price-input input { flex: 1; min-height: 44px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel-2); color: var(--text); font-size: 18px; padding: 0 12px; }
 .deal-msg { text-align: center; font-weight: 700; color: var(--accent); margin: 12px 0 0; }
 .tabs button { font-size: 14px; }
+
+/* ---- 测试工具 ---- */
+.devtools { margin-top: 24px; border: 1px dashed #f5c54288; border-radius: 12px; padding: 4px 14px 14px; }

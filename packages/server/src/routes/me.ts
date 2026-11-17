@@ -21,7 +21,22 @@ export function registerMeRoutes(app: FastifyInstance, deps: Deps, now: () => nu
       wallet,
       pityCount: player.pity_count,
       packsLeftToday: Math.max(0, PACKS.normal.dailyLimit - used),
+      devTools: deps.config.devUnlimitedIds.has(req.user.id),
     };
     return body;
+  });
+
+  // 测试工具：直接把信用点设成某个数（只给测试账号用；DEV_AUTH 没开时 devUnlimitedIds 是空的，等于不存在）
+  app.post<{ Body: { credits?: unknown } }>('/api/dev/credits', async (req, reply) => {
+    if (!req.user || !deps.config.devUnlimitedIds.has(req.user.id)) return fail(reply, 404, 'not_found', '没有这个接口');
+    const credits = Number(req.body?.credits);
+    if (!Number.isInteger(credits) || credits < 0 || credits > 100_000_000) return fail(reply, 400, 'bad_credits', '信用点要是 0 到 1 亿之间的整数');
+    const player = deps.repo.getPlayer(req.user.id);
+    if (!player) return fail(reply, 401, 'unauthorized', '请重新打开卡奴登录');
+    deps.repo.db.transaction(() => {
+      deps.repo.setCreditsPity(req.user!.id, credits, player.pity_count);
+      deps.repo.logCredits(req.user!.id, now(), credits - player.credits, 'dev_set', credits);
+    })();
+    return { ok: true, credits };
   });
 }

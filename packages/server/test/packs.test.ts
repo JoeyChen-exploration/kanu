@@ -211,3 +211,23 @@ describe('库存和珍藏柜（FR-INV-1、FR-INV-6）', () => {
     expect(repo.countLocation('123456789012345678', 'showcase')).toBe(0);
   });
 });
+
+describe('测试工具：设置信用点', () => {
+  it('测试账号可以把信用点设成任意数，写流水；普通账号和没开 DEV_AUTH 时接口不存在', async () => {
+    const on = setup({ devAuth: true, unlimited: '123456789012345678' });
+    const h = await login(on.app);
+    expect((await on.app.inject({ method: 'GET', url: '/api/me', headers: h })).json().devTools).toBe(true);
+    const r = await on.app.inject({ method: 'POST', url: '/api/dev/credits', headers: h, payload: { credits: 88888 } });
+    expect(r.json()).toMatchObject({ ok: true, credits: 88888 });
+    expect(on.repo.getPlayer('123456789012345678')!.credits).toBe(88888);
+    const other = (await on.app.inject({ method: 'POST', url: '/api/auth/dev-login', payload: { name: 'bob' } })).json();
+    expect((await on.app.inject({ method: 'POST', url: '/api/dev/credits', headers: { authorization: `Bearer ${other.session}` }, payload: { credits: 1 } })).statusCode).toBe(404);
+    await on.app.close();
+
+    const off = setup({ devAuth: false, unlimited: '123456789012345678' });
+    cleanup = () => off.app.close();
+    const h2 = await login(off.app);
+    expect((await off.app.inject({ method: 'GET', url: '/api/me', headers: h2 })).json().devTools).toBe(false);
+    expect((await off.app.inject({ method: 'POST', url: '/api/dev/credits', headers: h2, payload: { credits: 1 } })).statusCode).toBe(404);
+  });
+});

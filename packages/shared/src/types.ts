@@ -149,4 +149,6 @@ export interface MeResponse {
   pityCount: number;
   /** 今天还能开几包正规包 */
   packsLeftToday: number;
+  /** 测试账号（DEV_AUTH=1 且在 DEV_UNLIMITED_IDS 里）才是 true：前端显示测试工具 */
+  devTools: boolean;
 }

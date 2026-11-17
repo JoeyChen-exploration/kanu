@@ -17,3 +17,6 @@ coverage/
 # Claude Code：本机配置（兄弟仓库的绝对路径）和钩子运行时的标记文件
 .claude/settings.local.json
 .claude/hooks/.pending-sync-check
+
+# 本机工作文件（调研结果、临时脚本、测试数据库），放在 D 盘，不进 git
+.scratch/

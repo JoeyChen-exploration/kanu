@@ -58,7 +58,7 @@ export function App() {
         <span className="topbar-credits">{fmt(me.credits)} 信用点</span>
       </header>
       <main className="content">
-        {tab === 'shop' && <Shop me={me} />}
+        {tab === 'shop' && <Shop me={me} onChange={patchMe} />}
         {tab === 'packs' && <Packs me={me} onChange={patchMe} />}
         {tab === 'counter' && <Counter onChange={patchMe} />}
         {tab === 'inventory' && <Inventory />}
@@ -73,7 +73,32 @@ export function App() {
   );
 }
 
-function Shop({ me }: { me: MeResponse }) {
+function DevTools({ onChange }: { onChange: (p: Partial<MeResponse>) => void }) {
+  const [value, setValue] = useState('100000');
+  const [msg, setMsg] = useState('');
+  const save = async () => {
+    try {
+      const r = await api<{ credits: number }>('/dev/credits', { method: 'POST', body: { credits: Number(value) } });
+      onChange({ credits: r.credits });
+      setMsg(`已设为 ${fmt(r.credits)}`);
+    } catch (e) {
+      setMsg((e as Error).message);
+    }
+  };
+  return (
+    <section className="devtools">
+      <h2>测试工具 <small>只有测试账号看得到</small></h2>
+      <label className="price-input">
+        信用点设为
+        <input inputMode="numeric" value={value} onChange={(e) => setValue(e.target.value.replace(/\D/g, ''))} />
+      </label>
+      <button className="secondary" disabled={!value} onClick={save}>保存</button>
+      {msg && <p className="hint">{msg}</p>}
+    </section>
+  );
+}
+
+function Shop({ me, onChange }: { me: MeResponse; onChange: (p: Partial<MeResponse>) => void }) {
   return (
     <section className="page">
       <h1>你好，{me.user.name}</h1>
@@ -87,6 +112,7 @@ function Shop({ me }: { me: MeResponse }) {
         <div className="stat"><span className="label">摊位</span><span className="value">第 {me.weekNo} 周</span></div>
       </section>
       <p className="hint">去"进货"开包，再到"柜台"把卡卖给顾客。鉴定和房租还在装修。</p>
+      {me.devTools && <DevTools onChange={onChange} />}
     </section>
   );
 }

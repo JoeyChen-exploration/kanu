@@ -139,6 +139,12 @@ const MIGRATIONS: string[] = [
 
   // 8：珍藏柜不占卡册格子（2026-11-17）。之前放进珍藏柜的卡还挂在卡册上，清掉
   `UPDATE card_instances SET binder_id = NULL, loose_since_day = NULL WHERE location = 'showcase';`,
+
+  // 9：珍藏柜要解锁、升级（2026-11-17）。老存档里已经放了卡的玩家直接送 1 级。
+  // 顾客的耐心上限按进门时算（珍藏柜加成会让耐心多 1 点），存下来给前端画耐心条
+  `ALTER TABLE players ADD COLUMN showcase_level INTEGER NOT NULL DEFAULT 0;
+   UPDATE players SET showcase_level = 1 WHERE discord_id IN (SELECT owner_id FROM card_instances WHERE location = 'showcase');
+   ALTER TABLE customers ADD COLUMN max_patience INTEGER NOT NULL DEFAULT 0;`,
 ];
 
 /** 营业日在 customers、daily_usage 里的键 */
@@ -159,6 +165,8 @@ export interface CustomerRow {
   budget_low: number;
   budget_high: number;
   counter_price: number | null;
+  /** 进门时的耐心（含珍藏柜加成）；老数据为 0 */
+  max_patience: number;
   created_at: number;
 }
 
@@ -172,6 +180,7 @@ export interface PlayerRow {
   pity_count: number;
   game_day: number;
   day_customer_count: number;
+  showcase_level: number;
   created_at: number;
 }
 
@@ -398,12 +407,18 @@ function createRepo(db: Database.Database) {
       db.prepare('SELECT * FROM customers WHERE owner_id = ? AND day_key = ? ORDER BY slot, seat').all(ownerId, day) as CustomerRow[],
     getCustomer: (ownerId: string, id: number) =>
       (db.prepare('SELECT * FROM customers WHERE id = ? AND owner_id = ?').get(id, ownerId) as CustomerRow | undefined) ?? null,
-    insertCustomer(c: Omit<CustomerRow, 'id' | 'status' | 'counter_price'>): number {
+    insertCustomer(c: Omit<CustomerRow, 'id' | 'status' | 'counter_price' | 'max_patience'> & { max_patience?: number }): number {
       const r = db.prepare(
-        `INSERT INTO customers (owner_id, day_key, slot, seat, type, demand, float, patience, line, budget_low, budget_high, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).run(c.owner_id, c.day_key, c.slot, c.seat, c.type, c.demand, c.float, c.patience, c.line, c.budget_low, c.budget_high, c.created_at);
+        `INSERT INTO customers (owner_id, day_key, slot, seat, type, demand, float, patience, max_patience, line, budget_low, budget_high, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run(c.owner_id, c.day_key, c.slot, c.seat, c.type, c.demand, c.float, c.patience, c.max_patience ?? c.patience, c.line, c.budget_low, c.budget_high, c.created_at);
       return Number(r.lastInsertRowid);
+    },
+    setShowcaseLevel: (discordId: string, level: number) => db.prepare('UPDATE players SET showcase_level = ? WHERE discord_id = ?').run(level, discordId),
+    /** 珍藏柜里的卡（公开信息），最值钱的在前 */
+    showcaseCards(ownerId: string): CardView[] {
+      const rows = db.prepare(`${q.cardsWithTemplate} WHERE i.owner_id = ? AND i.location = 'showcase' ORDER BY i.id`).all(ownerId) as CardViewRow[];
+      return rows.map(toCardView).sort((a, b) => b.price - a.price);
     },
     updateCustomer: (id: number, c: { patience: number; status: string; line: string; counter_price: number | null }) =>
       db.prepare('UPDATE customers SET patience = ?, status = ?, line = ?, counter_price = ? WHERE id = ?').run(c.patience, c.status, c.line, c.counter_price, id),

@@ -243,8 +243,30 @@ export const PLAYER = {
 
 export const SEASON = { weeks: 8 };
 
-/** 珍藏柜（DESIGN 8.1、FR-INV-6）：默认格数，科技树 S1 可扩 */
-export const SHOWCASE = { slots: 3 };
+/**
+ * 珍藏柜（DESIGN 8.1、FR-INV-6、FR-INV-11，2026-11-17 用户定）：开局没有，要花信用点解锁、升级；科技树 S1 再 +2 格。
+ * 珍藏柜是店的门面：其他玩家和 AI 顾客都看得到。按柜里的卡算"展示分"（只看公开的稀有度和风格），
+ * 展示分越高，顾客的预算和心理价位越高，到一定分数耐心 +1。
+ */
+export const SHOWCASE = {
+  /** levels[n] = 第 n 级：升到这一级的价格、格数。第 0 级 = 没解锁 */
+  levels: [
+    { price: 0, slots: 0 },
+    // 2026-11-17 模拟调参：2,000 / 8,000 / 25,000 → 1,000 / 4,000 / 12,000（原价每天 2 包的玩家买店率从 72% 掉到 33%）
+    { price: 1000, slots: 3 },
+    { price: 4000, slots: 5 },
+    { price: 12000, slots: 8 },
+  ],
+  /** 每张卡的展示分 = rarityScore × 风格倍数（STYLE[style].mult），四舍五入 */
+  rarityScore: { N: 0, R: 1, SR: 3, SSR: 8, UR: 20, LR: 50, MR: 120 } as Record<Rarity, number>,
+  /** 每多少展示分，顾客预算和心理价位 +1%（2026-11-17 模拟调参：10 → 5） */
+  pointsPerPct: 5,
+  /** 预算和心理价位最多加多少（2026-11-17 模拟调参：15% → 20%） */
+  maxPriceBonus: 0.2,
+  /** 展示分到这个数，每位顾客耐心 +patienceBonus */
+  patienceAt: 40,
+  patienceBonus: 1,
+};
 
 // ---------- 卡册（DESIGN 4.5，2026-11-17 用户定） ----------
 // 卡要放进卡册才算收好；所有卡册的格数加起来就是库存上限。卡册满了，新开的卡只能散放在桌面上（最多 LOOSE.slots 张），

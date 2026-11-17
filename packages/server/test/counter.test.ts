@@ -276,6 +276,7 @@ describe('出价（FR-CTR-4）', () => {
     const { cardId, customerId } = seedSale(repo);
     await app.inject({ method: 'POST', url: '/api/binders/organize', headers: h });
     expect(repo.bindersOf(UID)[0]!.used).toBe(1);
+    repo.setShowcaseLevel(UID, 1);
     await app.inject({ method: 'POST', url: `/api/inventory/${cardId}/showcase`, headers: h, payload: { on: true } });
     expect(repo.bindersOf(UID)[0]!.used).toBe(0);
 

@@ -232,9 +232,10 @@ describe('拆包（FR-PACK-1～6）', () => {
 
 describe('隐藏属性不出服务器（FR-INV-2、NFR-SEC-2）', () => {
   it('进货、卡包、拆包、库存、图鉴、珍藏柜、/me 的响应里都没有隐藏属性', async () => {
-    const { app } = setup();
+    const { app, repo } = setup();
     cleanup = () => app.close();
     const h = await login(app);
+    repo.setShowcaseLevel(UID, 1);
     const store = (await app.inject({ method: 'GET', url: '/api/store', headers: h })).json();
     const bought = (await buy(app, h)).json();
     const sealed = (await app.inject({ method: 'GET', url: '/api/packs', headers: h })).json();
@@ -242,8 +243,10 @@ describe('隐藏属性不出服务器（FR-INV-2、NFR-SEC-2）', () => {
     const inv = (await app.inject({ method: 'GET', url: '/api/inventory', headers: h })).json();
     const coll = (await app.inject({ method: 'GET', url: '/api/collection', headers: h })).json();
     const show = (await app.inject({ method: 'POST', url: `/api/inventory/${opened.cards[0].id}/showcase`, headers: h, payload: { on: true } })).json();
+    expect(show.ok).toBe(true);
     const me = (await app.inject({ method: 'GET', url: '/api/me', headers: h })).json();
-    for (const body of [store, bought, sealed, opened, inv, coll, show, me]) expect(findKeys(body, HIDDEN_KEYS)).toEqual([]);
+    const showcase = (await app.inject({ method: 'GET', url: '/api/showcase', headers: h })).json();
+    for (const body of [store, bought, sealed, opened, inv, coll, show, me, showcase]) expect(findKeys(body, HIDDEN_KEYS)).toEqual([]);
   });
 
   it('同一个模板、真实品相不同的两张卡，报价一样（FR-APPR-5）', async () => {
@@ -272,18 +275,19 @@ describe('库存和珍藏柜（FR-INV-1、FR-INV-6）', () => {
     }
   });
 
-  it('珍藏柜最多 3 格，可以取出', async () => {
+  it('珍藏柜开局没有，要解锁；格数按等级；可以取出', async () => {
     const { app, repo } = setup();
     cleanup = () => app.close();
     const h = await login(app);
     const { cards } = await buyAndOpen(app, h);
-    for (let i = 0; i < SHOWCASE.slots; i += 1) {
-      expect((await app.inject({ method: 'POST', url: `/api/inventory/${cards[i]!.id}/showcase`, headers: h, payload: { on: true } })).statusCode).toBe(200);
-    }
-    const full = await app.inject({ method: 'POST', url: `/api/inventory/${cards[3]!.id}/showcase`, headers: h, payload: { on: true } });
-    expect(full.json().code).toBe('showcase_full');
-    await app.inject({ method: 'POST', url: `/api/inventory/${cards[0]!.id}/showcase`, headers: h, payload: { on: false } });
-    expect(repo.countLocation(UID, 'showcase')).toBe(SHOWCASE.slots - 1);
+    const put = (id: number, on = true) => app.inject({ method: 'POST', url: `/api/inventory/${id}/showcase`, headers: h, payload: { on } });
+    expect((await put(cards[0]!.id)).json().code).toBe('showcase_locked');
+    repo.setShowcaseLevel(UID, 1);
+    const slots = SHOWCASE.levels[1]!.slots;
+    for (let i = 0; i < slots; i += 1) expect((await put(cards[i]!.id)).statusCode).toBe(200);
+    expect((await put(cards[slots]!.id)).json().code).toBe('showcase_full');
+    await put(cards[0]!.id, false);
+    expect(repo.countLocation(UID, 'showcase')).toBe(slots - 1);
   });
 
   it('不能动别人的卡', async () => {

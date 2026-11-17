@@ -136,6 +136,9 @@ const MIGRATIONS: string[] = [
    CREATE INDEX binders_owner ON binders (owner_id);
    ALTER TABLE card_instances ADD COLUMN binder_id INTEGER REFERENCES binders(id);
    ALTER TABLE card_instances ADD COLUMN loose_since_day INTEGER;`,
+
+  // 8：珍藏柜不占卡册格子（2026-11-17）。之前放进珍藏柜的卡还挂在卡册上，清掉
+  `UPDATE card_instances SET binder_id = NULL, loose_since_day = NULL WHERE location = 'showcase';`,
 ];
 
 /** 营业日在 customers、daily_usage 里的键 */
@@ -381,9 +384,9 @@ function createRepo(db: Database.Database) {
       (db.prepare('SELECT COUNT(*) AS n FROM card_instances WHERE owner_id = ? AND location = ?').get(ownerId, location) as { n: number }).n,
     setLocation: (id: number, location: CardLocation) => db.prepare('UPDATE card_instances SET location = ? WHERE id = ?').run(location, id),
 
-    /** 能拿去柜台卖的卡（在库存里，不在珍藏柜） */
+    /** 能拿去柜台卖的卡：卡册、桌面、珍藏柜里的都能卖（2026-11-17 用户定：珍藏柜只防抵押、防清空，不防卖） */
     sellableCards(ownerId: string, limit = 1000): CardView[] {
-      const rows = db.prepare(`${q.cardsWithTemplate} WHERE i.owner_id = ? AND i.location = 'inventory' ORDER BY i.id DESC LIMIT ?`).all(ownerId, limit) as CardViewRow[];
+      const rows = db.prepare(`${q.cardsWithTemplate} WHERE i.owner_id = ? AND i.location IN ('inventory', 'showcase') ORDER BY i.id DESC LIMIT ?`).all(ownerId, limit) as CardViewRow[];
       return rows.map(toCardView);
     },
     deleteCard: (id: number) => db.prepare('DELETE FROM card_instances WHERE id = ?').run(id),

@@ -231,6 +231,7 @@ h2 small { color: var(--muted); font-weight: normal; font-size: 13px; margin-lef
 .binder-slot { aspect-ratio: 63 / 88; border: 1px dashed #2f3442; border-radius: 9px; }
 /* 柜台翻卡册：符合这位顾客的高亮，不符合的变暗 */
 .binder-loose { background: linear-gradient(160deg, #7a4b2a, #3b2414); }
+.binder-showcase { background: linear-gradient(160deg, #f5c542, #8a5a12); color: #2a1a00; }
 .binder-item.has-match { border-color: var(--accent); }
 .match-badge { flex: none; font-size: 12px; font-weight: 700; color: #111; background: var(--accent); border-radius: 999px; padding: 3px 8px; }
 .match-badge.none { color: var(--muted); background: none; font-weight: 400; }

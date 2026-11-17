@@ -187,6 +187,8 @@ export interface EligibleCardsResponse {
   binders: Array<{ id: number; kind: string; name: string; used: number; slots: number; matchCount: number }>;
   /** 桌面散放的卡（翻卡册接口里 binderId = 0） */
   loose: { count: number; matchCount: number };
+  /** 珍藏柜里的卡也能卖（翻卡册接口里 binderId = showcase） */
+  showcase: { count: number; matchCount: number };
 }
 
 /** GET /api/counter/:id/binder/:binderId?page=&matchFirst= ：按这位顾客翻一本卡册（0 = 桌面散放） */

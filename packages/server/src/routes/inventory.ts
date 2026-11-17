@@ -30,7 +30,18 @@ export function registerInventoryRoutes(app: FastifyInstance, deps: Deps) {
       if (on && card.location !== 'showcase' && repo.countLocation(req.user!.id, 'showcase') >= SHOWCASE.slots) {
         return fail(reply, 400, 'showcase_full', `珍藏柜只有 ${SHOWCASE.slots} 格，先取出一张`);
       }
-      repo.setLocation(id, on ? 'showcase' : 'inventory');
+      if (on === (card.location === 'showcase')) return { ok: true, card: repo.cardView(id) };
+      if (on) {
+        // 珍藏柜不占卡册格子：放进去时从卡册 / 桌面拿出来
+        repo.placeCard(id, null, null);
+        repo.setLocation(id, 'showcase');
+      } else {
+        // 取出来：放回有空位的卡册，满了散放在桌面；都放不下就不让取
+        const player = repo.getPlayer(req.user!.id)!;
+        if (deps.binders!.space(req.user!.id).total === 0) return fail(reply, 400, 'no_space', '卡册和桌面都满了，先卖掉几张或买本新卡册');
+        repo.setLocation(id, 'inventory');
+        deps.binders!.placeNew(req.user!.id, [id], player.game_day);
+      }
       return { ok: true, card: repo.cardView(id) };
     })();
   });

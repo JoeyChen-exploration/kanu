@@ -156,13 +156,14 @@ export function registerCounterRoutes(app: FastifyInstance, deps: Deps, now: () 
       .map((p) => ({ view: { id: p.id, seriesId: p.series_id, name: p.name, kind: p.kind }, sell: { id: p.id, seriesId: p.series_id, price: PACKS[p.kind].price } }))
       .filter((p) => matchesPack(p.sell, demand))
       .map((p) => ({ ...p.view, quickPrice: quickPricePack(type, p.sell) }));
-    const countIn = (binderId: number | null) => matched.filter((c) => c.binderId === binderId).length;
+    const countIn = (binderId: number) => matched.filter((c) => c.location === 'inventory' && c.binderId === binderId).length;
     const binders = repo.bindersOf(userId).map((b) => {
       const spec = BINDERS[b.kind as BinderKind];
       return { id: b.id, kind: b.kind, name: spec.name, used: b.used, slots: spec.slots, matchCount: countIn(b.id) };
     });
-    const loose = { count: repo.looseCards(userId).length, matchCount: countIn(null) };
-    return { ok: true, cards, packs, binders, loose } satisfies EligibleCardsResponse;
+    const loose = { count: repo.looseCards(userId).length, matchCount: matched.filter((c) => c.location === 'inventory' && c.binderId === null).length };
+    const showcase = { count: repo.countLocation(userId, 'showcase'), matchCount: matched.filter((c) => c.location === 'showcase').length };
+    return { ok: true, cards, packs, binders, loose, showcase } satisfies EligibleCardsResponse;
   });
 
   /** 按这位顾客翻一本卡册（binderId = 0 是桌面散放）：一页 9 张，符合的高亮；matchFirst=1 时符合的排前面（按市场价从高到低） */
@@ -175,7 +176,10 @@ export function registerCounterRoutes(app: FastifyInstance, deps: Deps, now: () 
     const binderId = Number.parseInt(req.params.binderId, 10);
     let binder: CounterBinderPageResponse['binder'];
     let all: CardView[];
-    if (binderId === 0) {
+    if (req.params.binderId === 'showcase') {
+      binder = { id: -1, kind: 'showcase', name: '珍藏柜' };
+      all = repo.inventory(userId, { location: 'showcase', page: 1, pageSize: 1000 }).cards;
+    } else if (binderId === 0) {
       binder = { id: 0, kind: 'loose', name: '桌面散放' };
       all = repo.looseCards(userId);
     } else {
@@ -221,7 +225,7 @@ export function registerCounterRoutes(app: FastifyInstance, deps: Deps, now: () 
       } else {
         const instanceId = Number(item.instanceId);
         const inst = repo.ownedInstance(ownerId, instanceId);
-        if (!inst || inst.location !== 'inventory') throw new ApiError(400, 'bad_card', '这张卡不能卖（不在库存里，或者在珍藏柜里）');
+        if (!inst || (inst.location !== 'inventory' && inst.location !== 'showcase')) throw new ApiError(400, 'bad_card', '这张卡现在不能卖');
         const view = repo.cardView(instanceId)!;
         const card = toSellable(view);
         if (!matchesCard(card, demand)) throw new ApiError(400, 'not_wanted', '这位顾客不要这张卡');

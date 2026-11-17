@@ -322,6 +322,28 @@ export const LOOSE = {
   wearPpm: 100_000,
 };
 
+// ---------- 任务栏 / 新手指引（2026-11-17 用户定） ----------
+// 右上角的任务栏：一条一条带新玩家上手，做完点"领取"拿信用点。进度从已有的流水和库存里数，不另记计数。
+// 以后科技树上线，玩家可以在任务栏里追踪节点的解锁条件。
+export type QuestMetric = 'packsBought' | 'packsOpened' | 'sales' | 'daysEnded' | 'collected' | 'showcaseLevel' | 'showcaseCards' | 'binders';
+/** tab：点任务时跳到哪一页 */
+export type QuestTab = 'shop' | 'packs' | 'counter' | 'inventory' | 'collection';
+
+export const QUESTS: Array<{ id: string; title: string; hint: string; tab: QuestTab; metric: QuestMetric; target: number; reward: number }> = [
+  { id: 'buy_pack', title: '进第一批货', hint: '到"进货"页，用电脑订一包卡', tab: 'packs', metric: 'packsBought', target: 1, reward: 100 },
+  { id: 'open_pack', title: '拆开一包', hint: '在"进货"页的"我的卡包"里拆一包', tab: 'packs', metric: 'packsOpened', target: 1, reward: 100 },
+  { id: 'first_sale', title: '第一笔生意', hint: '到"柜台"，把客人要的卡拖到台面上卖给他', tab: 'counter', metric: 'sales', target: 1, reward: 150 },
+  { id: 'end_day', title: '打烊', hint: '客人都接待完，按"打烊"进入下一天', tab: 'counter', metric: 'daysEnded', target: 1, reward: 150 },
+  { id: 'sales_5', title: '小有生意', hint: '在柜台一共成交 5 笔', tab: 'counter', metric: 'sales', target: 5, reward: 300 },
+  { id: 'collect_10', title: '图鉴点亮 10 张', hint: '多开包，翻"图鉴"看看还差哪些', tab: 'collection', metric: 'collected', target: 10, reward: 300 },
+  { id: 'unlock_showcase', title: '摆出门面', hint: '在"库存"页解锁珍藏柜', tab: 'inventory', metric: 'showcaseLevel', target: 1, reward: 300 },
+  { id: 'showcase_card', title: '第一件展品', hint: '在"库存"页把一张好卡拖进珍藏柜', tab: 'inventory', metric: 'showcaseCards', target: 1, reward: 100 },
+  { id: 'buy_binder', title: '添一本卡册', hint: '到"进货"页的"用品"买一本卡册', tab: 'packs', metric: 'binders', target: 2, reward: 200 },
+  { id: 'week_one', title: '撑过第一周', hint: '营业满 7 天（打烊 7 次）', tab: 'counter', metric: 'daysEnded', target: 7, reward: 500 },
+];
+/** 任务栏里同时显示几条还没领奖的任务 */
+export const QUEST_BAR = { visible: 3 };
+
 /** 开包播报（FR-PACK-6）：开出这个稀有度及以上、或编号限定时全服播报 */
 export const ANNOUNCE = { minRarity: 'UR' as Rarity };
 

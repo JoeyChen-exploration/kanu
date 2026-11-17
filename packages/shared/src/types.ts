@@ -281,6 +281,34 @@ export interface BuyBinderResponse {
   placed: number;
 }
 
+/** 任务栏里的一条任务（FR-UI-4） */
+export interface QuestView {
+  id: string;
+  title: string;
+  hint: string;
+  /** 点任务跳到哪一页 */
+  tab: string;
+  progress: number;
+  target: number;
+  reward: number;
+  done: boolean;
+  claimed: boolean;
+}
+
+/** GET /api/quests：全部任务（按顺序），前端只显示前几条没领奖的 */
+export interface QuestsResponse {
+  ok: true;
+  quests: QuestView[];
+}
+
+/** POST /api/quests/:id/claim */
+export interface QuestClaimResponse {
+  ok: true;
+  credits: number;
+  reward: number;
+  quests: QuestView[];
+}
+
 /** 珍藏柜的状态（FR-INV-11）：展示分只按公开的稀有度和风格算 */
 export interface ShowcaseStatus {
   /** 0 = 还没解锁 */

@@ -10,6 +10,7 @@ import { Inventory } from './pages/Inventory.tsx';
 import { Collection } from './pages/Collection.tsx';
 import { Counter } from './pages/Counter.tsx';
 import { Booklet, bookletUnseen } from './Booklet.tsx';
+import { QuestBar } from './QuestBar.tsx';
 
 type State =
   | { kind: 'loading'; text: string }
@@ -67,6 +68,7 @@ export function App() {
         <button className="topbar-book" onClick={() => setBooklet(true)} aria-label="新手手册">📖</button>
       </header>
       {booklet && <Booklet onClose={() => setBooklet(false)} />}
+      <QuestBar onGo={(t) => setTab(t as Tab)} onChange={patchMe} />
       <main className="content">
         {tab === 'shop' && <Shop me={me} onChange={patchMe} />}
         {tab === 'packs' && <Packs me={me} onChange={patchMe} />}

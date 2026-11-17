@@ -4,6 +4,9 @@
 import type { AuthTokenResponse, ConfigResponse } from '@kanu/shared/types';
 import { api, setSession } from './api.ts';
 
+/** SDK 里 OrientationLockStateTypeObject.LANDSCAPE（1 不锁、2 竖、3 横） */
+const ORIENTATION_LANDSCAPE = 3;
+
 /** Discord 打开 Activity 时 URL 会带 frame_id */
 export const insideDiscord = () => new URLSearchParams(window.location.search).has('frame_id');
 
@@ -22,6 +25,9 @@ export async function loginWithDiscord(cfg: ConfigResponse): Promise<AuthTokenRe
   const r = await api<AuthTokenResponse>('/auth/token', { method: 'POST', body: { code } });
   if (r.accessToken) await sdk.commands.authenticate({ access_token: r.accessToken });
   setSession(r.session);
+  // 卡奴是横屏游戏（2026-11-17 用户定）：手机上让 Discord 锁成横屏。失败（电脑版、旧客户端）不影响进游戏
+  sdk.commands.setOrientationLockState({ lock_state: ORIENTATION_LANDSCAPE, picture_in_picture_lock_state: ORIENTATION_LANDSCAPE })
+    .catch(() => {});
   return r;
 }
 

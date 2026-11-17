@@ -112,12 +112,14 @@ const MATCH_FIRST_KEY = 'kanu.counter.matchFirst';
 const readMatchFirst = () => { try { return localStorage.getItem(MATCH_FIRST_KEY) !== '0'; } catch { return true; } };
 
 /** 柜台卡册浮窗的内容：一页 3 × 3，符合这位顾客的高亮、能拖上台面（轻点也行），不符合的变暗 */
-function BinderPicker({ customerId, binder, onPick, bind, draggingId }: {
+function BinderPicker({ customerId, binder, onPick, bind, draggingId, onTable }: {
   customerId: number;
   binder: { id: number | 'showcase'; name: string };
   onPick: (item: Item) => void;
   bind: (item: Item) => BindProps;
   draggingId: number | null;
+  /** 已经摆在台面上的卡（卡册里标"已在台面"） */
+  onTable: Set<number>;
 }) {
   const [matchFirst, setMatchFirst] = useState(readMatchFirst);
   const [page, setPage] = useState(1);
@@ -144,6 +146,9 @@ function BinderPicker({ customerId, binder, onPick, bind, draggingId }: {
       <div className="binder-page">
         {cards.map(({ card, match, quickPrice }) => {
           if (!match) return <div key={card.id} className="cell dim" aria-disabled><Card card={card} small /></div>;
+          if (onTable.has(card.id)) {
+            return <div key={card.id} className="cell on-table" aria-disabled><Card card={card} small /><span className="cell-price">已在台面</span></div>;
+          }
           const item = cardItem(card, quickPrice ?? 0);
           return (
             <button key={card.id} className={draggingId === card.id ? 'cell match draggable dragging' : 'cell match draggable'} onClick={() => onPick(item)} {...bind(item)}>
@@ -395,7 +400,8 @@ function Deal({ customer, onChange, onDone, onUpdate, openBinders, setOpenBinder
         <FloatWindow key={String(b.id)} id={`counter-binder-${b.id}`} cascade={i} className="float-binder" title={b.name}
           onClose={() => setOpenBinders((xs) => xs.filter((x) => x.id !== b.id))}>
           <BinderPicker customerId={customer.id} binder={b} onPick={place} bind={sourceBind}
-            draggingId={drag?.item.item.kind === 'card' ? drag.item.item.id : null} />
+            draggingId={drag?.item.item.kind === 'card' ? drag.item.item.id : null}
+            onTable={new Set(table.filter((t) => t.kind === 'card').map((t) => t.id))} />
         </FloatWindow>
       ))}
       {drag && (

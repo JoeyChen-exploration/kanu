@@ -75,7 +75,7 @@ flowchart LR
 
 ### 2.3 运行环境
 
-- 客户端：Discord 桌面版、网页版、iOS、Android 里的 Activity iframe。**手机竖屏是主要场景**，最窄按 360 px 设计。
+- 客户端：Discord 桌面版、网页版、iOS、Android 里的 Activity iframe。**横屏是主要场景**（2026-11-17 改，版式学旺财牌局）：手机横屏约 844 × 390、电脑 16:9；方屏 / 竖屏（最窄 360 px）和画中画（高 ≤ 300）各有一套退路。进游戏时用 SDK `setOrientationLockState` 请 Discord 锁横屏，锁不上照常能玩。
 - 服务器：和旺财同一台 Linux 机器，Node.js 22，pm2 管理进程（旺财已经在用 `ecosystem.config.cjs`），cloudflared 隧道对外。
 
 ### 2.4 约束
@@ -392,7 +392,7 @@ Authorization: Bearer ${WANGCAI_CONTROL_SECRET}
 ### 8.3 可用性
 
 - **NFR-UX-1** 界面全中文。
-- **NFR-UX-2** 手机竖屏 360 px 宽也能完整操作，按钮不小于 44 px。
+- **NFR-UX-2** 手机横屏（高约 390 px）是主画面；竖屏 360 px 宽也能完整操作；画中画只显示信息。按钮不小于 40 px（横屏矮屏）/ 44 px（竖屏）。
 - **NFR-UX-3** 每个会扣信用点的操作都显示要扣多少，并要求确认（开包除外，开包按钮上直接写价格）。
 
 ### 8.4 可维护性

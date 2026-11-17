@@ -136,27 +136,51 @@ export const APPRAISAL = {
 };
 
 // ---------- 柜台顾客（DESIGN 6，SRS 8.5） ----------
-export const CUSTOMER_TYPES = ['resident', 'collector', 'rich', 'middleman', 'dealer', 'undercover'] as const;
+export const CUSTOMER_TYPES = ['resident', 'student', 'tourist', 'collector', 'nostalgic', 'rich', 'speculator', 'streamer', 'middleman', 'dealer', 'undercover'] as const;
 export type CustomerType = (typeof CUSTOMER_TYPES)[number];
+
+/**
+ * 顾客想要什么：
+ *   card：要卡。rarities 是收哪些稀有度；tagChance 是需求里带一个标签的概率（ppm）；
+ *         template 为 true 时点名要某一张卡（怀旧老顾客）。styleBonus：特殊风格（非标准框）的卡心理价位再乘这个数
+ *   pack：要没拆的卡包（开箱主播），按卡包的电脑订货价算
+ */
+export type CustomerWants =
+  | { kind: 'card'; rarities: Rarity[]; tagChance: number; template?: boolean; styleBonus?: number }
+  | { kind: 'pack' };
+
+const ALL: Rarity[] = ['N', 'R', 'SR', 'SSR', 'UR', 'LR', 'MR'];
+const SR_UP: Rarity[] = ['SR', 'SSR', 'UR', 'LR', 'MR'];
 
 export const CUSTOMER: Record<CustomerType, {
   name: string;
   ppm: number;
   /** MVP 里有没有这类顾客（DESIGN 12：MVP 不含卡贩和便衣） */
   mvp: boolean;
+  wants: CustomerWants;
   /** 心理价位的类型系数；中间人特殊，按基准价的固定比例收 */
   priceCoef: number;
   patience: number;
   /** 成交后识破假卡的概率（ppm） */
   detect: { low_fake: number; high_fake: number };
 }> = {
-  resident: { name: '下层区居民', ppm: 350_000, mvp: true, priceCoef: 0.8, patience: 4, detect: { low_fake: 300_000, high_fake: 100_000 } },
+  resident: { name: '下层区居民', ppm: 190_000, mvp: true, wants: { kind: 'card', rarities: ['N', 'R'], tagChance: 500_000 }, priceCoef: 0.8, patience: 4, detect: { low_fake: 300_000, high_fake: 100_000 } },
+  // 2026-11-17 加：学生钱少、耐心好，看到闪卡这类特殊风格愿意多给
+  student: { name: '学生', ppm: 100_000, mvp: true, wants: { kind: 'card', rarities: ['N', 'R'], tagChance: 300_000, styleBonus: 1.6 }, priceCoef: 0.6, patience: 5, detect: { low_fake: 100_000, high_fake: 0 } },
+  // 2026-11-17 加：上层区来的观光客，不太懂行，给钱爽快
+  tourist: { name: '观光客', ppm: 100_000, mvp: true, wants: { kind: 'card', rarities: ['N', 'R', 'SR'], tagChance: 400_000 }, priceCoef: 1.1, patience: 3, detect: { low_fake: 100_000, high_fake: 20_000 } },
   // 收藏家收 SR 以上的卡，封壳的不限稀有度但要评分够高（见 COLLECTOR）
-  collector: { name: '收藏家', ppm: 200_000, mvp: true, priceCoef: 1.2, patience: 2, detect: { low_fake: 800_000, high_fake: 500_000 } },
-  rich: { name: '上层区富人', ppm: 150_000, mvp: true, priceCoef: 1.4, patience: 3, detect: { low_fake: 100_000, high_fake: 50_000 } },
-  middleman: { name: '黑市中间人', ppm: 150_000, mvp: true, priceCoef: 0.4, patience: 3, detect: { low_fake: 0, high_fake: 0 } },
-  dealer: { name: '卡贩', ppm: 100_000, mvp: false, priceCoef: 1, patience: 3, detect: { low_fake: 0, high_fake: 0 } },
-  undercover: { name: '便衣治安员', ppm: 50_000, mvp: false, priceCoef: 1, patience: 3, detect: { low_fake: 0, high_fake: 0 } },
+  collector: { name: '收藏家', ppm: 120_000, mvp: true, wants: { kind: 'card', rarities: SR_UP, tagChance: 500_000 }, priceCoef: 1.2, patience: 2, detect: { low_fake: 800_000, high_fake: 500_000 } },
+  // 2026-11-17 加：点名要某一张卡，找到了出价很高
+  nostalgic: { name: '怀旧老顾客', ppm: 80_000, mvp: true, wants: { kind: 'card', rarities: ALL, tagChance: 0, template: true }, priceCoef: 1.5, patience: 3, detect: { low_fake: 500_000, high_fake: 200_000 } },
+  rich: { name: '上层区富人', ppm: 100_000, mvp: true, wants: { kind: 'card', rarities: SR_UP, tagChance: 500_000 }, priceCoef: 1.4, patience: 3, detect: { low_fake: 100_000, high_fake: 50_000 } },
+  // 2026-11-17 加：炒卡客只肯低价收 SR 以上，没耐心
+  speculator: { name: '炒卡客', ppm: 80_000, mvp: true, wants: { kind: 'card', rarities: SR_UP, tagChance: 300_000 }, priceCoef: 0.9, patience: 2, detect: { low_fake: 600_000, high_fake: 300_000 } },
+  // 2026-11-17 加：开箱主播买没拆的卡包回去直播开箱，按卡包价加价收
+  streamer: { name: '开箱主播', ppm: 80_000, mvp: true, wants: { kind: 'pack' }, priceCoef: 1.3, patience: 3, detect: { low_fake: 0, high_fake: 0 } },
+  middleman: { name: '黑市中间人', ppm: 100_000, mvp: true, wants: { kind: 'card', rarities: ALL, tagChance: 0 }, priceCoef: 0.4, patience: 3, detect: { low_fake: 0, high_fake: 0 } },
+  dealer: { name: '卡贩', ppm: 30_000, mvp: false, wants: { kind: 'card', rarities: ALL, tagChance: 0 }, priceCoef: 1, patience: 3, detect: { low_fake: 0, high_fake: 0 } },
+  undercover: { name: '便衣治安员', ppm: 20_000, mvp: false, wants: { kind: 'card', rarities: ALL, tagChance: 0 }, priceCoef: 1, patience: 3, detect: { low_fake: 0, high_fake: 0 } },
 };
 
 export const COUNTER = {
@@ -164,12 +188,12 @@ export const COUNTER = {
    * 每个营业日几位顾客。2026-11-17 改：学深空当铺，营业日由玩家自己推进——开门时这几位一次到店，
    * 接待完（或请走）就能打烊，马上进入下一天。不再按悉尼时间分早中晚。
    */
-  customersPerDay: 6,
+  customersPerDay: 10,
   /**
-   * 每个营业日实际来几位：按这张表随机（ppm），平均正好 customersPerDay，所以经济模拟的结论不变。
-   * 2026-11-17 用户要求每天客人不固定。科技树客流节点、特殊事件在这个基础上加人。
+   * 每个营业日实际来几位：按这张表随机（ppm），平均正好 customersPerDay。
+   * 2026-11-17 用户要求每天客人不固定、中位 10 位；顾客一位一位进门，处理完下一位才来。科技树客流节点、特殊事件在这个基础上加人。
    */
-  customersPerDayDist: { 4: 100_000, 5: 200_000, 6: 400_000, 7: 200_000, 8: 100_000 } as Record<number, number>,
+  customersPerDayDist: { 8: 100_000, 9: 200_000, 10: 400_000, 11: 200_000, 12: 100_000 } as Record<number, number>,
   /** 心理价位随机浮动范围 */
   floatMin: 0.85,
   floatMax: 1.25,

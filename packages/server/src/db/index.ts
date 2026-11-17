@@ -120,6 +120,10 @@ const MIGRATIONS: string[] = [
      created_at INTEGER NOT NULL
    );
    CREATE INDEX sealed_packs_owner ON sealed_packs (owner_id, series_id);`,
+
+  // 6：顾客一位一位进门（2026-11-17）。day_customer_count 是本营业日一共来几位（第一次开柜台时定，打烊清零），
+  // 不发给玩家：玩家不知道今天还剩几位
+  `ALTER TABLE players ADD COLUMN day_customer_count INTEGER NOT NULL DEFAULT 0;`,
 ];
 
 /** 营业日在 customers、daily_usage 里的键 */
@@ -152,6 +156,7 @@ export interface PlayerRow {
   week_no: number;
   pity_count: number;
   game_day: number;
+  day_customer_count: number;
   created_at: number;
 }
 
@@ -325,7 +330,8 @@ function createRepo(db: Database.Database) {
       db.prepare('SELECT p.id, p.series_id, p.source, s.name, s.kind FROM sealed_packs p JOIN series s ON s.id = p.series_id WHERE p.owner_id = ? ORDER BY p.id').all(ownerId) as Array<{ id: number; series_id: string; source: string; name: string; kind: 'themed' | 'premium' }>,
     seriesKind: (seriesId: string) => (db.prepare('SELECT kind FROM series WHERE id = ?').get(seriesId) as { kind: 'themed' | 'premium' } | undefined)?.kind ?? null,
 
-    advanceDay: (discordId: string) => db.prepare('UPDATE players SET game_day = game_day + 1 WHERE discord_id = ?').run(discordId),
+    advanceDay: (discordId: string) => db.prepare('UPDATE players SET game_day = game_day + 1, day_customer_count = 0 WHERE discord_id = ?').run(discordId),
+    setDayCustomerCount: (discordId: string, n: number) => db.prepare('UPDATE players SET day_customer_count = ? WHERE discord_id = ?').run(n, discordId),
     packsOpenedToday: (discordId: string, day: string) => q.getUsage.get(discordId, day)?.packs_normal ?? 0,
     bumpNormalPacks: (discordId: string, day: string) => q.bumpNormal.run(discordId, day),
 

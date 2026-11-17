@@ -60,6 +60,21 @@ describe('电脑订货（DESIGN 4）', () => {
     expect((repo.db.prepare('SELECT COUNT(*) AS n FROM card_instances').get() as { n: number }).n).toBe(0);
   });
 
+  it('购物车一次买好几种：总价、总包数都对，限购按合计算', async () => {
+    const { app, repo } = setup();
+    cleanup = () => app.close();
+    const h = await login(app);
+    repo.db.prepare('UPDATE players SET credits = 100000').run();
+    const cart = (items: object[]) => app.inject({ method: 'POST', url: '/api/store/buy', headers: { ...h, ...idem() }, payload: { items } });
+    const r = (await cart([{ seriesId: 'NEO', count: 2 }, { seriesId: 'ELT', count: 1 }])).json() as BuyPacksResponse;
+    expect(r.packIds).toHaveLength(3);
+    expect(r.credits).toBe(100000 - 2 * PACKS.themed.price - PACKS.premium.price);
+    expect(r.packsLeftToday).toBe(STORE.packsPerDay - 3);
+    expect((await cart([{ seriesId: 'MEC', count: 2 }, { seriesId: 'SEA', count: 1 }])).json().code).toBe('daily_limit');
+    expect((await cart([{ seriesId: 'MEC', count: 1 }, { seriesId: 'XXX', count: 1 }])).json().code).toBe('bad_pack');
+    expect(repo.sealedByOwner(UID)).toHaveLength(3);
+  });
+
   it('典藏包按典藏价扣钱', async () => {
     const { app, repo } = setup();
     cleanup = () => app.close();

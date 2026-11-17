@@ -1,7 +1,7 @@
 // 进货页（DESIGN 4）：上面是库存里没拆的卡包，点了拆开、逐张翻牌；下面是电脑订货（5 种卡包，按包买，正常价、保证正品）。
 import { useEffect, useState } from 'react';
 import { PITY } from '@kanu/shared/balance';
-import type { BuyPacksResponse, MeResponse, OpenPackResponse, SealedPacksResponse, StorePack, StoreResponse } from '@kanu/shared/types';
+import type { BuyPacksResponse, MeResponse, OpenPackResponse, SealedPacksResponse, StoreResponse } from '@kanu/shared/types';
 import { api, newIdempotencyKey } from '../api.ts';
 import { Card, CardBack, fmt } from '../Card.tsx';
 
@@ -12,6 +12,8 @@ export function Packs({ me, onChange }: { me: MeResponse; onChange: (patch: Part
   const [flipped, setFlipped] = useState<boolean[]>([]);
   const [busy, setBusy] = useState(false);
   const [showOdds, setShowOdds] = useState<string | null>(null);
+  /** 购物车：卡包种类 → 几包 */
+  const [cart, setCart] = useState<Record<string, number>>({});
   const [err, setErr] = useState('');
 
   const load = async () => {
@@ -27,9 +29,11 @@ export function Packs({ me, onChange }: { me: MeResponse; onChange: (patch: Part
     try { await fn(); } catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
   };
 
-  const buy = (pack: StorePack) => run(async () => {
-    const r = await api<BuyPacksResponse>('/store/buy', { method: 'POST', body: { seriesId: pack.seriesId, count: 1 }, idempotencyKey: newIdempotencyKey() });
+  const checkout = () => run(async () => {
+    const items = Object.entries(cart).filter(([, n]) => n > 0).map(([seriesId, count]) => ({ seriesId, count }));
+    const r = await api<BuyPacksResponse>('/store/buy', { method: 'POST', body: { items }, idempotencyKey: newIdempotencyKey() });
     onChange({ credits: r.credits, ...(r.packsLeftToday !== null ? { packsLeftToday: r.packsLeftToday } : {}) });
+    setCart({});
     await load();
   });
 
@@ -44,6 +48,11 @@ export function Packs({ me, onChange }: { me: MeResponse; onChange: (patch: Part
   const flip = (i: number) => setFlipped((f) => f.map((v, j) => (j === i ? true : v)));
   const allFlipped = flipped.length > 0 && flipped.every(Boolean);
   const left = store?.packsLeftToday;
+  const cartCount = Object.values(cart).reduce((a, b) => a + b, 0);
+  const cartCost = store ? store.packs.reduce((sum, p) => sum + (cart[p.seriesId] ?? 0) * p.price, 0) : 0;
+  const free = left === null;
+  const canAdd = free || (left !== undefined && cartCount < left);
+  const setQty = (id: string, n: number) => setCart((c) => ({ ...c, [id]: Math.max(0, n) }));
 
   // 正在翻牌时只显示这一包
   if (opened) {
@@ -99,12 +108,23 @@ export function Packs({ me, onChange }: { me: MeResponse; onChange: (patch: Part
                 <span className="odds">{p.odds.map((o) => `${o.rarity} ${o.percent}%`).join(' · ')}</span>
               )}
             </div>
-            <button className="buy" disabled={busy || left === 0 || (left !== null && me.credits < p.price)} onClick={() => buy(p)}>
-              {left === null ? '免费' : fmt(p.price)}
-            </button>
+            <div className="qty">
+              <span className="qty-price">{free ? '免费' : fmt(p.price)}</span>
+              <div className="stepper">
+                <button aria-label="少一包" disabled={!cart[p.seriesId]} onClick={() => setQty(p.seriesId, (cart[p.seriesId] ?? 0) - 1)}>−</button>
+                <span>{cart[p.seriesId] ?? 0}</span>
+                <button aria-label="多一包" disabled={!canAdd} onClick={() => setQty(p.seriesId, (cart[p.seriesId] ?? 0) + 1)}>+</button>
+              </div>
+            </div>
           </div>
         ))}
       </div>
+      {cartCount > 0 && (
+        <div className="cart-bar">
+          <span>购物车 {cartCount} 包 · {free ? '免费' : `${fmt(cartCost)} 信用点`}</span>
+          <button className="buy" disabled={busy || (!free && me.credits < cartCost)} onClick={checkout}>下单</button>
+        </div>
+      )}
       {err && <p className="error">{err}</p>}
     </section>
   );

@@ -145,7 +145,8 @@ export interface CustomerView {
   typeName: string;
   /** 最近一句台词 */
   line: string;
-  demand: { rarities: string[]; tag: string | null; text: string };
+  /** 想要什么：card 要卡（text 是"火属性的 SR 以上的卡"或"「霓虹龙·影」"），pack 要没拆的卡包 */
+  demand: { kind: 'card' | 'pack'; text: string };
   budgetLow: number;
   budgetHigh: number;
   patience: number;
@@ -157,9 +158,14 @@ export interface CustomerView {
 
 export interface CounterResponse {
   ok: true;
-  customers: CustomerView[];
   /** 第几个营业日（玩家自己推进，打烊 +1） */
   day: number;
+  /** 眼前这一位；没人了是 null */
+  current: CustomerView | null;
+  /** 今天已经接待过的（成交、走人、请走），最新的在最后 */
+  served: CustomerView[];
+  /** 今天的顾客都接待完了，可以打烊。今天一共来几位不告诉玩家 */
+  done: boolean;
 }
 
 export interface EndDayResponse {
@@ -171,12 +177,17 @@ export interface EndDayResponse {
 export interface EligibleCardsResponse {
   ok: true;
   cards: Array<{ card: CardView; quickPrice: number }>;
+  /** 开箱主播要的是没拆的卡包 */
+  packs: Array<{ id: number; seriesId: string; name: string; kind: string; quickPrice: number }>;
 }
 
 export interface OfferResponse {
   ok: true;
   outcome: 'deal' | 'counter' | 'too_high' | 'left' | 'caught';
   customer: CustomerView;
+  /** 这位走了以后进门的下一位（没有了是 null） */
+  next: CustomerView | null;
+  done: boolean;
   /** 成交价（deal 时） */
   price: number | null;
   credits: number;

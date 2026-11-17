@@ -83,6 +83,20 @@ describe('开包（FR-PACK-1～5）', () => {
     expect((await open(app, h)).statusCode).toBe(200);
   });
 
+  it('测试账号（DEV_UNLIMITED_IDS）开包不扣钱、不限购；没开 DEV_AUTH 时不生效', async () => {
+    const on = setup({ devAuth: true, unlimited: '123456789012345678' });
+    const h = await login(on.app);
+    for (let i = 0; i < PACKS.normal.dailyLimit + 2; i += 1) expect((await open(on.app, h)).statusCode).toBe(200);
+    expect(on.repo.getPlayer('123456789012345678')!.credits).toBe(PLAYER.startCredits);
+    await on.app.close();
+
+    const off = setup({ devAuth: false, unlimited: '123456789012345678' });
+    cleanup = () => off.app.close();
+    const h2 = await login(off.app);
+    const body = (await open(off.app, h2)).json() as OpenPackResponse;
+    expect(body.credits).toBe(PLAYER.startCredits - PACKS.normal.price);
+  });
+
   it('保底计数存库：连续 10 包没出 SSR 以上，第 10 包必出（FR-PACK-4）', async () => {
     let t = NOW;
     const { app, repo } = setup({ now: () => t });

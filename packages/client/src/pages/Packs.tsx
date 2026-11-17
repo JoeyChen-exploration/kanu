@@ -60,7 +60,7 @@ export function Packs({ me, onChange }: { me: MeResponse; onChange: (patch: Part
       <button className="primary" disabled={disabled} onClick={openPack}>
         {busy ? '开包中…' : `开正规卡包 · ${fmt(pack.price)} 信用点`}
       </button>
-      {me.credits < pack.price && <p className="hint">信用点不够了，去柜台卖卡吧（柜台下一步就来）。</p>}
+      {me.credits < pack.price && <p className="hint">信用点不够了，去柜台把卡卖给顾客吧。</p>}
       {err && <p className="error">{err}</p>}
     </section>
   );

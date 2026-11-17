@@ -42,8 +42,11 @@ export function registerPackRoutes(app: FastifyInstance, deps: Deps, now: () => 
       const pack = PACKS.normal;
       const day = sydneyDay(t);
       const used = repo.packsOpenedToday(userId, day);
-      if (used >= pack.dailyLimit) throw new ApiError(400, 'daily_limit', `今天的正规卡包已经买满 ${pack.dailyLimit} 包了，明天再来`);
-      if (player.credits < pack.price) throw new ApiError(400, 'insufficient_credits', `信用点不够：一包 ${pack.price}，你有 ${player.credits}`);
+      // 测试账号（DEV_UNLIMITED_IDS，只在 DEV_AUTH=1 时有）：不限购、不扣钱
+      const unlimited = deps.config.devUnlimitedIds.has(userId);
+      const cost = unlimited ? 0 : pack.price;
+      if (!unlimited && used >= pack.dailyLimit) throw new ApiError(400, 'daily_limit', `今天的正规卡包已经买满 ${pack.dailyLimit} 包了，明天再来`);
+      if (player.credits < cost) throw new ApiError(400, 'insufficient_credits', `信用点不够：一包 ${pack.price}，你有 ${player.credits}`);
 
       const byRarity = Object.fromEntries(RARITIES.map((r) => [r, repo.templatesFor(deps.currentSeries, r)])) as Record<Rarity, ReturnType<typeof repo.templatesFor>>;
       const counts = Object.fromEntries(RARITIES.map((r) => [r, byRarity[r].length])) as Record<Rarity, number>;
@@ -66,10 +69,10 @@ export function registerPackRoutes(app: FastifyInstance, deps: Deps, now: () => 
         return repo.insertCard({ templateId: tpl.id, ownerId: userId, authenticity: c.authenticity, grade: String(c.grade), origin: c.origin, style, serialNo, now: t });
       });
 
-      const credits = player.credits - pack.price;
+      const credits = player.credits - cost;
       repo.setCreditsPity(userId, credits, rolled.pityCount);
       repo.bumpNormalPacks(userId, day);
-      repo.logCredits(userId, t, -pack.price, 'pack', credits, { packType, cards: ids });
+      repo.logCredits(userId, t, -cost, unlimited ? 'pack_test_free' : 'pack', credits, { packType, cards: ids });
       if (rolled.pityTriggered) repo.logEvent(userId, t, 'pity', { cards: ids });
 
       const cards = ids.map((id) => repo.cardView(id)!);
@@ -79,7 +82,7 @@ export function registerPackRoutes(app: FastifyInstance, deps: Deps, now: () => 
         credits,
         pityCount: rolled.pityCount,
         pityTriggered: rolled.pityTriggered,
-        packsLeftToday: pack.dailyLimit - used - 1,
+        packsLeftToday: unlimited ? pack.dailyLimit : pack.dailyLimit - used - 1,
       };
       repo.putIdempotent(userId, key, response, t);
       toAnnounce = cards.map((c) => announcementFor(player.display_name, c)).filter((s): s is string => s !== null);

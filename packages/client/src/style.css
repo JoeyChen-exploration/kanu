@@ -138,3 +138,25 @@ h2 small { color: var(--muted); font-weight: normal; font-size: 13px; margin-lef
 .dev-login input, .dev-login button { min-height: 44px; border-radius: 10px; border: 1px solid var(--line); font-size: 16px; padding: 0 12px; }
 .dev-login input { background: var(--panel); color: var(--text); }
 .dev-login button { background: var(--accent); color: #1a1a1a; font-weight: 600; border: none; }
+
+/* ---- 柜台 ---- */
+.slot-title { font-size: 14px; color: var(--muted); margin: 14px 0 8px; font-weight: 600; }
+.customer { display: flex; gap: 10px; width: 100%; text-align: left; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin-bottom: 8px; }
+.customer.done { opacity: 0.55; }
+.customer-avatar { font-size: 30px; line-height: 1; flex: none; width: 40px; text-align: center; }
+.customer-body { display: flex; flex-direction: column; gap: 6px; min-width: 0; flex: 1; }
+.customer-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.customer-meta { font-size: 13px; color: var(--muted); }
+.bubble { display: block; background: var(--panel-2); border-radius: 4px 12px 12px 12px; padding: 8px 10px; font-size: 14px; margin: 0; }
+.patience { color: #ff7a7a; letter-spacing: 2px; font-size: 13px; }
+.badge { font-size: 12px; background: var(--panel-2); border-radius: 8px; padding: 2px 8px; color: var(--muted); }
+.deal-head { display: flex; gap: 10px; align-items: flex-start; }
+.deal-head p { margin: 6px 0 0; }
+.deal-card { display: flex; gap: 12px; align-items: center; margin-top: 12px; }
+.deal-card .card { width: 90px; flex: none; margin: 0; }
+.deal-card p { margin: 4px 0 8px; }
+.cell-price { display: block; font-size: 11px; color: var(--accent); margin-top: 2px; }
+.price-input { display: flex; align-items: center; gap: 8px; margin-top: 14px; font-size: 15px; }
+.price-input input { flex: 1; min-height: 44px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel-2); color: var(--text); font-size: 18px; padding: 0 12px; }
+.deal-msg { text-align: center; font-weight: 700; color: var(--accent); margin: 12px 0 0; }
+.tabs button { font-size: 14px; }

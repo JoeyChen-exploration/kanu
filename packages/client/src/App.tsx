@@ -7,6 +7,7 @@ import { fmt } from './Card.tsx';
 import { Packs } from './pages/Packs.tsx';
 import { Inventory } from './pages/Inventory.tsx';
 import { Collection } from './pages/Collection.tsx';
+import { Counter } from './pages/Counter.tsx';
 
 type State =
   | { kind: 'loading'; text: string }
@@ -14,8 +15,8 @@ type State =
   | { kind: 'ready'; me: MeResponse }
   | { kind: 'error'; text: string };
 
-type Tab = 'shop' | 'packs' | 'inventory' | 'collection';
-const TABS: Array<[Tab, string]> = [['shop', '店铺'], ['packs', '进货'], ['inventory', '库存'], ['collection', '图鉴']];
+type Tab = 'shop' | 'packs' | 'counter' | 'inventory' | 'collection';
+const TABS: Array<[Tab, string]> = [['shop', '店铺'], ['packs', '进货'], ['counter', '柜台'], ['inventory', '库存'], ['collection', '图鉴']];
 
 export function App() {
   const [state, setState] = useState<State>({ kind: 'loading', text: '正在开店…' });
@@ -59,6 +60,7 @@ export function App() {
       <main className="content">
         {tab === 'shop' && <Shop me={me} />}
         {tab === 'packs' && <Packs me={me} onChange={patchMe} />}
+        {tab === 'counter' && <Counter onChange={patchMe} />}
         {tab === 'inventory' && <Inventory />}
         {tab === 'collection' && <Collection />}
       </main>
@@ -84,7 +86,7 @@ function Shop({ me }: { me: MeResponse }) {
         <div className="stat"><span className="label">信誉</span><span className="value">{me.reputation}</span></div>
         <div className="stat"><span className="label">摊位</span><span className="value">第 {me.weekNo} 周</span></div>
       </section>
-      <p className="hint">柜台、鉴定和房租还在装修。先去"进货"开几包吧。</p>
+      <p className="hint">去"进货"开包，再到"柜台"把卡卖给顾客。鉴定和房租还在装修。</p>
     </section>
   );
 }

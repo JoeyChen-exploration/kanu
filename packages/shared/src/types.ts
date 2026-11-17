@@ -93,6 +93,51 @@ export interface CollectionResponse {
   series: Array<{ id: string; name: string; total: number; owned: number; cards: CollectionEntry[] }>;
 }
 
+// ---------- 柜台（M4） ----------
+// 心理价位、个人浮动是隐藏的，不出现在这里（NFR-SEC-2）。
+
+export type CustomerStatus = 'waiting' | 'sold' | 'left' | 'dismissed';
+
+export interface CustomerView {
+  id: number;
+  /** 第几个时段（0 早、1 中、2 晚） */
+  slot: number;
+  type: string;
+  typeName: string;
+  /** 最近一句台词 */
+  line: string;
+  demand: { rarities: string[]; tag: string | null; text: string };
+  budgetLow: number;
+  budgetHigh: number;
+  patience: number;
+  maxPatience: number;
+  status: CustomerStatus;
+  /** 上次还价报的数（还价之后才有） */
+  counterPrice: number | null;
+}
+
+export interface CounterResponse {
+  ok: true;
+  customers: CustomerView[];
+  /** 下一批顾客几点来（毫秒时间戳），今天没有了是 null */
+  nextSlotAt: number | null;
+}
+
+export interface EligibleCardsResponse {
+  ok: true;
+  cards: Array<{ card: CardView; quickPrice: number }>;
+}
+
+export interface OfferResponse {
+  ok: true;
+  outcome: 'deal' | 'counter' | 'too_high' | 'left' | 'caught';
+  customer: CustomerView;
+  /** 成交价（deal 时） */
+  price: number | null;
+  credits: number;
+  reputation: number;
+}
+
 export interface MeResponse {
   ok: true;
   user: SessionUser;

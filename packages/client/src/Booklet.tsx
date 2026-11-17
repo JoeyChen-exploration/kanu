@@ -190,13 +190,20 @@ const PAGES: Array<{ title: string; body: ReactNode }> = [
     title: '珍藏柜',
     body: (
       <>
-        <p>库存页最上面是<b>珍藏柜</b>，一共 {SHOWCASE.slots} 格。</p>
+        <p><b>珍藏柜</b>是店的门面，客人和别的玩家都看得到。开局没有，在库存页花信用点解锁、升级：</p>
+        <table className="booklet-table">
+          <tbody>
+            {SHOWCASE.levels.slice(1).map((l, i) => (
+              <tr key={i}><td>{i === 0 ? '解锁' : `升到 ${i + 1} 级`}</td><td>{fmt(l.price)}</td><td>{l.slots} 格</td></tr>
+            ))}
+          </tbody>
+        </table>
         <ul>
-          <li>放进去的卡<b>不能卖</b>，也不能拿去抵押，最安全。</li>
-          <li>就算店倒闭了从头开始，珍藏柜里的卡也会留下来。</li>
-          <li>想卖的时候，在库存页点开这张卡，取出来就行。</li>
+          <li>柜里的卡越稀有，<b>展示分</b>越高（{RARITIES.filter((r) => SHOWCASE.rarityScore[r] > 0).map((r) => `${r} ${SHOWCASE.rarityScore[r]}`).join('、')}，特殊风格再乘倍数）。</li>
+          <li>每 {SHOWCASE.pointsPerPct} 分，客人的预算和出价 <b>+1%</b>，最多 +{SHOWCASE.maxPriceBonus * 100}%；到 {SHOWCASE.patienceAt} 分，每位客人耐心 <b>+{SHOWCASE.patienceBonus}</b>。</li>
+          <li>柜里的卡有客人要也能直接卖，但卖掉展示分就掉了。</li>
+          <li>店倒闭从头开始时，柜里的卡会<b>留下来</b>；不能拿去抵押；不占卡册格子。</li>
         </ul>
-        <p className="hint">把你最舍不得的那几张放进去。</p>
       </>
     ),
   },

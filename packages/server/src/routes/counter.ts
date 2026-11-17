@@ -18,6 +18,7 @@ import {
   rollCustomer, rollCustomerCount, type Demand, type SellableCard, type SellablePack,
 } from '../game/customers.ts';
 import { loadLines, type LineEvent } from '../content.ts';
+import { showcaseEffects, showcaseScore } from '../game/showcase.ts';
 
 const lines = loadLines();
 
@@ -50,7 +51,7 @@ export function toCustomerView(row: CustomerRow): CustomerView {
     budgetLow: row.budget_low,
     budgetHigh: row.budget_high,
     patience: row.patience,
-    maxPatience: CUSTOMER[type].patience,
+    maxPatience: Math.max(row.max_patience ?? 0, row.patience, CUSTOMER[type].patience),
     status: row.status as CustomerView['status'],
     counterPrice: row.counter_price,
   };
@@ -83,10 +84,12 @@ export function registerCounterRoutes(app: FastifyInstance, deps: Deps, now: () 
       const series = repo.allSeries().map((s) => ({ id: s.id, name: s.name, price: PACKS[s.kind].price }));
       const templates = repo.allTemplates().map((x) => ({ id: x.id, name: x.name, rarity: x.rarity, tags: JSON.parse(x.tags) as string[] }));
       const forceType = rows.length >= player.day_customer_count - extra ? 'collector' as const : undefined;
-      const c = rollCustomer(rng, { inventory: repo.sellableCards(ownerId).map(toSellable), packs: sellablePacks(ownerId), templates, series, typicalPrice, forceType });
+      // 珍藏柜是门面：按顾客进门那一刻柜里的卡算展示分，抬高预算、心理价位和耐心
+      const showcase = showcaseEffects(showcaseScore(repo.showcaseCards(ownerId).map((x) => ({ rarity: x.rarity as Rarity, style: x.style }))));
+      const c = rollCustomer(rng, { inventory: repo.sellableCards(ownerId).map(toSellable), packs: sellablePacks(ownerId), templates, series, typicalPrice, forceType, showcase });
       repo.insertCustomer({
         owner_id: ownerId, day_key: day, slot: 0, seat: rows.length, type: c.type, demand: JSON.stringify(c.demand), float: c.float,
-        patience: c.patience, line: say(c.type, 'greet', { demand: demandText(c.type, c.demand) }), budget_low: c.budgetLow, budget_high: c.budgetHigh, created_at: t,
+        patience: c.patience, max_patience: c.patience, line: say(c.type, 'greet', { demand: demandText(c.type, c.demand) }), budget_low: c.budgetLow, budget_high: c.budgetHigh, created_at: t,
       });
       rows = repo.customersFor(ownerId, day);
     }
@@ -156,13 +159,14 @@ export function registerCounterRoutes(app: FastifyInstance, deps: Deps, now: () 
       .map((p) => ({ view: { id: p.id, seriesId: p.series_id, name: p.name, kind: p.kind }, sell: { id: p.id, seriesId: p.series_id, price: PACKS[p.kind].price } }))
       .filter((p) => matchesPack(p.sell, demand))
       .map((p) => ({ ...p.view, quickPrice: quickPricePack(type, p.sell) }));
-    const countIn = (binderId: number | null) => matched.filter((c) => c.binderId === binderId).length;
+    const countIn = (binderId: number) => matched.filter((c) => c.location === 'inventory' && c.binderId === binderId).length;
     const binders = repo.bindersOf(userId).map((b) => {
       const spec = BINDERS[b.kind as BinderKind];
       return { id: b.id, kind: b.kind, name: spec.name, used: b.used, slots: spec.slots, matchCount: countIn(b.id) };
     });
-    const loose = { count: repo.looseCards(userId).length, matchCount: countIn(null) };
-    return { ok: true, cards, packs, binders, loose } satisfies EligibleCardsResponse;
+    const loose = { count: repo.looseCards(userId).length, matchCount: matched.filter((c) => c.location === 'inventory' && c.binderId === null).length };
+    const showcase = { count: repo.countLocation(userId, 'showcase'), matchCount: matched.filter((c) => c.location === 'showcase').length };
+    return { ok: true, cards, packs, binders, loose, showcase } satisfies EligibleCardsResponse;
   });
 
   /** 按这位顾客翻一本卡册（binderId = 0 是桌面散放）：一页 9 张，符合的高亮；matchFirst=1 时符合的排前面（按市场价从高到低） */
@@ -175,7 +179,10 @@ export function registerCounterRoutes(app: FastifyInstance, deps: Deps, now: () 
     const binderId = Number.parseInt(req.params.binderId, 10);
     let binder: CounterBinderPageResponse['binder'];
     let all: CardView[];
-    if (binderId === 0) {
+    if (req.params.binderId === 'showcase') {
+      binder = { id: -1, kind: 'showcase', name: '珍藏柜' };
+      all = repo.inventory(userId, { location: 'showcase', page: 1, pageSize: 1000 }).cards;
+    } else if (binderId === 0) {
       binder = { id: 0, kind: 'loose', name: '桌面散放' };
       all = repo.looseCards(userId);
     } else {
@@ -221,7 +228,7 @@ export function registerCounterRoutes(app: FastifyInstance, deps: Deps, now: () 
       } else {
         const instanceId = Number(item.instanceId);
         const inst = repo.ownedInstance(ownerId, instanceId);
-        if (!inst || inst.location !== 'inventory') throw new ApiError(400, 'bad_card', '这张卡不能卖（不在库存里，或者在珍藏柜里）');
+        if (!inst || (inst.location !== 'inventory' && inst.location !== 'showcase')) throw new ApiError(400, 'bad_card', '这张卡现在不能卖');
         const view = repo.cardView(instanceId)!;
         const card = toSellable(view);
         if (!matchesCard(card, demand)) throw new ApiError(400, 'not_wanted', '这位顾客不要这张卡');

@@ -187,6 +187,8 @@ export interface EligibleCardsResponse {
   binders: Array<{ id: number; kind: string; name: string; used: number; slots: number; matchCount: number }>;
   /** 桌面散放的卡（翻卡册接口里 binderId = 0） */
   loose: { count: number; matchCount: number };
+  /** 珍藏柜里的卡也能卖（翻卡册接口里 binderId = showcase） */
+  showcase: { count: number; matchCount: number };
 }
 
 /** GET /api/counter/:id/binder/:binderId?page=&matchFirst= ：按这位顾客翻一本卡册（0 = 桌面散放） */
@@ -272,4 +274,32 @@ export interface BuyBinderResponse {
   binder: BinderView;
   /** 买完自动从桌面收进来几张散卡 */
   placed: number;
+}
+
+/** 珍藏柜的状态（FR-INV-11）：展示分只按公开的稀有度和风格算 */
+export interface ShowcaseStatus {
+  /** 0 = 还没解锁 */
+  level: number;
+  slots: number;
+  used: number;
+  score: number;
+  /** 顾客预算和心理价位加了几 %（整数） */
+  priceBonusPct: number;
+  patienceBonus: number;
+  /** 下一级；已经满级为 null */
+  next: { level: number; price: number; slots: number } | null;
+}
+
+/** GET /api/showcase */
+export interface ShowcaseResponse {
+  ok: true;
+  status: ShowcaseStatus;
+  cards: CardView[];
+}
+
+/** POST /api/showcase/upgrade：解锁或升一级 */
+export interface ShowcaseUpgradeResponse {
+  ok: true;
+  credits: number;
+  status: ShowcaseStatus;
 }

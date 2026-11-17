@@ -231,6 +231,7 @@ h2 small { color: var(--muted); font-weight: normal; font-size: 13px; margin-lef
 .binder-slot { aspect-ratio: 63 / 88; border: 1px dashed #2f3442; border-radius: 9px; }
 /* 柜台翻卡册：符合这位顾客的高亮，不符合的变暗 */
 .binder-loose { background: linear-gradient(160deg, #7a4b2a, #3b2414); }
+.binder-showcase { background: linear-gradient(160deg, #f5c542, #8a5a12); color: #2a1a00; }
 .binder-item.has-match { border-color: var(--accent); }
 .match-badge { flex: none; font-size: 12px; font-weight: 700; color: #111; background: var(--accent); border-radius: 999px; padding: 3px 8px; }
 .match-badge.none { color: var(--muted); background: none; font-weight: 400; }
@@ -238,6 +239,11 @@ h2 small { color: var(--muted); font-weight: normal; font-size: 13px; margin-lef
 .picker-head b { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cell.match { border-radius: 10px; box-shadow: 0 0 0 2px var(--accent), 0 0 12px color-mix(in srgb, var(--accent) 55%, transparent); }
 .cell.dim { opacity: 0.3; filter: grayscale(0.8); pointer-events: none; }
+
+/* 珍藏柜：展示分和效果 */
+.showcase-locked { background: var(--panel); border: 1px dashed var(--accent); border-radius: 12px; padding: 4px 14px 14px; }
+.showcase-score { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; color: var(--muted); margin-top: 8px; }
+.showcase-score b { color: var(--accent); }
 
 /* 新手手册：像一本小册子，左右翻页 */
 .topbar-book { flex: none; width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); font-size: 18px; }

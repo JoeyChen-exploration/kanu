@@ -2,13 +2,16 @@
 // 最下面保留按稀有度筛选的"全部卡"列表。点任何一张卡看详情、放进 / 取出珍藏柜。
 import { useContext, useEffect, useState } from 'react';
 import { LOOSE, RARITIES, SHOWCASE } from '@kanu/shared/balance';
-import type { BinderPageResponse, BinderView, BindersResponse, CardView, InventoryResponse } from '@kanu/shared/types';
-import { api } from '../api.ts';
+import type {
+  BinderPageResponse, BinderView, BindersResponse, CardView, InventoryResponse, MeResponse, ShowcaseResponse, ShowcaseStatus, ShowcaseUpgradeResponse,
+} from '@kanu/shared/types';
+import { api, newIdempotencyKey } from '../api.ts';
 import { Card, GameDayContext, fmt } from '../Card.tsx';
 
-export function Inventory() {
+export function Inventory({ onChange }: { onChange: (p: Partial<MeResponse>) => void }) {
   const [data, setData] = useState<BindersResponse | null>(null);
   const [showcase, setShowcase] = useState<CardView[]>([]);
+  const [sc, setSc] = useState<ShowcaseStatus | null>(null);
   const [openBinder, setOpenBinder] = useState<BinderView | null>(null);
   const [selected, setSelected] = useState<CardView | null>(null);
   const [msg, setMsg] = useState('');
@@ -16,9 +19,21 @@ export function Inventory() {
   const day = useContext(GameDayContext);
 
   const load = async () => {
-    const [b, sc] = await Promise.all([api<BindersResponse>('/binders'), api<InventoryResponse>('/inventory?location=showcase')]);
+    const [b, s] = await Promise.all([api<BindersResponse>('/binders'), api<ShowcaseResponse>('/showcase')]);
     setData(b);
-    setShowcase(sc.cards);
+    setShowcase(s.cards);
+    setSc(s.status);
+  };
+
+  const upgradeShowcase = async () => {
+    setErr('');
+    try {
+      const r = await api<ShowcaseUpgradeResponse>('/showcase/upgrade', { method: 'POST', body: {}, idempotencyKey: newIdempotencyKey() });
+      onChange({ credits: r.credits });
+      setSc(r.status);
+    } catch (e) {
+      setErr((e as Error).message);
+    }
   };
   useEffect(() => { load().catch((e: Error) => setErr(e.message)); }, []);
 
@@ -44,11 +59,7 @@ export function Inventory() {
   const loose = data?.loose.cards ?? [];
   return (
     <section className="page">
-      <h2>珍藏柜 <small>{showcase.length} / {SHOWCASE.slots}</small></h2>
-      <div className="grid showcase">
-        {showcase.map((c) => <button key={c.id} className="cell" onClick={() => setSelected(c)}><Card card={c} small /></button>)}
-        {Array.from({ length: Math.max(0, SHOWCASE.slots - showcase.length) }, (_, i) => <div key={i} className="cell empty-slot">空</div>)}
-      </div>
+      <ShowcasePanel status={sc} cards={showcase} onPick={setSelected} onUpgrade={upgradeShowcase} />
 
       <h2>我的卡册</h2>
       <div className="binder-list">
@@ -87,6 +98,42 @@ export function Inventory() {
       {err && <p className="error">{err}</p>}
       {selected && <CardSheet card={selected} onClose={() => setSelected(null)} onToggle={toggleShowcase} />}
     </section>
+  );
+}
+
+/** 珍藏柜：没解锁时显示解锁按钮；解锁后显示格子、展示分和它带来的效果、升级按钮 */
+function ShowcasePanel({ status, cards, onPick, onUpgrade }: {
+  status: ShowcaseStatus | null;
+  cards: CardView[];
+  onPick: (c: CardView) => void;
+  onUpgrade: () => Promise<void>;
+}) {
+  const [busy, setBusy] = useState(false);
+  if (!status) return <h2>珍藏柜</h2>;
+  const up = async () => { setBusy(true); try { await onUpgrade(); } finally { setBusy(false); } };
+  if (status.level === 0) {
+    return (
+      <div className="showcase-locked">
+        <h2>珍藏柜 <small>未解锁</small></h2>
+        <p className="hint">珍藏柜是店的门面：客人和别的玩家都看得到。柜里的卡越稀有，客人越舍得花钱、越有耐心。店倒闭重来时柜里的卡也会留下。</p>
+        {status.next && <button className="primary" disabled={busy} onClick={up}>解锁珍藏柜（{status.next.slots} 格）· {fmt(status.next.price)} 信用点</button>}
+      </div>
+    );
+  }
+  return (
+    <>
+      <h2>珍藏柜 <small>{status.used} / {status.slots} · {status.level} 级</small></h2>
+      <div className="grid showcase">
+        {cards.map((c) => <button key={c.id} className="cell" onClick={() => onPick(c)}><Card card={c} small /></button>)}
+        {Array.from({ length: Math.max(0, status.slots - cards.length) }, (_, i) => <div key={i} className="cell empty-slot">空</div>)}
+      </div>
+      <div className="showcase-score">
+        <span>展示分 <b>{status.score}</b></span>
+        <span>客人预算 <b>+{status.priceBonusPct}%</b>{status.priceBonusPct >= SHOWCASE.maxPriceBonus * 100 ? '（满）' : ''}</span>
+        <span>耐心 <b>{status.patienceBonus ? `+${status.patienceBonus}` : `${SHOWCASE.patienceAt} 分 +1`}</b></span>
+      </div>
+      {status.next && <button className="secondary" disabled={busy} onClick={up}>升级到 {status.next.level} 级（{status.next.slots} 格）· {fmt(status.next.price)} 信用点</button>}
+    </>
   );
 }
 

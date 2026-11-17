@@ -92,7 +92,7 @@ const readMatchFirst = () => { try { return localStorage.getItem(MATCH_FIRST_KEY
 /** 柜台上翻一本卡册：一页 3 × 3，符合这位顾客的高亮可点，不符合的变暗 */
 function BinderPicker({ customerId, binder, onBack, onPick }: {
   customerId: number;
-  binder: { id: number; name: string };
+  binder: { id: number | 'showcase'; name: string };
   onBack: () => void;
   onPick: (card: CardView, quickPrice: number) => void;
 }) {
@@ -151,7 +151,7 @@ function Deal({ customer, onChange, onDone, onUpdate }: {
   const [stock, setStock] = useState<EligibleCardsResponse | null>(null);
   const [picked, setPicked] = useState<Picked | null>(null);
   /** 正在翻的卡册（id 0 = 桌面散放）；挑完卡点"换一样"会回到这本 */
-  const [openBinder, setOpenBinder] = useState<{ id: number; name: string } | null>(null);
+  const [openBinder, setOpenBinder] = useState<{ id: number | 'showcase'; name: string } | null>(null);
   const [price, setPrice] = useState('');
   const [step, setStep] = useState(10);
   const [busy, setBusy] = useState(false);
@@ -245,6 +245,16 @@ function Deal({ customer, onChange, onDone, onUpdate }: {
                     <span className={b.matchCount ? 'match-badge' : 'match-badge none'}>{b.matchCount ? `${b.matchCount} 张符合` : '没有符合的'}</span>
                   </button>
                 ))}
+                {stock.showcase.count > 0 && (
+                  <button className={stock.showcase.matchCount ? 'binder-item has-match' : 'binder-item'} onClick={() => setOpenBinder({ id: 'showcase', name: '珍藏柜' })}>
+                    <div className="binder-cover binder-showcase" aria-hidden>珍藏</div>
+                    <div className="binder-body">
+                      <b>珍藏柜</b>
+                      <span className="hint">{stock.showcase.count} 张</span>
+                    </div>
+                    <span className={stock.showcase.matchCount ? 'match-badge' : 'match-badge none'}>{stock.showcase.matchCount ? `${stock.showcase.matchCount} 张符合` : '没有符合的'}</span>
+                  </button>
+                )}
                 {stock.loose.count > 0 && (
                   <button className={stock.loose.matchCount ? 'binder-item has-match' : 'binder-item'} onClick={() => setOpenBinder({ id: 0, name: '桌面散放' })}>
                     <div className="binder-cover binder-loose" aria-hidden>桌面</div>

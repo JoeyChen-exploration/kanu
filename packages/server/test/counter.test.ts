@@ -260,16 +260,36 @@ describe('出价（FR-CTR-4）', () => {
     expect(repo.getPlayer(UID)!.credits).toBe(PLAYER.startCredits + 1);
   });
 
-  it('不要的卡、珍藏柜里的卡不能卖', async () => {
+  it('不要的卡不能卖', async () => {
     const { app, repo } = setup();
     cleanup = () => app.close();
     const h = await login(app);
     const { customerId } = seedSale(repo);
     const nCard = repo.insertCard({ templateId: 'NEO-01', ownerId: UID, authenticity: 'real', grade: '5', origin: 'legit', style: 'standard', serialNo: null, now: NOW });
     expect((await offer(app, h, customerId, { instanceId: nCard, price: 10 })).json().code).toBe('not_wanted');
-    const cardId = repo.insertCard({ templateId: 'NEO-18', ownerId: UID, authenticity: 'real', grade: '7', origin: 'legit', style: 'standard', serialNo: null, now: NOW });
-    repo.setLocation(cardId, 'showcase');
-    expect((await offer(app, h, customerId, { instanceId: cardId, price: 10 })).json().code).toBe('bad_card');
+  });
+
+  it('珍藏柜里的卡也能在柜台卖；珍藏柜不占卡册格子', async () => {
+    const { app, repo } = setup();
+    cleanup = () => app.close();
+    const h = await login(app);
+    const { cardId, customerId } = seedSale(repo);
+    await app.inject({ method: 'POST', url: '/api/binders/organize', headers: h });
+    expect(repo.bindersOf(UID)[0]!.used).toBe(1);
+    repo.setShowcaseLevel(UID, 1);
+    await app.inject({ method: 'POST', url: `/api/inventory/${cardId}/showcase`, headers: h, payload: { on: true } });
+    expect(repo.bindersOf(UID)[0]!.used).toBe(0);
+
+    const stock = (await app.inject({ method: 'GET', url: `/api/counter/${customerId}/cards`, headers: h })).json() as EligibleCardsResponse;
+    expect(stock.showcase).toEqual({ count: 1, matchCount: 1 });
+    expect(stock.loose.matchCount).toBe(0);
+    const page = (await app.inject({ method: 'GET', url: `/api/counter/${customerId}/binder/showcase`, headers: h })).json() as CounterBinderPageResponse;
+    expect(page.cards).toEqual([expect.objectContaining({ card: expect.objectContaining({ id: cardId }), match: true })]);
+    expect(findKeys(page, HIDDEN)).toEqual([]);
+
+    const r = (await app.inject({ method: 'POST', url: `/api/counter/${customerId}/quick`, headers: { ...h, ...idem() }, payload: { instanceId: cardId } })).json() as OfferResponse;
+    expect(r.outcome).toBe('deal');
+    expect(repo.countLocation(UID, 'showcase')).toBe(0);
   });
 });
 

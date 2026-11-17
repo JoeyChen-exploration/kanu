@@ -98,6 +98,8 @@ export function rollCustomer(rng: Rng, input: {
   typicalPrice: (rarities: Rarity[]) => number;
   /** 指定类型（比如卡册效果带来的额外收藏家）；不传就按出现率抽 */
   forceType?: CustomerType;
+  /** 珍藏柜展示分的效果：预算和心理价位（float）一起乘 priceMult，耐心加 patienceBonus */
+  showcase?: { priceMult: number; patienceBonus: number };
 }): RolledCustomer {
   const type = input.forceType ?? pickPpm(rng, MVP_TYPES, (t) => CUSTOMER[t].ppm);
   const wants = CUSTOMER[type].wants;
@@ -131,10 +133,13 @@ export function rollCustomer(rng: Rng, input: {
     refPrice = type === 'middleman' ? ref * CUSTOMER.middleman.priceCoef : ref * CUSTOMER[type].priceCoef;
   }
 
-  const float = between(rng, COUNTER.floatMin, COUNTER.floatMax);
+  const fx = input.showcase ?? { priceMult: 1, patienceBonus: 0 };
+  // 珍藏柜加成直接乘进个人浮动（隐藏），心理价位跟着涨；快速出售价仍按浮动下限算，不吃加成
+  const float = between(rng, COUNTER.floatMin, COUNTER.floatMax) * fx.priceMult;
+  refPrice *= fx.priceMult;
   // 预算区间用参考价算、再取整，和心理价位不是同一个数
   const round = (n: number) => Math.max(5, Math.round(n / 5) * 5);
-  return { type, demand, float, patience: CUSTOMER[type].patience, budgetLow: round(refPrice * 0.7), budgetHigh: round(refPrice * 1.1) };
+  return { type, demand, float, patience: CUSTOMER[type].patience + fx.patienceBonus, budgetLow: round(refPrice * 0.7), budgetHigh: round(refPrice * 1.1) };
 }
 
 export type OfferOutcome =

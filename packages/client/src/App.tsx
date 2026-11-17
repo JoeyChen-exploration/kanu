@@ -1,4 +1,5 @@
-// 卡奴前端：登录 → 底部四个标签页（店铺、进货、库存、图鉴）。
+// 卡奴前端：登录 → 五个标签页（店铺、进货、柜台、库存、图鉴）。
+// 横屏游戏（2026-11-17 用户定，版式学旺财牌局）：横屏时标签在左侧栏竖排，方屏 / 竖屏退回顶栏 + 底部标签，见 style.css 末尾。
 import { useEffect, useRef, useState } from 'react';
 import type { ConfigResponse, MeResponse } from '@kanu/shared/types';
 import { api } from './api.ts';
@@ -55,11 +56,14 @@ export function App() {
 
   return (
     <GameDayContext.Provider value={me.gameDay}>
+    {/* 学旺财牌局：.app 占满整屏、是容器，.shell 按容器比例换版式（横屏左侧栏 + 右主画面；方屏 / 竖屏顶栏 + 底部标签；画中画只留信息） */}
     <div className="app">
+    <div className="shell">
       <header className="topbar">
         <Avatar url={me.user.avatar} />
         <span className="topbar-name">{me.user.name}</span>
         <span className="topbar-credits">{fmt(me.credits)} 信用点</span>
+        <span className="topbar-day">第 {me.gameDay} 天</span>
         <button className="topbar-book" onClick={() => setBooklet(true)} aria-label="新手手册">📖</button>
       </header>
       {booklet && <Booklet onClose={() => setBooklet(false)} />}
@@ -75,6 +79,7 @@ export function App() {
           <button key={k} className={tab === k ? 'on' : ''} onClick={() => { setTab(k); if (k === 'shop') loadMe().catch(() => {}); }}>{label}</button>
         ))}
       </nav>
+    </div>
     </div>
     </GameDayContext.Provider>
   );
@@ -118,7 +123,7 @@ function Shop({ me, onChange }: { me: MeResponse; onChange: (p: Partial<MeRespon
         <div className="stat"><span className="label">信誉</span><span className="value">{me.reputation}</span></div>
         <div className="stat"><span className="label">营业</span><span className="value">第 {me.gameDay} 天</span></div>
       </section>
-      <p className="hint">去"进货"开包，再到"柜台"把卡卖给顾客。不清楚规则就点右上角的 📖 看新手手册。</p>
+      <p className="hint">去"进货"开包，再到"柜台"把卡卖给顾客。不清楚规则就点 📖 看新手手册。</p>
       {me.devTools && <DevTools onChange={onChange} />}
     </section>
   );

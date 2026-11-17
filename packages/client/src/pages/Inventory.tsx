@@ -76,7 +76,8 @@ export function Inventory({ onChange }: { onChange: (p: Partial<MeResponse>) => 
 
   const loose = data?.loose.cards ?? [];
   return (
-    <section className="page">
+    <section className="page inv-layout">
+      <div className="inv-col">
       <ShowcasePanel status={sc} cards={showcase} onPick={setSelected} onUpgrade={upgradeShowcase} bind={bind} dropClass={drag && drag.item.location !== 'showcase' ? dropping('showcase') : ''} />
       {!drag && <p className="hint drag-tip">按住卡牌（手机上长按）拖到珍藏柜就能放进去，拖回卡册或桌面就是取出来。</p>}
 
@@ -93,7 +94,9 @@ export function Inventory({ onChange }: { onChange: (p: Partial<MeResponse>) => 
           </button>
         ))}
       </div>
+      </div>
 
+      <div className="inv-col">
       <div className={`stash-zone${drag && drag.item.location === 'showcase' ? dropping('stash') : ''}`} data-drop="stash">
         <h2>桌面散放 <small>{loose.length} / {LOOSE.slots}</small></h2>
         {loose.length === 0
@@ -117,6 +120,7 @@ export function Inventory({ onChange }: { onChange: (p: Partial<MeResponse>) => 
 
       <AllCards onPick={setSelected} />
       {err && <p className="error">{err}</p>}
+      </div>
 
       {openBinders.map((b, i) => (
         <FloatWindow key={b.id} id={`binder-${b.id}`} cascade={i} className="float-binder" title={b.name}

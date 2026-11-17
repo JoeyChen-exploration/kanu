@@ -25,7 +25,7 @@ Discord Activity 卡牌经营游戏：玩家在 Discord 里打开网页小程序
 6. **"每天"按悉尼日**（Australia/Sydney），和旺财钱包一致。
 7. **金币只能由旺财写**：只通过 `/wallet/*` 接口，见 SRS 6.3。兑换失败只有在旺财明确拒绝时才退信用点。不要 import 旺财（oceania-bot）的任何代码；需要改旺财时，改动提交到 oceania-bot 仓库，和卡奴的提交分开（SRS 6.4）。
 8. 前端只请求同源相对路径（`/api/...`）和本服务器的静态资源；Activity 在 Discord 代理后面，外部地址要先配 URL Mapping。
-9. 界面全中文，先按手机竖屏 360 px 宽设计。
+9. 界面全中文。**横屏游戏**（2026-11-17 用户定，版式学旺财牌局）：主场景是手机横屏（约 844 × 390）和电脑 16:9，左侧栏 + 右主画面；方屏 / 竖屏、画中画（高 ≤ 300）各有一套退路，不能挡住不让玩。交互按"拖到哪里 + 按钮确认"，道具都是可拖动的浮窗（DESIGN 4.5）。改了界面用 `npm run shots`（先 `npm run dev`）按几种比例截图自查，截图在 `.scratch/shots/`（脚本借旺财牌局装好的 playwright-core 和 Chromium，只读）。
 
 ## 分支和提交
 
@@ -45,3 +45,4 @@ Discord Activity 卡牌经营游戏：玩家在 Discord 里打开网页小程序
 - `npm run typecheck`：三个包的类型检查
 - `npm run build`：构建前端到 packages/client/dist，服务器启动时如果有就托管它
 - `npm run sim`：经济模拟（M1 加）
+- `npm run shots`：按横屏手机、16:9、3:2、方屏、竖屏、画中画六种比例截图（要先 `npm run dev`）

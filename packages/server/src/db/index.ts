@@ -81,7 +81,53 @@ const MIGRATIONS: string[] = [
      created_at INTEGER NOT NULL,
      PRIMARY KEY (discord_id, key)
    );`,
+
+  // 3：M4 柜台。float（个人浮动）是隐藏的，心理价位每次出价时现算，都不发给玩家
+  `CREATE TABLE customers (
+     id            INTEGER PRIMARY KEY AUTOINCREMENT,
+     owner_id      TEXT NOT NULL REFERENCES players(discord_id),
+     sydney_day    TEXT NOT NULL,
+     slot          INTEGER NOT NULL,
+     seat          INTEGER NOT NULL,
+     type          TEXT NOT NULL,
+     demand        TEXT NOT NULL,
+     float         REAL NOT NULL,
+     patience      INTEGER NOT NULL,
+     status        TEXT NOT NULL DEFAULT 'waiting',
+     line          TEXT NOT NULL,
+     budget_low    INTEGER NOT NULL,
+     budget_high   INTEGER NOT NULL,
+     counter_price INTEGER,
+     created_at    INTEGER NOT NULL,
+     UNIQUE (owner_id, sydney_day, slot, seat)
+   );`,
+
+  // 4：营业日改成玩家自己推进（2026-11-17）。"哪一天"用 day_key 表示（营业日写成 g12），不再是悉尼日期
+  `ALTER TABLE players ADD COLUMN game_day INTEGER NOT NULL DEFAULT 1;
+   ALTER TABLE customers RENAME COLUMN sydney_day TO day_key;
+   ALTER TABLE daily_usage RENAME COLUMN sydney_day TO day_key;`,
 ];
+
+/** 营业日在 customers、daily_usage 里的键 */
+export const dayKey = (gameDay: number) => `g${gameDay}`;
+
+export interface CustomerRow {
+  id: number;
+  owner_id: string;
+  day_key: string;
+  slot: number;
+  seat: number;
+  type: string;
+  demand: string;
+  float: number;
+  patience: number;
+  status: string;
+  line: string;
+  budget_low: number;
+  budget_high: number;
+  counter_price: number | null;
+  created_at: number;
+}
 
 export interface PlayerRow {
   discord_id: string;
@@ -91,6 +137,7 @@ export interface PlayerRow {
   reputation: number;
   week_no: number;
   pity_count: number;
+  game_day: number;
   created_at: number;
 }
 
@@ -176,11 +223,11 @@ function createRepo(db: Database.Database) {
     markCollected: db.prepare('INSERT INTO collection (discord_id, template_id, first_at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING'),
 
     getUsage: db.prepare<[string, string], { packs_normal: number; packs_black: number }>(
-      'SELECT packs_normal, packs_black FROM daily_usage WHERE discord_id = ? AND sydney_day = ?',
+      'SELECT packs_normal, packs_black FROM daily_usage WHERE discord_id = ? AND day_key = ?',
     ),
     bumpNormal: db.prepare(
-      `INSERT INTO daily_usage (discord_id, sydney_day, packs_normal) VALUES (?, ?, 1)
-       ON CONFLICT(discord_id, sydney_day) DO UPDATE SET packs_normal = packs_normal + 1`,
+      `INSERT INTO daily_usage (discord_id, day_key, packs_normal) VALUES (?, ?, 1)
+       ON CONFLICT(discord_id, day_key) DO UPDATE SET packs_normal = packs_normal + 1`,
     ),
 
     getIdem: db.prepare<[string, string], { response: string }>('SELECT response FROM idempotency WHERE discord_id = ? AND key = ?'),
@@ -249,6 +296,7 @@ function createRepo(db: Database.Database) {
       return Number(r.lastInsertRowid);
     },
 
+    advanceDay: (discordId: string) => db.prepare('UPDATE players SET game_day = game_day + 1 WHERE discord_id = ?').run(discordId),
     packsOpenedToday: (discordId: string, day: string) => q.getUsage.get(discordId, day)?.packs_normal ?? 0,
     bumpNormalPacks: (discordId: string, day: string) => q.bumpNormal.run(discordId, day),
 
@@ -283,6 +331,30 @@ function createRepo(db: Database.Database) {
     countLocation: (ownerId: string, location: CardLocation) =>
       (db.prepare('SELECT COUNT(*) AS n FROM card_instances WHERE owner_id = ? AND location = ?').get(ownerId, location) as { n: number }).n,
     setLocation: (id: number, location: CardLocation) => db.prepare('UPDATE card_instances SET location = ? WHERE id = ?').run(location, id),
+
+    /** 能拿去柜台卖的卡（在库存里，不在珍藏柜） */
+    sellableCards(ownerId: string, limit = 1000): CardView[] {
+      const rows = db.prepare(`${q.cardsWithTemplate} WHERE i.owner_id = ? AND i.location = 'inventory' ORDER BY i.id DESC LIMIT ?`).all(ownerId, limit) as CardViewRow[];
+      return rows.map(toCardView);
+    },
+    deleteCard: (id: number) => db.prepare('DELETE FROM card_instances WHERE id = ?').run(id),
+    setCreditsReputation: (discordId: string, credits: number, reputation: number) =>
+      db.prepare('UPDATE players SET credits = ?, reputation = ? WHERE discord_id = ?').run(credits, reputation, discordId),
+
+    // ---- 柜台顾客（FR-CTR-1～3） ----
+    customersFor: (ownerId: string, day: string) =>
+      db.prepare('SELECT * FROM customers WHERE owner_id = ? AND day_key = ? ORDER BY slot, seat').all(ownerId, day) as CustomerRow[],
+    getCustomer: (ownerId: string, id: number) =>
+      (db.prepare('SELECT * FROM customers WHERE id = ? AND owner_id = ?').get(id, ownerId) as CustomerRow | undefined) ?? null,
+    insertCustomer(c: Omit<CustomerRow, 'id' | 'status' | 'counter_price'>): number {
+      const r = db.prepare(
+        `INSERT INTO customers (owner_id, day_key, slot, seat, type, demand, float, patience, line, budget_low, budget_high, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run(c.owner_id, c.day_key, c.slot, c.seat, c.type, c.demand, c.float, c.patience, c.line, c.budget_low, c.budget_high, c.created_at);
+      return Number(r.lastInsertRowid);
+    },
+    updateCustomer: (id: number, c: { patience: number; status: string; line: string; counter_price: number | null }) =>
+      db.prepare('UPDATE customers SET patience = ?, status = ?, line = ?, counter_price = ? WHERE id = ?').run(c.patience, c.status, c.line, c.counter_price, id),
 
     collection(ownerId: string) {
       const owned = new Set((db.prepare('SELECT template_id FROM collection WHERE discord_id = ?').all(ownerId) as Array<{ template_id: string }>).map((r) => r.template_id));

@@ -93,6 +93,55 @@ export interface CollectionResponse {
   series: Array<{ id: string; name: string; total: number; owned: number; cards: CollectionEntry[] }>;
 }
 
+// ---------- 柜台（M4） ----------
+// 心理价位、个人浮动是隐藏的，不出现在这里（NFR-SEC-2）。
+
+export type CustomerStatus = 'waiting' | 'sold' | 'left' | 'dismissed';
+
+export interface CustomerView {
+  id: number;
+  type: string;
+  typeName: string;
+  /** 最近一句台词 */
+  line: string;
+  demand: { rarities: string[]; tag: string | null; text: string };
+  budgetLow: number;
+  budgetHigh: number;
+  patience: number;
+  maxPatience: number;
+  status: CustomerStatus;
+  /** 上次还价报的数（还价之后才有） */
+  counterPrice: number | null;
+}
+
+export interface CounterResponse {
+  ok: true;
+  customers: CustomerView[];
+  /** 第几个营业日（玩家自己推进，打烊 +1） */
+  day: number;
+}
+
+export interface EndDayResponse {
+  ok: true;
+  /** 打烊后进入的新营业日 */
+  day: number;
+}
+
+export interface EligibleCardsResponse {
+  ok: true;
+  cards: Array<{ card: CardView; quickPrice: number }>;
+}
+
+export interface OfferResponse {
+  ok: true;
+  outcome: 'deal' | 'counter' | 'too_high' | 'left' | 'caught';
+  customer: CustomerView;
+  /** 成交价（deal 时） */
+  price: number | null;
+  credits: number;
+  reputation: number;
+}
+
 export interface MeResponse {
   ok: true;
   user: SessionUser;
@@ -102,6 +151,10 @@ export interface MeResponse {
   wallet: WalletView;
   /** 连续多少包正规包没出 SSR 以上（保底进度） */
   pityCount: number;
-  /** 今天还能开几包正规包 */
+  /** 本营业日还能开几包正规包 */
   packsLeftToday: number;
+  /** 第几个营业日 */
+  gameDay: number;
+  /** 测试账号（DEV_AUTH=1 且在 DEV_UNLIMITED_IDS 里）才是 true：前端显示测试工具 */
+  devTools: boolean;
 }

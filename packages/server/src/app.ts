@@ -14,6 +14,7 @@ import { registerAuthRoutes } from './routes/auth.ts';
 import { registerMeRoutes } from './routes/me.ts';
 import { registerPackRoutes } from './routes/packs.ts';
 import { registerInventoryRoutes } from './routes/inventory.ts';
+import { registerCounterRoutes } from './routes/counter.ts';
 
 export interface Deps {
   config: Config;
@@ -81,6 +82,7 @@ export function buildApp(deps: Deps) {
   registerMeRoutes(app, deps, now);
   registerPackRoutes(app, deps, now);
   registerInventoryRoutes(app, deps);
+  registerCounterRoutes(app, deps, now);
 
   app.setErrorHandler((err, req, reply) => {
     if (err instanceof ApiError) return fail(reply, err.status, err.code, err.message);

@@ -7,6 +7,7 @@ import { fmt } from './Card.tsx';
 import { Packs } from './pages/Packs.tsx';
 import { Inventory } from './pages/Inventory.tsx';
 import { Collection } from './pages/Collection.tsx';
+import { Counter } from './pages/Counter.tsx';
 
 type State =
   | { kind: 'loading'; text: string }
@@ -14,8 +15,8 @@ type State =
   | { kind: 'ready'; me: MeResponse }
   | { kind: 'error'; text: string };
 
-type Tab = 'shop' | 'packs' | 'inventory' | 'collection';
-const TABS: Array<[Tab, string]> = [['shop', '店铺'], ['packs', '进货'], ['inventory', '库存'], ['collection', '图鉴']];
+type Tab = 'shop' | 'packs' | 'counter' | 'inventory' | 'collection';
+const TABS: Array<[Tab, string]> = [['shop', '店铺'], ['packs', '进货'], ['counter', '柜台'], ['inventory', '库存'], ['collection', '图鉴']];
 
 export function App() {
   const [state, setState] = useState<State>({ kind: 'loading', text: '正在开店…' });
@@ -57,8 +58,9 @@ export function App() {
         <span className="topbar-credits">{fmt(me.credits)} 信用点</span>
       </header>
       <main className="content">
-        {tab === 'shop' && <Shop me={me} />}
+        {tab === 'shop' && <Shop me={me} onChange={patchMe} />}
         {tab === 'packs' && <Packs me={me} onChange={patchMe} />}
+        {tab === 'counter' && <Counter onChange={patchMe} />}
         {tab === 'inventory' && <Inventory />}
         {tab === 'collection' && <Collection />}
       </main>
@@ -71,7 +73,32 @@ export function App() {
   );
 }
 
-function Shop({ me }: { me: MeResponse }) {
+function DevTools({ onChange }: { onChange: (p: Partial<MeResponse>) => void }) {
+  const [value, setValue] = useState('100000');
+  const [msg, setMsg] = useState('');
+  const save = async () => {
+    try {
+      const r = await api<{ credits: number }>('/dev/credits', { method: 'POST', body: { credits: Number(value) } });
+      onChange({ credits: r.credits });
+      setMsg(`已设为 ${fmt(r.credits)}`);
+    } catch (e) {
+      setMsg((e as Error).message);
+    }
+  };
+  return (
+    <section className="devtools">
+      <h2>测试工具 <small>只有测试账号看得到</small></h2>
+      <label className="price-input">
+        信用点设为
+        <input inputMode="numeric" value={value} onChange={(e) => setValue(e.target.value.replace(/\D/g, ''))} />
+      </label>
+      <button className="secondary" disabled={!value} onClick={save}>保存</button>
+      {msg && <p className="hint">{msg}</p>}
+    </section>
+  );
+}
+
+function Shop({ me, onChange }: { me: MeResponse; onChange: (p: Partial<MeResponse>) => void }) {
   return (
     <section className="page">
       <h1>你好，{me.user.name}</h1>
@@ -82,9 +109,10 @@ function Shop({ me }: { me: MeResponse }) {
           <span className="value">{me.wallet.coins === null ? '暂时查不到' : !me.wallet.opened ? '还没开户' : fmt(me.wallet.coins)}</span>
         </div>
         <div className="stat"><span className="label">信誉</span><span className="value">{me.reputation}</span></div>
-        <div className="stat"><span className="label">摊位</span><span className="value">第 {me.weekNo} 周</span></div>
+        <div className="stat"><span className="label">营业</span><span className="value">第 {me.gameDay} 天</span></div>
       </section>
-      <p className="hint">柜台、鉴定和房租还在装修。先去"进货"开几包吧。</p>
+      <p className="hint">去"进货"开包，再到"柜台"把卡卖给顾客。鉴定和房租还在装修。</p>
+      {me.devTools && <DevTools onChange={onChange} />}
     </section>
   );
 }

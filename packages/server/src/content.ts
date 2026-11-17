@@ -27,6 +27,19 @@ export function checkSeries(s: SeriesContent): string[] {
   return errors;
 }
 
+/** 顾客台词（FR-CTR-7）：content/lines.json，按"顾客类型 → 场景"分组 */
+export type LineEvent = 'greet' | 'counter' | 'too_high' | 'deal' | 'left';
+export interface Lines {
+  byType: Record<string, Record<LineEvent, string[]>>;
+  caught: string[];
+}
+
+export function loadLines(file = path.resolve(CONTENT_DIR, '..', 'lines.json')): Lines {
+  const raw = JSON.parse(fs.readFileSync(file, 'utf8')) as Record<string, unknown>;
+  const { note: _note, caught, ...byType } = raw;
+  return { byType: byType as Lines['byType'], caught: caught as string[] };
+}
+
 export function importAllSeries(repo: Repo, dir = CONTENT_DIR): string[] {
   const all = loadSeries(dir);
   for (const s of all) {

@@ -28,7 +28,8 @@
 | 旺财 | 服务器现有的 oceania-bot，唯一能写金币钱包的程序 |
 | 信用点 | 卡奴游戏内货币，跨赛季保留（软赛季） |
 | 金币 | 服务器全局货币，存在旺财钱包 |
-| 悉尼日 | 按 Australia/Sydney 时区的日历日，"每天"的统一口径 |
+| 悉尼日 | 按 Australia/Sydney 时区的日历日；现在只用于金币兑换的每周上限等现实时间口径 |
+| 营业日 | 玩家自己推进的游戏天：6 位顾客接待完就打烊进入下一天（2026-11-17 改）。限购、房租都按营业日算 |
 | 幂等 key | 每次写操作带的唯一字符串，同一个 key 重复请求只生效一次 |
 
 ### 1.4 参考
@@ -81,7 +82,7 @@ flowchart LR
 
 - **C-1** 前端只能访问 URL Mapping 里配置过的地址。卡面图、字体等静态资源全部由卡奴服务器自己提供，不引用外部 CDN；确实要用外部服务时，先在 Developer Portal 加映射，并在前端调用 SDK 的 `patchUrlMappings`。
 - **C-2** 金币只能由旺财写。卡奴不直接读写 `wallet.json`，只通过 `/wallet/*` 接口。
-- **C-3** 所有"每天"都按悉尼日计算，和旺财钱包一致。
+- **C-3** 游戏里的"每天"按营业日（玩家打烊推进）；只有和旺财钱包有关的现实时间口径（金币兑换的每周上限）按悉尼时间。
 - **C-4** 游戏数值全部集中在 `packages/shared/src/balance.ts`，服务器、模拟脚本、前端展示共用同一份，不在别处写死。
 
 ### 2.5 假设
@@ -151,7 +152,7 @@ kanu/
 | --- | --- | --- |
 | FR-PACK-1 | 开正规卡包：扣 300 信用点，按 DESIGN 4 的概率表生成 5 张卡，按 3.4 随机外层风格，按 5.2 的分布随机真实品相（含黑标） | MVP |
 | FR-PACK-2 | 卡牌实例的全部隐藏属性在**生成时**确定并存库，之后不再随机 | MVP |
-| FR-PACK-3 | 每日限购按悉尼日计数：正规 5 包、黑市 3 包 | MVP（黑市在第二阶段） |
+| FR-PACK-3 | 每个营业日限购：正规 5 包、黑市 3 包，打烊后重新计 | MVP（黑市在第二阶段） |
 | FR-PACK-4 | 保底：正规卡包计数到 10 包未出 SSR 及以上时，第 10 包必出一张 SSR（风格随机但排除编号限定）；出 SSR 及以上时计数清零 | MVP |
 | FR-PACK-5 | 编号限定：每个卡牌模板全服最多 50 张，序列号从 1 递增，用数据库事务保证不重号；发完后该模板不再出编号限定，改按标准框 | MVP |
 | FR-PACK-6 | 开包结果有翻牌动画；出 UR 及以上或编号限定时，通过 Bot 在播报频道发一条消息（玩家名、卡名、稀有度、风格） | MVP |
@@ -184,8 +185,8 @@ kanu/
 
 | 编号 | 需求 | MVP |
 | --- | --- | --- |
-| FR-CTR-1 | 每天分三个时段（悉尼 08:00、13:00、19:00 起），每个时段 2 位顾客。顾客在玩家**打开柜台时按需生成**，不靠定时任务预生成 | MVP |
-| FR-CTR-2 | 没接待的顾客保留到当天结束，跨天作废 | MVP |
+| FR-CTR-1 | 每个营业日 6 位顾客，第一次打开柜台时一次生成，不靠定时任务 | MVP |
+| FR-CTR-2 | 顾客都接待完（成交、走人或请走）才能打烊（`POST /api/day/end`，要幂等 key），打烊后进入下一个营业日，上一天的顾客作废 | MVP |
 | FR-CTR-3 | 顾客生成时就确定类型、需求、心理价位（隐藏）、耐心值；按 DESIGN 6 的概率抽类型 | MVP |
 | FR-CTR-4 | 出价流程按 DESIGN 6 的五步实现；"高出不多"和"高出太多"的阈值放 balance.ts | MVP |
 | FR-CTR-5 | 成交后对假卡做识破判定，识破则退款、卡退回、扣信誉 | MVP |
@@ -196,10 +197,10 @@ kanu/
 
 | 编号 | 需求 | MVP |
 | --- | --- | --- |
-| FR-RENT-1 | 每周日悉尼 20:00 扣摊位费，金额按 DESIGN 7 的公式（第 8 周封顶），周数按每个玩家自己的"第几周"算，不跟赛季走（从头开始后从 1 重算） | MVP |
-| FR-RENT-2 | 余额不足进入 24 小时宽限期：Bot 私信提醒（私信失败就只在 Activity 里提示），宽限期内可以自己挑卡抵押或卖掉 | MVP |
+| FR-RENT-1 | 每 7 个营业日在打烊时扣摊位费，金额按 DESIGN 7 的公式（第 8 次封顶），按玩家自己的营业日算，不跟现实时间和赛季走（从头开始后从 1 重算） | MVP |
+| FR-RENT-2 | 打烊扣租时余额不足进入欠租：柜台不开门、不能打烊进下一天，玩家自己挑卡抵押或卖掉，凑够后补交 | MVP |
 | FR-RENT-3 | 抵押按市场价 50% 折算（未封壳按未评级价，见 FR-APPR-5），7 天内可以按 60% 赎回，过期由定时任务转给房东（删除） | MVP |
-| FR-RENT-4 | 宽限期结束仍不足：系统自动抵押，从市场价最低的卡开始，珍藏柜最后动，凑够就停（一个事务里完成，写 events_log）。所有卡都抵押完还不够、或玩家主动申请破产，才从头开始：按 DESIGN 7 的表保留和清空，用 1,200 信用点重开 | MVP |
+| FR-RENT-4 | 欠租时可以一键"按顺序抵押"（从市场价最低的卡开始，珍藏柜最后动，凑够就停，一个事务里完成，写 events_log）。所有卡都抵押完还不够、或玩家主动申请破产，才从头开始：按 DESIGN 7 的表保留和清空，用 1,200 信用点重开 | MVP |
 | FR-RENT-5 | 任何时候可以花 40,000 买下店铺，之后不再扣摊位费 | MVP |
 | FR-RENT-6 | 首页显示下次扣租的时间和金额 | MVP |
 
@@ -247,7 +248,7 @@ MVP 需要的表（字段为主要字段，类型和索引在实现时定）：
 | 表 | 主要字段 |
 | --- | --- |
 | players | discord_id（主键）、display_name、avatar、credits、reputation、week_no、grace_until、shop_owned、pity_count、bankrupt_count、created_at |
-| daily_usage | discord_id、sydney_day、packs_normal、packs_black |
+| daily_usage | discord_id、day_key（营业日，写成 g12）、packs_normal、packs_black |
 | weekly_usage | discord_id、sydney_week（该周周一的日期）、coins_exchanged |
 | card_templates | id（如 NEO-017）、name、series、rarity、tags（JSON）、base_price、flavor_text、image |
 | card_instances | id、template_id、owner_id、authenticity（real / low_fake / high_fake）、condition（1–10，隐藏）、black_label、subgrades（JSON，送评时生成）、certified（已验真）、graded（是否封壳）、grade_rejected（被评级社拒评）、origin（legit / unknown / stolen）、style、serial_no、location、created_at |
@@ -357,8 +358,7 @@ Authorization: Bearer ${WANGCAI_CONTROL_SECRET}
 
 | 时间（悉尼） | 任务 | MVP |
 | --- | --- | --- |
-| 每周日 20:00 | 扣摊位费，进入宽限期的发私信 | MVP |
-| 每 10 分钟 | 宽限期到期的自动抵押或从头开始；抵押到期的转给房东；兑换单重试 | MVP |
+| 每 10 分钟 | 兑换单重试 | MVP |
 | 每小时 | 鉴定机构和送评到期的出结果 | MVP |
 | 每天 03:00 | 备份数据库；清理 48 小时前的幂等记录 | MVP |
 | 每天 08:00 | 新闻 | 第二阶段 |

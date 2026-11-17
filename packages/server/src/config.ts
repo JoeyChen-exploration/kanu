@@ -13,6 +13,10 @@ export interface Config {
   sessionSecret: string;
   devAuth: boolean;
   disabled: boolean;
+  /** 本机测试用：把服务器时钟往后拨多少毫秒（只在 DEV_AUTH=1 时生效，比如半夜测柜台） */
+  devTimeOffsetMs: number;
+  /** 本机测试用：这些 Discord ID 开包不扣信用点、不限购（只在 DEV_AUTH=1 时生效，正式环境不开 DEV_AUTH 就自动失效） */
+  devUnlimitedIds: Set<string>;
   dbPath: string;
   wallet: { mode: 'mock' | 'live'; port: number | null; secret: string | null; mockCoins: number };
   clientDist: string;
@@ -36,6 +40,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     sessionSecret,
     devAuth,
     disabled: env.KANU_DISABLED === '1',
+    devTimeOffsetMs: devAuth ? Number(env.DEV_TIME_OFFSET_HOURS || 0) * 3600e3 : 0,
+    devUnlimitedIds: new Set(devAuth ? String(env.DEV_UNLIMITED_IDS || '').split(',').map((s) => s.trim()).filter(Boolean) : []),
     dbPath: path.resolve(ROOT, env.DB_PATH || './data/kanu.sqlite'),
     wallet: {
       mode,

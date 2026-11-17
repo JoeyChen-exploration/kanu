@@ -3,7 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import { PACKS } from '@kanu/shared/balance';
 import type { MeResponse } from '@kanu/shared/types';
 import { fail, type Deps } from '../app.ts';
-import { sydneyDay } from '../time.ts';
+import { dayKey } from '../db/index.ts';
 
 export function registerMeRoutes(app: FastifyInstance, deps: Deps, now: () => number) {
   app.get('/api/me', async (req, reply) => {
@@ -11,7 +11,7 @@ export function registerMeRoutes(app: FastifyInstance, deps: Deps, now: () => nu
     const player = deps.repo.getPlayer(req.user.id);
     if (!player) return fail(reply, 401, 'unauthorized', '请重新打开卡奴登录');
     const wallet = await deps.wallet.balance(req.user.id);
-    const used = deps.repo.packsOpenedToday(req.user.id, sydneyDay(now()));
+    const used = deps.repo.packsOpenedToday(req.user.id, dayKey(player.game_day));
     const body: MeResponse = {
       ok: true,
       user: { id: player.discord_id, name: player.display_name, avatar: player.avatar },
@@ -21,7 +21,23 @@ export function registerMeRoutes(app: FastifyInstance, deps: Deps, now: () => nu
       wallet,
       pityCount: player.pity_count,
       packsLeftToday: Math.max(0, PACKS.normal.dailyLimit - used),
+      gameDay: player.game_day,
+      devTools: deps.config.devUnlimitedIds.has(req.user.id),
     };
     return body;
+  });
+
+  // 测试工具：直接把信用点设成某个数（只给测试账号用；DEV_AUTH 没开时 devUnlimitedIds 是空的，等于不存在）
+  app.post<{ Body: { credits?: unknown } }>('/api/dev/credits', async (req, reply) => {
+    if (!req.user || !deps.config.devUnlimitedIds.has(req.user.id)) return fail(reply, 404, 'not_found', '没有这个接口');
+    const credits = Number(req.body?.credits);
+    if (!Number.isInteger(credits) || credits < 0 || credits > 100_000_000) return fail(reply, 400, 'bad_credits', '信用点要是 0 到 1 亿之间的整数');
+    const player = deps.repo.getPlayer(req.user.id);
+    if (!player) return fail(reply, 401, 'unauthorized', '请重新打开卡奴登录');
+    deps.repo.db.transaction(() => {
+      deps.repo.setCreditsPity(req.user!.id, credits, player.pity_count);
+      deps.repo.logCredits(req.user!.id, now(), credits - player.credits, 'dev_set', credits);
+    })();
+    return { ok: true, credits };
   });
 }

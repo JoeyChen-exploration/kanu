@@ -69,18 +69,30 @@ describe('开包（FR-PACK-1～5）', () => {
     expect((repo.db.prepare('SELECT COUNT(*) AS n FROM card_instances').get() as { n: number }).n).toBe(0);
   });
 
-  it('每天限购 5 包，按悉尼日计（FR-PACK-3）', async () => {
-    let t = NOW;
-    const { app, repo } = setup({ now: () => t });
+  it('每个营业日限购 5 包，打烊进入下一天后重新计（FR-PACK-3）', async () => {
+    const { app, repo } = setup();
     cleanup = () => app.close();
     const h = await login(app);
     repo.db.prepare('UPDATE players SET credits = 100000').run();
     for (let i = 0; i < PACKS.normal.dailyLimit; i += 1) expect((await open(app, h)).statusCode).toBe(200);
     const sixth = await open(app, h);
     expect(sixth.json().code).toBe('daily_limit');
-    // NOW 是悉尼时间晚上 7 点；过 6 小时就是第二天凌晨 1 点（会话 24 小时有效，还没过期）
-    t += 6 * 3600e3;
+    repo.advanceDay('123456789012345678');
     expect((await open(app, h)).statusCode).toBe(200);
+  });
+
+  it('测试账号（DEV_UNLIMITED_IDS）开包不扣钱、不限购；没开 DEV_AUTH 时不生效', async () => {
+    const on = setup({ devAuth: true, unlimited: '123456789012345678' });
+    const h = await login(on.app);
+    for (let i = 0; i < PACKS.normal.dailyLimit + 2; i += 1) expect((await open(on.app, h)).statusCode).toBe(200);
+    expect(on.repo.getPlayer('123456789012345678')!.credits).toBe(PLAYER.startCredits);
+    await on.app.close();
+
+    const off = setup({ devAuth: false, unlimited: '123456789012345678' });
+    cleanup = () => off.app.close();
+    const h2 = await login(off.app);
+    const body = (await open(off.app, h2)).json() as OpenPackResponse;
+    expect(body.credits).toBe(PLAYER.startCredits - PACKS.normal.price);
   });
 
   it('保底计数存库：连续 10 包没出 SSR 以上，第 10 包必出（FR-PACK-4）', async () => {
@@ -195,5 +207,25 @@ describe('库存和珍藏柜（FR-INV-1、FR-INV-6）', () => {
     const res = await app.inject({ method: 'POST', url: `/api/inventory/${cards[0]!.id}/showcase`, headers: { authorization: `Bearer ${other.session}` }, payload: { on: true } });
     expect(res.statusCode).toBe(404);
     expect(repo.countLocation('123456789012345678', 'showcase')).toBe(0);
+  });
+});
+
+describe('测试工具：设置信用点', () => {
+  it('测试账号可以把信用点设成任意数，写流水；普通账号和没开 DEV_AUTH 时接口不存在', async () => {
+    const on = setup({ devAuth: true, unlimited: '123456789012345678' });
+    const h = await login(on.app);
+    expect((await on.app.inject({ method: 'GET', url: '/api/me', headers: h })).json().devTools).toBe(true);
+    const r = await on.app.inject({ method: 'POST', url: '/api/dev/credits', headers: h, payload: { credits: 88888 } });
+    expect(r.json()).toMatchObject({ ok: true, credits: 88888 });
+    expect(on.repo.getPlayer('123456789012345678')!.credits).toBe(88888);
+    const other = (await on.app.inject({ method: 'POST', url: '/api/auth/dev-login', payload: { name: 'bob' } })).json();
+    expect((await on.app.inject({ method: 'POST', url: '/api/dev/credits', headers: { authorization: `Bearer ${other.session}` }, payload: { credits: 1 } })).statusCode).toBe(404);
+    await on.app.close();
+
+    const off = setup({ devAuth: false, unlimited: '123456789012345678' });
+    cleanup = () => off.app.close();
+    const h2 = await login(off.app);
+    expect((await off.app.inject({ method: 'GET', url: '/api/me', headers: h2 })).json().devTools).toBe(false);
+    expect((await off.app.inject({ method: 'POST', url: '/api/dev/credits', headers: h2, payload: { credits: 1 } })).statusCode).toBe(404);
   });
 });

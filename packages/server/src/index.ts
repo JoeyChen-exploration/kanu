@@ -25,7 +25,9 @@ const app = buildApp({
   rng: cryptoRng,
   notifier: createDiscordNotifier({ botToken: config.botToken, channelId: config.announceChannelId }),
   currentSeries: config.currentSeries,
+  now: () => Date.now() + config.devTimeOffsetMs,
 });
+if (config.devTimeOffsetMs) app.log.warn(`开发时钟偏移 ${config.devTimeOffsetMs / 3600e3} 小时（DEV_TIME_OFFSET_HOURS）`);
 
 // 幂等记录只留 48 小时（SRS 第 5 节）。正式的定时任务框架在 M5 做，这里先每小时清一次
 const pruneTimer = setInterval(() => repo.pruneIdempotency(Date.now() - IDEMPOTENCY.ttlMs), 3600e3);

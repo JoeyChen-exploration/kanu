@@ -30,13 +30,13 @@ export function Packs({ me, onChange }: { me: MeResponse; onChange: (patch: Part
 
   const flip = (i: number) => setFlipped((f) => f.map((v, j) => (j === i ? true : v)));
   const flipAll = () => setFlipped((f) => f.map(() => true));
-  const disabled = busy || me.packsLeftToday <= 0 || me.credits < pack.price;
+  const disabled = busy || (!me.devTools && (me.packsLeftToday <= 0 || me.credits < pack.price));
 
   return (
     <section className="page">
       <h2>进货</h2>
       <div className="pack-info">
-        <div>今天还能开 <b>{me.packsLeftToday}</b> / {pack.dailyLimit} 包</div>
+        <div>第 {me.gameDay} 天，还能开 <b>{me.devTools ? '不限' : me.packsLeftToday}</b>{me.devTools ? '' : ` / ${pack.dailyLimit} 包`}</div>
         <div>保底进度 <b>{me.pityCount}</b> / {PITY.packs}（{PITY.packs} 包内必出 SSR 以上）</div>
       </div>
 
@@ -60,7 +60,7 @@ export function Packs({ me, onChange }: { me: MeResponse; onChange: (patch: Part
       <button className="primary" disabled={disabled} onClick={openPack}>
         {busy ? '开包中…' : `开正规卡包 · ${fmt(pack.price)} 信用点`}
       </button>
-      {me.credits < pack.price && <p className="hint">信用点不够了，去柜台卖卡吧（柜台下一步就来）。</p>}
+      {me.credits < pack.price && <p className="hint">信用点不够了，去柜台把卡卖给顾客吧。</p>}
       {err && <p className="error">{err}</p>}
     </section>
   );

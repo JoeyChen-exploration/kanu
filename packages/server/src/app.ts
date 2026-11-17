@@ -2,14 +2,18 @@
 import fs from 'node:fs';
 import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
 import fastifyStatic from '@fastify/static';
-import type { ApiError, SessionUser } from '@kanu/shared/types';
+import type { ApiError as ApiErrorBody, SessionUser } from '@kanu/shared/types';
 import type { Config } from './config.ts';
 import type { Repo } from './db/index.ts';
 import type { SessionCodec } from './auth/session.ts';
 import type { DiscordAuth } from './auth/discord.ts';
 import type { WalletClient } from './wallet/client.ts';
+import type { Rng } from './game/rng.ts';
+import type { Notifier } from './notify/discord.ts';
 import { registerAuthRoutes } from './routes/auth.ts';
 import { registerMeRoutes } from './routes/me.ts';
+import { registerPackRoutes } from './routes/packs.ts';
+import { registerInventoryRoutes } from './routes/inventory.ts';
 
 export interface Deps {
   config: Config;
@@ -17,11 +21,29 @@ export interface Deps {
   sessions: SessionCodec;
   discord: DiscordAuth;
   wallet: WalletClient;
+  /** 线上传 cryptoRng，测试传 seeded */
+  rng: Rng;
+  notifier: Notifier;
+  /** 正规卡包开哪个系列 */
+  currentSeries: string;
   now?: () => number;
 }
 
 export const fail = (reply: FastifyReply, status: number, code: string, message: string) =>
-  reply.code(status).send({ ok: false, code, message } satisfies ApiError);
+  reply.code(status).send({ ok: false, code, message } satisfies ApiErrorBody);
+
+/** 业务规则拒绝：在事务里抛出，事务回滚，路由按 status 回给玩家（message 是给玩家看的中文） */
+export class ApiError extends Error {
+  constructor(public status: number, public code: string, message: string) {
+    super(message);
+  }
+}
+
+/** 写接口的幂等 key（NFR-SEC-5）：前端每次点击生成一个 UUID 放在 Idempotency-Key 请求头 */
+export function idempotencyKey(req: FastifyRequest): string | null {
+  const k = req.headers['idempotency-key'];
+  return typeof k === 'string' && k.length >= 8 && k.length <= 100 ? k : null;
+}
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -56,7 +78,16 @@ export function buildApp(deps: Deps) {
   app.get('/api/health', async () => ({ ok: true }));
 
   registerAuthRoutes(app, deps, now);
-  registerMeRoutes(app, deps);
+  registerMeRoutes(app, deps, now);
+  registerPackRoutes(app, deps, now);
+  registerInventoryRoutes(app, deps);
+
+  app.setErrorHandler((err, req, reply) => {
+    if (err instanceof ApiError) return fail(reply, err.status, err.code, err.message);
+    req.log.error(err);
+    // 不把内部错误细节发给玩家（NFR-SEC-2：调试字段也可能带隐藏属性）
+    return fail(reply, (err as { statusCode?: number }).statusCode === 400 ? 400 : 500, 'internal', '出错了，稍后再试');
+  });
 
   app.setNotFoundHandler((req, reply) => {
     if (req.url.startsWith('/api/')) return fail(reply, 404, 'not_found', '没有这个接口');

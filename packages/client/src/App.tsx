@@ -8,6 +8,7 @@ import { Packs } from './pages/Packs.tsx';
 import { Inventory } from './pages/Inventory.tsx';
 import { Collection } from './pages/Collection.tsx';
 import { Counter } from './pages/Counter.tsx';
+import { Booklet, bookletUnseen } from './Booklet.tsx';
 
 type State =
   | { kind: 'loading'; text: string }
@@ -21,6 +22,8 @@ const TABS: Array<[Tab, string]> = [['shop', '店铺'], ['packs', '进货'], ['c
 export function App() {
   const [state, setState] = useState<State>({ kind: 'loading', text: '正在开店…' });
   const [tab, setTab] = useState<Tab>('shop');
+  /** 新手手册：第一次进游戏自动打开，之后点顶栏 📖 */
+  const [booklet, setBooklet] = useState(bookletUnseen);
   const started = useRef(false);
 
   const loadMe = async () => setState({ kind: 'ready', me: await api<MeResponse>('/me') });
@@ -57,7 +60,9 @@ export function App() {
         <Avatar url={me.user.avatar} />
         <span className="topbar-name">{me.user.name}</span>
         <span className="topbar-credits">{fmt(me.credits)} 信用点</span>
+        <button className="topbar-book" onClick={() => setBooklet(true)} aria-label="新手手册">📖</button>
       </header>
+      {booklet && <Booklet onClose={() => setBooklet(false)} />}
       <main className="content">
         {tab === 'shop' && <Shop me={me} onChange={patchMe} />}
         {tab === 'packs' && <Packs me={me} onChange={patchMe} />}
@@ -113,7 +118,7 @@ function Shop({ me, onChange }: { me: MeResponse; onChange: (p: Partial<MeRespon
         <div className="stat"><span className="label">信誉</span><span className="value">{me.reputation}</span></div>
         <div className="stat"><span className="label">营业</span><span className="value">第 {me.gameDay} 天</span></div>
       </section>
-      <p className="hint">去"进货"开包，再到"柜台"把卡卖给顾客。鉴定和房租还在装修。</p>
+      <p className="hint">去"进货"开包，再到"柜台"把卡卖给顾客。不清楚规则就点右上角的 📖 看新手手册。</p>
       {me.devTools && <DevTools onChange={onChange} />}
     </section>
   );

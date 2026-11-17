@@ -238,3 +238,40 @@ h2 small { color: var(--muted); font-weight: normal; font-size: 13px; margin-lef
 .picker-head b { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cell.match { border-radius: 10px; box-shadow: 0 0 0 2px var(--accent), 0 0 12px color-mix(in srgb, var(--accent) 55%, transparent); }
 .cell.dim { opacity: 0.3; filter: grayscale(0.8); pointer-events: none; }
+
+/* 新手手册：像一本小册子，左右翻页 */
+.topbar-book { flex: none; width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); font-size: 18px; }
+.booklet-backdrop { align-items: center; padding: 16px; }
+.booklet {
+  /* 固定大小，不随每页字数变化；字多的页在册子里面滚动 */
+  width: min(460px, 100%); height: min(600px, calc(100dvh - 32px - var(--island-top, 0px) - var(--island-bottom, 0px)));
+  display: flex; flex-direction: column; background: #f4ecd8; color: #2a2418;
+  border-radius: 6px 14px 14px 6px; border-left: 8px solid #8a5a12; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+}
+.booklet .hint { color: #7a6c52; }
+.booklet .chip { background: #fffaf0; color: #2a2418; border-color: #d6c7a6; }
+.booklet .chip.on { background: #8a5a12; color: #fff; border-color: #8a5a12; }
+.booklet .badge { background: #e7dcc0; color: #4a3d26; }
+.booklet-head { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px 0; }
+.booklet-page { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 18px 8px; font-size: 15px; line-height: 1.6; animation: booklet-in 0.2s ease-out; }
+.booklet-page h2 { color: #8a5a12; margin: 6px 0 10px; }
+.booklet-page ul, .booklet-page ol { padding-left: 20px; margin: 8px 0; }
+.booklet-page li { margin: 4px 0; }
+@keyframes booklet-in { from { opacity: 0; transform: translateX(12px); } to { opacity: 1; transform: none; } }
+.booklet-table { width: 100%; border-collapse: collapse; font-size: 14px; margin: 6px 0; }
+.booklet-table td { padding: 5px 4px; border-bottom: 1px solid #e2d6b8; }
+.booklet-table td:last-child { text-align: right; }
+.booklet-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.rarity-chip { display: inline-block; min-width: 34px; text-align: center; border-radius: 6px; padding: 1px 6px; font-weight: 800; font-size: 12px; color: #fff; background: linear-gradient(135deg, var(--r1), var(--r2)); }
+.booklet-customers { display: grid; gap: 8px; }
+.booklet-customer { display: flex; gap: 10px; align-items: flex-start; }
+.booklet-customer p { margin: 2px 0 0; font-size: 13px; }
+.booklet-avatar { font-size: 26px; line-height: 1; flex: none; }
+.booklet-wear { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 8px 0; }
+.booklet-wear figure { margin: 0; }
+.booklet-wear figcaption { font-size: 11px; text-align: center; color: #7a6c52; margin-top: 4px; line-height: 1.3; }
+.booklet-dots { display: flex; justify-content: center; gap: 6px; padding: 6px 0; }
+.booklet-dots button { width: 8px; height: 8px; padding: 0; border-radius: 50%; border: none; background: #d6c7a6; }
+.booklet-dots button.on { background: #8a5a12; width: 18px; border-radius: 4px; }
+.booklet-nav { display: flex; justify-content: space-between; gap: 8px; padding: 0 12px 12px; }
+.booklet-nav .chip { flex: 1; }

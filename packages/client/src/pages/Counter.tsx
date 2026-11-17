@@ -6,7 +6,7 @@ import type { CardView, CounterBinderPageResponse, CounterResponse, CustomerView
 import { api, newIdempotencyKey } from '../api.ts';
 import { Card, fmt } from '../Card.tsx';
 
-const AVATAR: Record<string, string> = {
+export const AVATAR: Record<string, string> = {
   resident: '🧑‍🔧', student: '🧒', tourist: '🧳', collector: '🧐', nostalgic: '👴',
   rich: '🤵', speculator: '📈', streamer: '🎥', middleman: '🕶️',
 };

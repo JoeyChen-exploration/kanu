@@ -1,6 +1,7 @@
 // 柜台（SRS FR-CTR-1～5、7）。2026-11-17：顾客一位一位进门，学深空当铺：
 //   GET  /api/counter                 本营业日眼前这一位 + 今天接待过的（今天一共几位不告诉玩家）
-//   GET  /api/counter/:id/cards       这位顾客能接受的卡（或卡包）+ 每样的快速出售价
+//   GET  /api/counter/:id/cards       这位顾客能接受的卡（或卡包）+ 每样的快速出售价 + 每本卡册里符合的张数
+//   GET  /api/counter/:id/binder/:binderId?page=&matchFirst=  按这位顾客翻卡册（0 = 桌面散放），符合的高亮 / 排前面
 //   POST /api/counter/:id/offer       { instanceId | packId, price } 开价
 //   POST /api/counter/:id/quick       { instanceId | packId } 快速出售（按浮动下限算，必定成交）
 //   POST /api/counter/:id/dismiss     请顾客离开
@@ -8,8 +9,8 @@
 // 上一位走了才生成下一位，需求参照玩家当时的库存。写操作都在一个事务里，要求幂等 key（dismiss 除外，它是设成目标状态）。
 // 心理价位、个人浮动、今天还剩几位都不出现在响应里。
 import type { FastifyInstance } from 'fastify';
-import { CUSTOMER, PACKS, RARITIES, RARITY, REPUTATION, COUNTER, type CustomerType, type Rarity } from '@kanu/shared/balance';
-import type { CardView, CounterResponse, CustomerView, EligibleCardsResponse, EndDayResponse, OfferResponse } from '@kanu/shared/types';
+import { BINDER_PAGE_SIZE, BINDERS, CUSTOMER, PACKS, RARITIES, RARITY, REPUTATION, COUNTER, type BinderKind, type CustomerType, type Rarity } from '@kanu/shared/balance';
+import type { CardView, CounterBinderPageResponse, CounterResponse, CustomerView, EligibleCardsResponse, EndDayResponse, OfferResponse } from '@kanu/shared/types';
 import { ApiError, fail, idempotencyKey, type Deps } from '../app.ts';
 import { dayKey, type CustomerRow } from '../db/index.ts';
 import {
@@ -129,6 +130,10 @@ export function registerCounterRoutes(app: FastifyInstance, deps: Deps, now: () 
     })();
   });
 
+  /** 快速出售价（含卡册加价） */
+  const cardQuick = (ownerId: string, type: CustomerType, card: CardView) =>
+    Math.round(quickPrice(type, toSellable(card)) * deps.binders!.priceMultiplier(ownerId, card.binderId, type));
+
   const waitingCustomer = (ownerId: string, id: number) => {
     const c = repo.getCustomer(ownerId, id);
     const player = repo.getPlayer(ownerId);
@@ -142,15 +147,51 @@ export function registerCounterRoutes(app: FastifyInstance, deps: Deps, now: () 
     const c = waitingCustomer(req.user.id, Number.parseInt(req.params.id, 10));
     const demand = JSON.parse(c.demand) as Demand;
     const type = c.type as CustomerType;
-    const cards = repo.sellableCards(req.user.id)
-      .filter((x) => matchesCard(toSellable(x), demand))
+    const userId = req.user.id;
+    const matched = repo.sellableCards(userId).filter((x) => matchesCard(toSellable(x), demand));
+    const cards = [...matched]
       .sort((a, b) => b.price - a.price)
-      .map((card) => ({ card, quickPrice: Math.round(quickPrice(type, toSellable(card)) * deps.binders!.priceMultiplier(req.user!.id, card.binderId, type)) }));
-    const packs = repo.sealedByOwner(req.user.id)
+      .map((card) => ({ card, quickPrice: cardQuick(userId, type, card) }));
+    const packs = repo.sealedByOwner(userId)
       .map((p) => ({ view: { id: p.id, seriesId: p.series_id, name: p.name, kind: p.kind }, sell: { id: p.id, seriesId: p.series_id, price: PACKS[p.kind].price } }))
       .filter((p) => matchesPack(p.sell, demand))
       .map((p) => ({ ...p.view, quickPrice: quickPricePack(type, p.sell) }));
-    return { ok: true, cards, packs } satisfies EligibleCardsResponse;
+    const countIn = (binderId: number | null) => matched.filter((c) => c.binderId === binderId).length;
+    const binders = repo.bindersOf(userId).map((b) => {
+      const spec = BINDERS[b.kind as BinderKind];
+      return { id: b.id, kind: b.kind, name: spec.name, used: b.used, slots: spec.slots, matchCount: countIn(b.id) };
+    });
+    const loose = { count: repo.looseCards(userId).length, matchCount: countIn(null) };
+    return { ok: true, cards, packs, binders, loose } satisfies EligibleCardsResponse;
+  });
+
+  /** 按这位顾客翻一本卡册（binderId = 0 是桌面散放）：一页 9 张，符合的高亮；matchFirst=1 时符合的排前面（按市场价从高到低） */
+  app.get<{ Params: { id: string; binderId: string }; Querystring: { page?: string; matchFirst?: string } }>('/api/counter/:id/binder/:binderId', async (req, reply) => {
+    if (!req.user) return fail(reply, 401, 'unauthorized', '请重新打开卡奴登录');
+    const userId = req.user.id;
+    const c = waitingCustomer(userId, Number.parseInt(req.params.id, 10));
+    const demand = JSON.parse(c.demand) as Demand;
+    const type = c.type as CustomerType;
+    const binderId = Number.parseInt(req.params.binderId, 10);
+    let binder: CounterBinderPageResponse['binder'];
+    let all: CardView[];
+    if (binderId === 0) {
+      binder = { id: 0, kind: 'loose', name: '桌面散放' };
+      all = repo.looseCards(userId);
+    } else {
+      const b = repo.getBinder(userId, binderId);
+      if (!b) return fail(reply, 404, 'not_found', '找不到这本卡册');
+      binder = { id: b.id, kind: b.kind, name: BINDERS[b.kind as BinderKind].name };
+      all = repo.allBinderCards(b.id);
+    }
+    const matchFirst = req.query.matchFirst !== '0';
+    let rows = all.map((card) => ({ card, match: matchesCard(toSellable(card), demand) }));
+    if (matchFirst) rows = [...rows.filter((r) => r.match).sort((a, b) => b.card.price - a.card.price), ...rows.filter((r) => !r.match)];
+    const pages = Math.max(1, Math.ceil(rows.length / BINDER_PAGE_SIZE));
+    const page = Math.min(pages, Math.max(1, Number.parseInt(req.query.page ?? '1', 10) || 1));
+    const cards = rows.slice((page - 1) * BINDER_PAGE_SIZE, page * BINDER_PAGE_SIZE)
+      .map((r) => ({ ...r, quickPrice: r.match ? cardQuick(userId, type, r.card) : null }));
+    return { ok: true, binder, page, pages, matchFirst, cards } satisfies CounterBinderPageResponse;
   });
 
   /** 开价 / 快速出售的公共流程：卖卡（instanceId）或卖没拆的卡包（packId） */

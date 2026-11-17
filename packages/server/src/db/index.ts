@@ -420,6 +420,11 @@ function createRepo(db: Database.Database) {
       const rows = db.prepare(`${q.cardsWithTemplate} WHERE i.owner_id = ? AND i.location = 'inventory' AND i.binder_id IS NULL ORDER BY i.id`).all(ownerId) as CardViewRow[];
       return rows.map(toCardView);
     },
+    /** 一本卡册里的全部卡（按放进去的顺序），柜台按顾客需要重新排 */
+    allBinderCards(binderId: number): CardView[] {
+      const rows = db.prepare(`${q.cardsWithTemplate} WHERE i.binder_id = ? AND i.location = 'inventory' ORDER BY i.id`).all(binderId) as CardViewRow[];
+      return rows.map(toCardView);
+    },
     binderCards(binderId: number, page: number, pageSize: number): CardView[] {
       const rows = db.prepare(`${q.cardsWithTemplate} WHERE i.binder_id = ? ORDER BY i.id LIMIT ? OFFSET ?`).all(binderId, pageSize, (page - 1) * pageSize) as CardViewRow[];
       return rows.map(toCardView);

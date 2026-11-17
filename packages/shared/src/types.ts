@@ -183,6 +183,21 @@ export interface EligibleCardsResponse {
   cards: Array<{ card: CardView; quickPrice: number }>;
   /** 开箱主播要的是没拆的卡包 */
   packs: Array<{ id: number; seriesId: string; name: string; kind: string; quickPrice: number }>;
+  /** 柜台翻卡册用：每本卡册里有几张符合这位顾客 */
+  binders: Array<{ id: number; kind: string; name: string; used: number; slots: number; matchCount: number }>;
+  /** 桌面散放的卡（翻卡册接口里 binderId = 0） */
+  loose: { count: number; matchCount: number };
+}
+
+/** GET /api/counter/:id/binder/:binderId?page=&matchFirst= ：按这位顾客翻一本卡册（0 = 桌面散放） */
+export interface CounterBinderPageResponse {
+  ok: true;
+  binder: { id: number; kind: string; name: string };
+  page: number;
+  pages: number;
+  matchFirst: boolean;
+  /** match = 符合这位顾客的要求；不符合的 quickPrice 为 null，前端变暗、不能点 */
+  cards: Array<{ card: CardView; match: boolean; quickPrice: number | null }>;
 }
 
 export interface OfferResponse {

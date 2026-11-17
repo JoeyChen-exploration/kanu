@@ -173,6 +173,7 @@ kanu/
 | FR-INV-7 | 卡册（DESIGN 4.5）：开局送一本；用品店买卡册；新卡自动放进有空位的卡册，满了散放在桌面（最多 20 张），卡册和桌面都放不下一包时不让拆；买卡册后自动收起散卡；`GET /api/binders`、`GET /api/binders/:id?page=`、`POST /api/binders/buy`、`POST /api/binders/organize` | MVP |
 | FR-INV-8 | 散放磨损：打烊时每张散卡按 LOOSE.wearPpm 概率品相掉 1 分（只改隐藏的 grade，日志只记张数）；卡牌响应只带公开的 looseSinceDay，前端按天数画磨损 | MVP |
 | FR-INV-9 | 卡册效果：防潮收藏册里的卡卖给收藏家心理价位 +5%；典藏皮面册里的卡卖给任何顾客 +5%，拥有时每个营业日多来 1 位收藏家 | MVP |
+| FR-INV-10 | 柜台翻卡册：`GET /api/counter/:id/cards` 附每本卡册和桌面的符合张数；`GET /api/counter/:id/binder/:binderId?page=&matchFirst=`（0 = 桌面散放）一页 9 张，标出 match 和快卖价（不符合的为 null），matchFirst 默认开 | MVP |
 
 ### 4.4 鉴定（APPR）
 

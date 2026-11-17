@@ -56,10 +56,12 @@ export function rollSubgrades(rng: Rng, grade: Grade): [number, number, number, 
 
 export interface OpenPackInput {
   packType: PackType;
-  /** 开这包之前，连续多少包正规包没出 SSR 及以上 */
+  /** 开这包之前，连续多少包（计保底的卡包）没出 SSR 及以上 */
   pityCount: number;
-  /** 每个稀有度有几张模板（DESIGN 3.2 的"每个系列张数"） */
+  /** 这种卡包（系列）里每个稀有度有几张模板；不传就用 PACKS[packType].composition */
   templateCounts?: Record<Rarity, number>;
+  /** 覆盖这包每张卡的假卡率（ppm）：电话批发不保证正品时用（DESIGN 4） */
+  fakePpm?: number;
   /** 某张模板的编号限定还有没有剩（调用方查 serials 表） */
   serialAvailable: (rarity: Rarity, templateIndex: number) => boolean;
 }
@@ -71,18 +73,16 @@ export interface OpenPackResult {
   pityTriggered: boolean;
 }
 
-const defaultCounts = Object.fromEntries(RARITIES.map((r) => [r, RARITY[r].perSeries])) as Record<Rarity, number>;
-
 function rollCard(rng: Rng, input: OpenPackInput, rarity: Rarity, allowSerial: boolean): RolledCard {
-  const counts = input.templateCounts ?? defaultCounts;
+  const counts = input.templateCounts ?? PACKS[input.packType].composition;
   const templateIndex = rng.int(counts[rarity]);
   const style = rollStyle(rng, rarity, { allowSerial: allowSerial && input.serialAvailable(rarity, templateIndex) });
   const grade = rollGrade(rng);
   const pack = PACKS[input.packType];
   let authenticity: Authenticity = 'real';
-  if (chance(rng, pack.fakePpm)) authenticity = rng.int(2) === 0 ? 'low_fake' : 'high_fake';
+  if (chance(rng, input.fakePpm ?? pack.fakePpm)) authenticity = rng.int(2) === 0 ? 'low_fake' : 'high_fake';
   let origin: Origin = 'legit';
-  if (input.packType !== 'normal') origin = chance(rng, pack.stolenPpm) ? 'stolen' : 'unknown';
+  if (input.packType === 'black') origin = chance(rng, pack.stolenPpm) ? 'stolen' : 'unknown';
   return { rarity, templateIndex, style, grade, authenticity, origin };
 }
 
@@ -90,7 +90,7 @@ export function openPack(rng: Rng, input: OpenPackInput): OpenPackResult {
   const pack = PACKS[input.packType];
   const cards = Array.from({ length: pack.cards }, () => rollCard(rng, input, rollRarity(rng, input.packType), true));
 
-  if (input.packType !== PITY.packType) return { cards, pityCount: input.pityCount, pityTriggered: false };
+  if (!pack.pity) return { cards, pityCount: input.pityCount, pityTriggered: false };
 
   const hit = cards.some((c) => atLeast(c.rarity, PITY.rarity));
   if (hit) return { cards, pityCount: 0, pityTriggered: false };

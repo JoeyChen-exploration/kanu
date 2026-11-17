@@ -19,7 +19,7 @@ const lines = loadLines();
 
 /** 每个稀有度范围的"典型价"：按正规包概率加权的基准价 × 未评级系数，给没对上库存的需求定预算区间 */
 function typicalPrice(rarities: Rarity[]): number {
-  const odds = PACKS.normal.odds;
+  const odds = PACKS.themed.odds;
   const w = rarities.reduce((s, r) => s + odds[r], 0);
   return Math.round(rarities.reduce((s, r) => s + odds[r] * RARITY[r].basePrice, 0) / w * 0.85);
 }

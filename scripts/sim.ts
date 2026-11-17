@@ -80,10 +80,10 @@ function season(rng: Rng, packsPerDay: number, reserveFromDay: number): SeasonRe
     let income = 0, spent = 0;
     for (let day = 0; day < 7; day += 1) {
       const reserve = shopWeek || day < reserveFromDay ? 0 : rentForWeek(week);
-      const n = Math.max(0, Math.min(packsPerDay, Math.floor((credits - reserve) / PACKS.normal.price)));
+      const n = Math.max(0, Math.min(packsPerDay, Math.floor((credits - reserve) / PACKS.themed.price)));
       for (let p = 0; p < n; p += 1) {
-        credits -= PACKS.normal.price; spent += PACKS.normal.price;
-        const r = openPack(rng, { packType: 'normal', pityCount: pity, serialAvailable: () => true });
+        credits -= PACKS.themed.price; spent += PACKS.themed.price;
+        const r = openPack(rng, { packType: 'themed', pityCount: pity, serialAvailable: () => true });
         pity = r.pityCount;
         for (const c of r.cards) inv.push({ rarity: c.rarity, style: c.style, value: publicPrice({ rarity: c.rarity, style: c.style, publicGrade: null }) });
       }

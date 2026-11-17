@@ -5,54 +5,81 @@
 export const RARITIES = ['N', 'R', 'SR', 'SSR', 'UR', 'LR', 'MR'] as const;
 export type Rarity = (typeof RARITIES)[number];
 
-export const RARITY: Record<Rarity, { name: string; basePrice: number; perSeries: number }> = {
-  N: { name: '普通', basePrice: 25, perSeries: 20 },
-  R: { name: '稀有', basePrice: 100, perSeries: 14 },
+export const RARITY: Record<Rarity, { name: string; basePrice: number }> = {
+  N: { name: '普通', basePrice: 25 },
+  R: { name: '稀有', basePrice: 100 },
   // 2026-11-17 模拟调参：SR 400 → 600、SSR 1,500 → 2,200，抬高中位玩家的周收入（目标中位约 1,000 金币）
-  SR: { name: '超稀有', basePrice: 600, perSeries: 8 },
-  SSR: { name: '特级稀有', basePrice: 2200, perSeries: 5 },
-  UR: { name: '极稀有', basePrice: 6000, perSeries: 3 },
-  LR: { name: '传说', basePrice: 20000, perSeries: 2 },
-  MR: { name: '神话', basePrice: 60000, perSeries: 1 },
+  SR: { name: '超稀有', basePrice: 600 },
+  SSR: { name: '特级稀有', basePrice: 2200 },
+  UR: { name: '极稀有', basePrice: 6000 },
+  LR: { name: '传说', basePrice: 20000 },
+  MR: { name: '神话', basePrice: 60000 },
 };
 
 /** a 是否不低于 b（如 atLeast('UR', 'SSR') === true） */
 export const atLeast = (a: Rarity, b: Rarity) => RARITIES.indexOf(a) >= RARITIES.indexOf(b);
 
-// ---------- 卡包（DESIGN 4） ----------
-export type PackType = 'normal' | 'black';
+// ---------- 卡包（DESIGN 3.2、4） ----------
+// 2026-11-17 改：卡牌按卡包分。每种卡包就是一个系列（content/series/*.json 里的 kind 决定它是主题包还是典藏包）。
+// 现阶段 4 种主题包 + 1 种典藏包，每种 20 张。
+export type PackType = 'themed' | 'premium' | 'black';
 
 export const PACKS: Record<PackType, {
+  name: string;
+  /** 电脑订货（按包买）的价格 */
   price: number;
   cards: number;
-  dailyLimit: number;
   /** 单张稀有度概率，ppm */
   odds: Record<Rarity, number>;
+  /** 这类卡包每种（每个系列）里各稀有度有几张卡；内容校验用 */
+  composition: Record<Rarity, number>;
   /** 每张卡独立判定是假卡的概率（ppm）；假卡里低仿和高仿各占一半 */
   fakePpm: number;
   /** 每张卡独立判定是赃物的概率（ppm） */
   stolenPpm: number;
+  /** 计不计保底 */
+  pity: boolean;
 }> = {
-  normal: {
+  themed: {
+    name: '主题包',
     price: 300,
     cards: 5,
-    dailyLimit: 5,
-    odds: { N: 640_000, R: 240_000, SR: 80_000, SSR: 32_000, UR: 6_000, LR: 1_500, MR: 500 },
+    // 原正规包的爆率，主题包没有 MR，MR 的 0.05% 并进 LR
+    odds: { N: 640_000, R: 240_000, SR: 80_000, SSR: 32_000, UR: 6_000, LR: 2_000, MR: 0 },
+    composition: { N: 7, R: 5, SR: 4, SSR: 2, UR: 1, LR: 1, MR: 0 },
     fakePpm: 0,
     stolenPpm: 0,
+    pity: true,
+  },
+  premium: {
+    name: '典藏包',
+    // 初值，待模拟脚本按新卡包重跑后再定
+    price: 800,
+    cards: 5,
+    odds: { N: 520_000, R: 270_000, SR: 120_000, SSR: 60_000, UR: 20_000, LR: 8_000, MR: 2_000 },
+    composition: { N: 4, R: 4, SR: 5, SSR: 3, UR: 2, LR: 1, MR: 1 },
+    fakePpm: 0,
+    stolenPpm: 0,
+    pity: true,
   },
   black: {
+    name: '黑市卡包',
     price: 200,
     cards: 5,
-    dailyLimit: 3,
     odds: { N: 520_000, R: 270_000, SR: 120_000, SSR: 60_000, UR: 20_000, LR: 8_000, MR: 2_000 },
+    // 黑市包（第二阶段）开的是已有卡包里的卡，具体从哪几种里抽到时再定
+    composition: { N: 0, R: 0, SR: 0, SSR: 0, UR: 0, LR: 0, MR: 0 },
     fakePpm: 250_000,
     stolenPpm: 200_000,
+    pity: false,
   },
 };
 
-/** 保底：正规卡包连续 packs 包没出 rarity 及以上，第 packs 包必出一张 rarity（不出编号限定） */
-export const PITY = { packType: 'normal' as PackType, packs: 10, rarity: 'SSR' as Rarity };
+/** 电脑订货（店里终端，DESIGN 4）：按包买、正常价、唯一保证正品；每个营业日限购（各种卡包合计） */
+export const STORE = { packsPerDay: 5 };
+
+/** 保底：计保底的卡包连续 packs 包没出 rarity 及以上，第 packs 包必出一张 rarity（不出编号限定） */
+export const PITY = { packs: 10, rarity: 'SSR' as Rarity };
 
 // ---------- 外层风格（DESIGN 3.4） ----------
 export const STYLES = ['standard', 'holo', 'ice', 'gold', 'dark', 'serial'] as const;

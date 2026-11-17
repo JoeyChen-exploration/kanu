@@ -1,0 +1,28 @@
+{
+  "id": "MEC",
+  "name": "机械义体",
+  "kind": "themed",
+  "note": "占位内容：卡名、标签、卡面文字都是临时的。",
+  "cards": [
+    { "id": "MEC-01", "name": "锈蚀齿轮", "rarity": "N", "tags": ["机械"] },
+    { "id": "MEC-02", "name": "破损义肢", "rarity": "N", "tags": ["机械"] },
+    { "id": "MEC-03", "name": "小飞虫无人机", "rarity": "N", "tags": ["机械"] },
+    { "id": "MEC-04", "name": "自动贩卖机", "rarity": "N", "tags": ["机械", "电"] },
+    { "id": "MEC-05", "name": "地铁站台", "rarity": "N", "tags": ["机械"] },
+    { "id": "MEC-06", "name": "故障显示屏", "rarity": "N", "tags": ["电"] },
+    { "id": "MEC-07", "name": "万能扳手", "rarity": "N", "tags": ["机械"] },
+    { "id": "MEC-08", "name": "维修机器人", "rarity": "R", "tags": ["机械"] },
+    { "id": "MEC-09", "name": "废品回收车", "rarity": "R", "tags": ["机械"] },
+    { "id": "MEC-10", "name": "赛博快递员", "rarity": "R", "tags": ["机械", "电"] },
+    { "id": "MEC-11", "name": "电子宠物猫", "rarity": "R", "tags": ["兽", "电"] },
+    { "id": "MEC-12", "name": "义眼贩子", "rarity": "R", "tags": ["机械", "影"] },
+    { "id": "MEC-13", "name": "机械猎犬", "rarity": "SR", "tags": ["机械", "兽"], "flavor": "主人早就不在了，它还在巡逻。" },
+    { "id": "MEC-14", "name": "数据幽灵", "rarity": "SR", "tags": ["灵", "电"], "flavor": "删不掉的，都会变成它。" },
+    { "id": "MEC-15", "name": "外骨骼搬运工", "rarity": "SR", "tags": ["机械"], "flavor": "一个班扛的货，比他这辈子见过的钱还多。" },
+    { "id": "MEC-16", "name": "改装摩托", "rarity": "SR", "tags": ["机械", "火"], "flavor": "排气管里喷出来的是霓虹色。" },
+    { "id": "MEC-17", "name": "义体医生", "rarity": "SSR", "tags": ["机械", "电"], "flavor": "换一只手不贵，换回原来那只才贵。" },
+    { "id": "MEC-18", "name": "废墟守护兽", "rarity": "SSR", "tags": ["兽", "机械"], "flavor": "它守着的地方，早就没人记得名字。" },
+    { "id": "MEC-19", "name": "雷暴机兵", "rarity": "UR", "tags": ["机械", "电"], "flavor": "整层的保险丝，是它的心跳。" },
+    { "id": "MEC-20", "name": "机械之心", "rarity": "LR", "tags": ["机械", "灵"], "flavor": "据说装上它的人，再也不会做梦。" }
+  ]
+}

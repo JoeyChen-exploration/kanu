@@ -14,7 +14,7 @@ afterEach(async () => { await cleanup?.(); cleanup = null; });
 
 /** 放一张卡和一位指定的顾客，返回它们的 id（心理价位 = 公开价 × 类型系数 × float） */
 function seedSale(repo: ReturnType<typeof setup>['repo'], opts: { type?: string; float?: number; template?: string; authenticity?: string; rarities?: string[] } = {}) {
-  const cardId = repo.insertCard({ templateId: opts.template ?? 'NEO-043', ownerId: UID, authenticity: opts.authenticity ?? 'real', grade: '7', origin: 'legit', style: 'standard', serialNo: null, now: NOW });
+  const cardId = repo.insertCard({ templateId: opts.template ?? 'NEO-17', ownerId: UID, authenticity: opts.authenticity ?? 'real', grade: '7', origin: 'legit', style: 'standard', serialNo: null, now: NOW });
   const type = opts.type ?? 'rich';
   const customerId = repo.insertCustomer({
     owner_id: UID, day_key: dayKey(1), slot: 0, seat: 9, type,
@@ -169,9 +169,9 @@ describe('出价（FR-CTR-4）', () => {
     cleanup = () => app.close();
     const h = await login(app);
     const { customerId } = seedSale(repo);
-    const nCard = repo.insertCard({ templateId: 'NEO-001', ownerId: UID, authenticity: 'real', grade: '5', origin: 'legit', style: 'standard', serialNo: null, now: NOW });
+    const nCard = repo.insertCard({ templateId: 'NEO-01', ownerId: UID, authenticity: 'real', grade: '5', origin: 'legit', style: 'standard', serialNo: null, now: NOW });
     expect((await offer(app, h, customerId, nCard, 10)).json().code).toBe('not_wanted');
-    const cardId = repo.insertCard({ templateId: 'NEO-044', ownerId: UID, authenticity: 'real', grade: '7', origin: 'legit', style: 'standard', serialNo: null, now: NOW });
+    const cardId = repo.insertCard({ templateId: 'NEO-18', ownerId: UID, authenticity: 'real', grade: '7', origin: 'legit', style: 'standard', serialNo: null, now: NOW });
     repo.setLocation(cardId, 'showcase');
     expect((await offer(app, h, customerId, cardId, 10)).json().code).toBe('bad_card');
   });

@@ -60,13 +60,54 @@ export interface CardView {
   createdAt: number;
 }
 
+// ---------- 进货和卡包（DESIGN 4，2026-11-17 卡包重做） ----------
+
+export interface StorePack {
+  seriesId: string;
+  name: string;
+  /** themed 主题包 / premium 典藏包 */
+  kind: string;
+  kindName: string;
+  price: number;
+  /** 这种卡包里一共几张卡（图鉴） */
+  cardCount: number;
+  /** 各稀有度的爆率（百分比，给玩家看的） */
+  odds: Array<{ rarity: string; percent: number }>;
+}
+
+export interface StoreResponse {
+  ok: true;
+  packs: StorePack[];
+  /** 本营业日电脑订货还能买几包；测试账号是 null（不限） */
+  packsLeftToday: number | null;
+}
+
+export interface BuyPacksResponse {
+  ok: true;
+  credits: number;
+  packsLeftToday: number | null;
+  /** 新买到的卡包 id（原封不动放进库存） */
+  packIds: number[];
+}
+
+export interface SealedPackGroup {
+  seriesId: string;
+  name: string;
+  kind: string;
+  /** 这一种还没拆的卡包 id */
+  ids: number[];
+}
+
+export interface SealedPacksResponse {
+  ok: true;
+  groups: SealedPackGroup[];
+}
+
 export interface OpenPackResponse {
   ok: true;
   cards: CardView[];
-  credits: number;
   pityCount: number;
   pityTriggered: boolean;
-  packsLeftToday: number;
 }
 
 export interface InventoryResponse {

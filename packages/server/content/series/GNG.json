@@ -1,0 +1,28 @@
+{
+  "id": "GNG",
+  "name": "地下帮派",
+  "kind": "themed",
+  "note": "占位内容：卡名、标签、卡面文字都是临时的。",
+  "cards": [
+    { "id": "GNG-01", "name": "打工人", "rarity": "N", "tags": ["帮派"] },
+    { "id": "GNG-02", "name": "天桥乞丐", "rarity": "N", "tags": ["帮派"] },
+    { "id": "GNG-03", "name": "电线上的鸟巢", "rarity": "N", "tags": ["电", "兽"] },
+    { "id": "GNG-04", "name": "失物招领箱", "rarity": "N", "tags": ["灵"] },
+    { "id": "GNG-05", "name": "一枚旧硬币", "rarity": "N", "tags": ["灵"] },
+    { "id": "GNG-06", "name": "跑腿小弟", "rarity": "N", "tags": ["帮派"] },
+    { "id": "GNG-07", "name": "后巷麻将桌", "rarity": "N", "tags": ["帮派"] },
+    { "id": "GNG-08", "name": "巷口混混", "rarity": "R", "tags": ["帮派"] },
+    { "id": "GNG-09", "name": "电网窃贼", "rarity": "R", "tags": ["电", "影"] },
+    { "id": "GNG-10", "name": "夜班护士", "rarity": "R", "tags": ["灵"] },
+    { "id": "GNG-11", "name": "地下赌场荷官", "rarity": "R", "tags": ["帮派"] },
+    { "id": "GNG-12", "name": "放贷人", "rarity": "R", "tags": ["帮派", "影"] },
+    { "id": "GNG-13", "name": "地下拳王", "rarity": "SR", "tags": ["帮派"], "flavor": "输一场，整条街都要换主人。" },
+    { "id": "GNG-14", "name": "黑市掮客", "rarity": "SR", "tags": ["帮派", "影"], "flavor": "\"来路？我只问价钱。\"" },
+    { "id": "GNG-15", "name": "纹身师", "rarity": "SR", "tags": ["帮派", "龙"], "flavor": "他纹的龙，夜里会换个姿势。" },
+    { "id": "GNG-16", "name": "走私客", "rarity": "SR", "tags": ["帮派", "水"], "flavor": "货舱夹层比货舱还大。" },
+    { "id": "GNG-17", "name": "夜行刺客", "rarity": "SSR", "tags": ["影", "帮派"], "flavor": "灯灭的那一秒，就是账结清的那一秒。" },
+    { "id": "GNG-18", "name": "赌场老板娘", "rarity": "SSR", "tags": ["帮派", "霓虹"], "flavor": "庄家永远不输，她就是庄家。" },
+    { "id": "GNG-19", "name": "下层区教父", "rarity": "UR", "tags": ["帮派", "影"], "flavor": "房东收租，他收房东。" },
+    { "id": "GNG-20", "name": "帮派议会", "rarity": "LR", "tags": ["帮派", "影"], "flavor": "七把椅子，从来没坐满过。" }
+  ]
+}

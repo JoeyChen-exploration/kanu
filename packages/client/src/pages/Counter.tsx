@@ -1,7 +1,7 @@
 // 柜台页（FR-CTR-1～5）：一个营业日 6 位顾客一次到店；点顾客 → 挑卡 → 开价 / 快速出售 / 接受还价。
 // 顾客都接待完（或请走）就能打烊，进入下一个营业日（学深空当铺，2026-11-17）。
 import { useEffect, useState } from 'react';
-import { PACKS } from '@kanu/shared/balance';
+import { STORE } from '@kanu/shared/balance';
 import type { CounterResponse, CustomerView, EligibleCardsResponse, EndDayResponse, MeResponse, OfferResponse } from '@kanu/shared/types';
 import { api, newIdempotencyKey } from '../api.ts';
 import { Card, fmt } from '../Card.tsx';
@@ -28,7 +28,7 @@ export function Counter({ onChange }: { onChange: (patch: Partial<MeResponse>) =
     setErr('');
     try {
       const r = await api<EndDayResponse>('/day/end', { method: 'POST', body: {}, idempotencyKey: newIdempotencyKey() });
-      onChange({ gameDay: r.day, packsLeftToday: PACKS.normal.dailyLimit });
+      onChange({ gameDay: r.day, packsLeftToday: STORE.packsPerDay });
       await load();
     } catch (e) {
       setErr((e as Error).message);

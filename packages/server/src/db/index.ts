@@ -106,6 +106,20 @@ const MIGRATIONS: string[] = [
   `ALTER TABLE players ADD COLUMN game_day INTEGER NOT NULL DEFAULT 1;
    ALTER TABLE customers RENAME COLUMN sydney_day TO day_key;
    ALTER TABLE daily_usage RENAME COLUMN sydney_day TO day_key;`,
+
+  // 5：卡包重做（2026-11-17）。series 加卡包类型；模板可以停用（内容里删掉的旧卡，玩家手上的照常保留）；
+  // 买来的卡包先原封不动放在 sealed_packs，拆的时候才发卡。daily_usage.packs_normal 现在记电脑订货的包数
+  `ALTER TABLE series ADD COLUMN kind TEXT NOT NULL DEFAULT 'themed';
+   ALTER TABLE card_templates ADD COLUMN retired INTEGER NOT NULL DEFAULT 0;
+   CREATE TABLE sealed_packs (
+     id         INTEGER PRIMARY KEY AUTOINCREMENT,
+     owner_id   TEXT NOT NULL REFERENCES players(discord_id),
+     series_id  TEXT NOT NULL REFERENCES series(id),
+     source     TEXT NOT NULL,
+     box_id     INTEGER,
+     created_at INTEGER NOT NULL
+   );
+   CREATE INDEX sealed_packs_owner ON sealed_packs (owner_id, series_id);`,
 ];
 
 /** 营业日在 customers、daily_usage 里的键 */
@@ -168,6 +182,8 @@ export interface InstanceRow {
 export interface SeriesContent {
   id: string;
   name: string;
+  /** 主题包 / 典藏包，决定价格、爆率和每种稀有度几张（PACKS[kind]） */
+  kind: 'themed' | 'premium';
   cards: Array<{ id: string; name: string; rarity: Rarity; tags: string[]; flavor?: string; image?: string }>;
 }
 
@@ -200,17 +216,18 @@ function createRepo(db: Database.Database) {
     setCreditsPity: db.prepare('UPDATE players SET credits = ?, pity_count = ? WHERE discord_id = ?'),
     insertEvent: db.prepare('INSERT INTO events_log (at, discord_id, kind, data) VALUES (?, ?, ?, ?)'),
 
-    upsertSeries: db.prepare('INSERT INTO series (id, name) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET name = excluded.name'),
+    upsertSeries: db.prepare('INSERT INTO series (id, name, kind) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET name = excluded.name, kind = excluded.kind'),
     upsertTemplate: db.prepare(
       `INSERT INTO card_templates (id, series_id, name, rarity, tags, flavor, image) VALUES (?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET series_id = excluded.series_id, name = excluded.name, rarity = excluded.rarity,
-         tags = excluded.tags, flavor = excluded.flavor, image = excluded.image`,
+         tags = excluded.tags, flavor = excluded.flavor, image = excluded.image, retired = 0`,
     ),
     templatesBySeriesRarity: db.prepare<[string, string], TemplateRow>(
-      'SELECT * FROM card_templates WHERE series_id = ? AND rarity = ? ORDER BY id',
+      'SELECT * FROM card_templates WHERE series_id = ? AND rarity = ? AND retired = 0 ORDER BY id',
     ),
-    allSeries: db.prepare<[], { id: string; name: string }>('SELECT id, name FROM series ORDER BY id'),
-    allTemplates: db.prepare<[], TemplateRow>('SELECT * FROM card_templates ORDER BY id'),
+    allSeries: db.prepare<[], { id: string; name: string; kind: 'themed' | 'premium' }>("SELECT s.id, s.name, s.kind FROM series s WHERE EXISTS (SELECT 1 FROM card_templates t WHERE t.series_id = s.id AND t.retired = 0) ORDER BY s.kind DESC, s.id"),
+    allTemplates: db.prepare<[], TemplateRow>('SELECT * FROM card_templates WHERE retired = 0 ORDER BY id'),
+    retireMissing: db.prepare("UPDATE card_templates SET retired = 1 WHERE series_id = ? AND id NOT IN (SELECT value FROM json_each(?))"),
 
     ensureSerial: db.prepare('INSERT INTO serials (template_id, next_serial) VALUES (?, 1) ON CONFLICT(template_id) DO NOTHING'),
     getSerial: db.prepare<[string], { next_serial: number }>('SELECT next_serial FROM serials WHERE template_id = ?'),
@@ -269,12 +286,14 @@ function createRepo(db: Database.Database) {
 
     // ---- 系列和模板（FR-ADMIN-4 的最小版：启动时从 content/ 导入） ----
     importSeries: db.transaction((content: SeriesContent) => {
-      q.upsertSeries.run(content.id, content.name);
+      q.upsertSeries.run(content.id, content.name, content.kind);
       for (const c of content.cards) {
         if (!RARITY[c.rarity]) throw new Error(`${c.id} 的稀有度 ${c.rarity} 不认识`);
         q.upsertTemplate.run(c.id, content.id, c.name, c.rarity, JSON.stringify(c.tags), c.flavor ?? null, c.image ?? null);
         q.ensureSerial.run(c.id);
       }
+      // 内容里删掉的旧卡停用：不再开出来、图鉴不再显示，玩家手上的照常保留
+      q.retireMissing.run(content.id, JSON.stringify(content.cards.map((c) => c.id)));
     }),
     templatesFor: (seriesId: string, rarity: Rarity) => q.templatesBySeriesRarity.all(seriesId, rarity),
     allSeries: () => q.allSeries.all(),
@@ -295,6 +314,16 @@ function createRepo(db: Database.Database) {
       if (c.authenticity === 'real') q.markCollected.run(c.ownerId, c.templateId, c.now);
       return Number(r.lastInsertRowid);
     },
+
+    // ---- 没拆的卡包（DESIGN 4） ----
+    insertSealed: (ownerId: string, seriesId: string, source: string, now: number, boxId: number | null = null) =>
+      Number(db.prepare('INSERT INTO sealed_packs (owner_id, series_id, source, box_id, created_at) VALUES (?, ?, ?, ?, ?)').run(ownerId, seriesId, source, boxId, now).lastInsertRowid),
+    getSealed: (ownerId: string, id: number) =>
+      (db.prepare('SELECT * FROM sealed_packs WHERE id = ? AND owner_id = ?').get(id, ownerId) as { id: number; owner_id: string; series_id: string; source: string; box_id: number | null; created_at: number } | undefined) ?? null,
+    deleteSealed: (id: number) => db.prepare('DELETE FROM sealed_packs WHERE id = ?').run(id),
+    sealedByOwner: (ownerId: string) =>
+      db.prepare('SELECT p.id, p.series_id, p.source, s.name, s.kind FROM sealed_packs p JOIN series s ON s.id = p.series_id WHERE p.owner_id = ? ORDER BY p.id').all(ownerId) as Array<{ id: number; series_id: string; source: string; name: string; kind: 'themed' | 'premium' }>,
+    seriesKind: (seriesId: string) => (db.prepare('SELECT kind FROM series WHERE id = ?').get(seriesId) as { kind: 'themed' | 'premium' } | undefined)?.kind ?? null,
 
     advanceDay: (discordId: string) => db.prepare('UPDATE players SET game_day = game_day + 1 WHERE discord_id = ?').run(discordId),
     packsOpenedToday: (discordId: string, day: string) => q.getUsage.get(discordId, day)?.packs_normal ?? 0,

@@ -15,7 +15,11 @@ export function Inventory({ onChange }: { onChange: (p: Partial<MeResponse>) => 
   const [data, setData] = useState<BindersResponse | null>(null);
   const [showcase, setShowcase] = useState<CardView[]>([]);
   const [sc, setSc] = useState<ShowcaseStatus | null>(null);
-  const [openBinder, setOpenBinder] = useState<BinderView | null>(null);
+  /** 同时打开的卡册浮窗（可以好几本） */
+  const [openBinders, setOpenBinders] = useState<BinderView[]>([]);
+  const isOpen = (id: number) => openBinders.some((b) => b.id === id);
+  /** 列表里点一本：没开就打开，开着就关掉 */
+  const toggleBinder = (b: BinderView) => setOpenBinders((xs) => (xs.some((x) => x.id === b.id) ? xs.filter((x) => x.id !== b.id) : [...xs, b]));
   const [selected, setSelected] = useState<CardView | null>(null);
   const [msg, setMsg] = useState('');
   const [err, setErr] = useState('');
@@ -79,7 +83,7 @@ export function Inventory({ onChange }: { onChange: (p: Partial<MeResponse>) => 
       <h2>我的卡册</h2>
       <div className="binder-list">
         {data?.binders.map((b) => (
-          <button key={b.id} className={openBinder?.id === b.id ? 'binder-item on' : 'binder-item'} onClick={() => setOpenBinder(b)}>
+          <button key={b.id} className={isOpen(b.id) ? 'binder-item on' : 'binder-item'} onClick={() => toggleBinder(b)}>
             <div className={`binder-cover binder-${b.kind}`} aria-hidden>{b.name.slice(0, 2)}</div>
             <div className="binder-body">
               <b>{b.name}</b>
@@ -114,13 +118,14 @@ export function Inventory({ onChange }: { onChange: (p: Partial<MeResponse>) => 
       <AllCards onPick={setSelected} />
       {err && <p className="error">{err}</p>}
 
-      {openBinder && (
-        <FloatWindow id="binder" className="float-binder" title={openBinder.name} onClose={() => { setOpenBinder(null); void load(); }} dropZone="stash">
+      {openBinders.map((b, i) => (
+        <FloatWindow key={b.id} id={`binder-${b.id}`} cascade={i} className="float-binder" title={b.name}
+          onClose={() => { setOpenBinders((xs) => xs.filter((x) => x.id !== b.id)); void load(); }} dropZone="stash">
           <div className={drag && drag.item.location === 'showcase' ? `float-drop${dropping('stash')}` : 'float-drop'}>
-            <BinderPages binder={openBinder} version={version} onPick={setSelected} bind={bind} draggingId={drag?.item.id ?? null} />
+            <BinderPages binder={b} version={version} onPick={setSelected} bind={bind} draggingId={drag?.item.id ?? null} />
           </div>
         </FloatWindow>
-      )}
+      ))}
       {drag && (
         <DragGhost x={drag.x} y={drag.y}>
           <Card card={drag.item} small />

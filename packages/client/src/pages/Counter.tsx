@@ -11,6 +11,8 @@ const AVATAR: Record<string, string> = {
   rich: '🤵', speculator: '📈', streamer: '🎥', middleman: '🕶️',
 };
 const STATUS: Record<string, string> = { sold: '成交', left: '走了', dismissed: '请走' };
+/** 开价时每次加减多少，玩家自己选 */
+const STEPS = [1, 10, 100, 1000];
 
 export function Counter({ onChange }: { onChange: (patch: Partial<MeResponse>) => void }) {
   const [data, setData] = useState<CounterResponse | null>(null);
@@ -93,8 +95,11 @@ function Deal({ customer, onChange, onDone, onUpdate }: {
   const [stock, setStock] = useState<EligibleCardsResponse | null>(null);
   const [picked, setPicked] = useState<Picked | null>(null);
   const [price, setPrice] = useState('');
+  const [step, setStep] = useState(10);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState('');
+  /** 按当前步长加减开价，最低 1 */
+  const bump = (d: number) => setPrice((p) => String(Math.max(1, (Number(p) || 0) + d)));
 
   useEffect(() => {
     api<EligibleCardsResponse>(`/counter/${customer.id}/cards`).then(setStock).catch((e: Error) => setNote(e.message));
@@ -173,11 +178,18 @@ function Deal({ customer, onChange, onDone, onUpdate }: {
             <div><b>{picked.name}</b><p className="hint">{picked.kind === 'pack' ? '没拆的卡包' : `市场价约 ${fmt(picked.price)}`}</p></div>
             <button className="chip" onClick={() => setPicked(null)}>换一样</button>
           </div>
-          <label className="price-input">
-            开价
-            <input inputMode="numeric" value={price} onChange={(e) => setPrice(e.target.value.replace(/\D/g, ''))} />
-            信用点
-          </label>
+          <div className="price-input">
+            <span>开价</span>
+            <button className="step-btn" aria-label={`减 ${step}`} disabled={!price || Number(price) <= 1} onClick={() => bump(-step)}>−</button>
+            <input inputMode="numeric" aria-label="开价" value={price} onChange={(e) => setPrice(e.target.value.replace(/\D/g, ''))} />
+            <button className="step-btn" aria-label={`加 ${step}`} onClick={() => bump(step)}>+</button>
+          </div>
+          <div className="step-choices">
+            <span className="hint">每次加减</span>
+            {STEPS.map((s) => (
+              <button key={s} className={step === s ? 'chip on' : 'chip'} onClick={() => setStep(s)}>{fmt(s)}</button>
+            ))}
+          </div>
           <button className="primary" disabled={busy || !price} onClick={() => send('offer', Number(price))}>开价 {price ? fmt(Number(price)) : ''}</button>
           {customer.counterPrice !== null && (
             <button className="secondary" disabled={busy} onClick={() => send('offer', customer.counterPrice!)}>接受还价 {fmt(customer.counterPrice)}</button>

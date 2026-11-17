@@ -198,3 +198,9 @@ h2 small { color: var(--muted); font-weight: normal; font-size: 13px; margin-lef
 .served summary { cursor: pointer; padding: 8px 0; }
 .served-row { display: flex; gap: 10px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
 .served-row .badge { margin-left: auto; }
+
+/* ---- 开价：+ / − 和步长 ---- */
+.price-input .step-btn { width: 44px; height: 44px; flex: none; border-radius: 10px; border: 1px solid var(--line); background: var(--panel-2); font-size: 22px; font-weight: 700; }
+.price-input input { text-align: center; }
+.step-choices { display: flex; align-items: center; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.step-choices .hint { margin-right: 2px; }

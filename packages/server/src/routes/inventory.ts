@@ -1,6 +1,6 @@
 // 库存、珍藏柜、图鉴（FR-INV-1、2、4、5、6）。返回的卡牌一律经过 toCardView，只有公开信息。
 import type { FastifyInstance } from 'fastify';
-import { RARITIES } from '@kanu/shared/balance';
+import { RARITIES, STYLE, stylesFor } from '@kanu/shared/balance';
 import { showcaseSlots } from '../game/showcase.ts';
 import type { CardLocation, CollectionResponse, InventoryResponse } from '@kanu/shared/types';
 import { fail, type Deps } from '../app.ts';
@@ -51,18 +51,32 @@ export function registerInventoryRoutes(app: FastifyInstance, deps: Deps) {
 
   app.get('/api/collection', async (req, reply) => {
     if (!req.user) return fail(reply, 401, 'unauthorized', '请重新打开卡奴登录');
-    const { owned, counts } = repo.collection(req.user.id);
+    const { owned, counts, ownedStyles, styleCounts } = repo.collection(req.user.id);
     const templates = repo.allTemplates();
     const series = repo.allSeries().map((s) => {
-      const cards = templates.filter((t) => t.series_id === s.id).map((t) => ({
-        templateId: t.id,
-        name: t.name,
-        rarity: t.rarity,
-        tags: JSON.parse(t.tags) as string[],
-        owned: owned.has(t.id),
-        count: counts.get(t.id) ?? 0,
-      }));
-      return { id: s.id, name: s.name, total: cards.length, owned: cards.filter((c) => c.owned).length, cards };
+      const cards = templates.filter((t) => t.series_id === s.id).map((t) => {
+        // 大师图鉴（DESIGN 3.6）：只列这个稀有度可能出的风格
+        const styles = stylesFor(t.rarity).map((st) => ({
+          style: st,
+          name: STYLE[st].name,
+          owned: ownedStyles.has(`${t.id}|${st}`),
+          count: styleCounts.get(`${t.id}|${st}`) ?? 0,
+        }));
+        return {
+          templateId: t.id,
+          name: t.name,
+          rarity: t.rarity,
+          tags: JSON.parse(t.tags) as string[],
+          owned: owned.has(t.id),
+          count: counts.get(t.id) ?? 0,
+          styles,
+          master: styles.every((x) => x.owned),
+        };
+      });
+      return {
+        id: s.id, name: s.name, kind: s.kind, total: cards.length,
+        owned: cards.filter((c) => c.owned).length, master: cards.filter((c) => c.master).length, cards,
+      };
     });
     return { ok: true, series } satisfies CollectionResponse;
   });

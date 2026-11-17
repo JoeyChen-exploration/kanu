@@ -145,6 +145,18 @@ const MIGRATIONS: string[] = [
   `ALTER TABLE players ADD COLUMN showcase_level INTEGER NOT NULL DEFAULT 0;
    UPDATE players SET showcase_level = 1 WHERE discord_id IN (SELECT owner_id FROM card_instances WHERE location = 'showcase');
    ALTER TABLE customers ADD COLUMN max_patience INTEGER NOT NULL DEFAULT 0;`,
+
+  // 10：大师图鉴（2026-11-17 用户定，从第四阶段提前）：每张卡的每种外层风格"有过"就记一笔（卖掉也算）。
+  // 老存档按现在手上的真卡补记；以前卖掉的风格已经查不到了
+  `CREATE TABLE collection_styles (
+     discord_id  TEXT NOT NULL,
+     template_id TEXT NOT NULL,
+     style       TEXT NOT NULL,
+     first_at    INTEGER NOT NULL,
+     PRIMARY KEY (discord_id, template_id, style)
+   );
+   INSERT OR IGNORE INTO collection_styles (discord_id, template_id, style, first_at)
+     SELECT owner_id, template_id, style, MIN(created_at) FROM card_instances WHERE authenticity = 'real' GROUP BY owner_id, template_id, style;`,
 ];
 
 /** 营业日在 customers、daily_usage 里的键 */
@@ -269,6 +281,7 @@ function createRepo(db: Database.Database) {
        VALUES (?, ?, ?, ?, ?, ?, ?, 'inventory', ?)`,
     ),
     markCollected: db.prepare('INSERT INTO collection (discord_id, template_id, first_at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING'),
+    markStyleCollected: db.prepare('INSERT INTO collection_styles (discord_id, template_id, style, first_at) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING'),
 
     getUsage: db.prepare<[string, string], { packs_normal: number; packs_black: number }>(
       'SELECT packs_normal, packs_black FROM daily_usage WHERE discord_id = ? AND day_key = ?',
@@ -342,7 +355,10 @@ function createRepo(db: Database.Database) {
     insertCard(c: { templateId: string; ownerId: string; authenticity: string; grade: string; origin: string; style: Style; serialNo: number | null; now: number }): number {
       const r = q.insertInstance.run(c.templateId, c.ownerId, c.authenticity, c.grade, c.origin, c.style, c.serialNo, c.now);
       // 图鉴只认真卡（DESIGN 3.6）。黑市包上线后，假卡和来路不明的卡要等验真后再点亮，否则图鉴会泄露真伪
-      if (c.authenticity === 'real') q.markCollected.run(c.ownerId, c.templateId, c.now);
+      if (c.authenticity === 'real') {
+        q.markCollected.run(c.ownerId, c.templateId, c.now);
+        q.markStyleCollected.run(c.ownerId, c.templateId, c.style, c.now);
+      }
       return Number(r.lastInsertRowid);
     },
 
@@ -455,7 +471,10 @@ function createRepo(db: Database.Database) {
     collection(ownerId: string) {
       const owned = new Set((db.prepare('SELECT template_id FROM collection WHERE discord_id = ?').all(ownerId) as Array<{ template_id: string }>).map((r) => r.template_id));
       const counts = new Map((db.prepare('SELECT template_id, COUNT(*) AS n FROM card_instances WHERE owner_id = ? GROUP BY template_id').all(ownerId) as Array<{ template_id: string; n: number }>).map((r) => [r.template_id, r.n]));
-      return { owned, counts };
+      // 大师图鉴：每种风格有过没有（键 "模板|风格"）、现在手上各几张
+      const ownedStyles = new Set((db.prepare('SELECT template_id, style FROM collection_styles WHERE discord_id = ?').all(ownerId) as Array<{ template_id: string; style: string }>).map((r) => `${r.template_id}|${r.style}`));
+      const styleCounts = new Map((db.prepare('SELECT template_id, style, COUNT(*) AS n FROM card_instances WHERE owner_id = ? GROUP BY template_id, style').all(ownerId) as Array<{ template_id: string; style: string; n: number }>).map((r) => [`${r.template_id}|${r.style}`, r.n]));
+      return { owned, counts, ownedStyles, styleCounts };
     },
 
     close: () => db.close(),

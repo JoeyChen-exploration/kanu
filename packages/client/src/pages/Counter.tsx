@@ -40,7 +40,9 @@ export function Counter({ onChange }: { onChange: (patch: Partial<MeResponse>) =
     try {
       const r = await api<EndDayResponse>('/day/end', { method: 'POST', body: {}, idempotencyKey: newIdempotencyKey() });
       onChange({ gameDay: r.day, packsLeftToday: STORE.packsPerDay });
-      setMsg('');
+      // 鉴定机构 / 评级社在打烊时出结果
+      const OUT: Record<string, string> = { verified: '真卡，已验真', fake: '是假卡', stolen: '是赃物，被没收了', rejected: '被拒评（疑似假卡），信誉下降' };
+      setMsg(r.appraisals.map((a) => `「${a.name}」${a.outcome === 'slab' ? `封壳了：${a.score === 'BL' ? '黑标' : `${a.score} 分`}` : OUT[a.outcome]}`).join('；'));
       await load();
     } catch (e) {
       setErr((e as Error).message);

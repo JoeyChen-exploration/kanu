@@ -18,6 +18,7 @@ import { registerCounterRoutes } from './routes/counter.ts';
 import { registerBinderRoutes } from './routes/binders.ts';
 import { registerShowcaseRoutes } from './routes/showcase.ts';
 import { registerQuestRoutes } from './routes/quests.ts';
+import { registerAppraisalRoutes } from './routes/appraisal.ts';
 import { createBinderService, type BinderService } from './binders.ts';
 
 export interface Deps {
@@ -93,6 +94,7 @@ export function buildApp(input: Deps) {
   registerBinderRoutes(app, deps, now);
   registerShowcaseRoutes(app, deps, now);
   registerQuestRoutes(app, deps, now);
+  registerAppraisalRoutes(app, deps, now);
 
   app.setErrorHandler((err, req, reply) => {
     if (err instanceof ApiError) return fail(reply, err.status, err.code, err.message);

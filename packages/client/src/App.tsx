@@ -9,6 +9,7 @@ import { Packs } from './pages/Packs.tsx';
 import { Inventory } from './pages/Inventory.tsx';
 import { Collection } from './pages/Collection.tsx';
 import { Counter } from './pages/Counter.tsx';
+import { Appraisal } from './pages/Appraisal.tsx';
 import { Booklet, bookletUnseen } from './Booklet.tsx';
 import { QuestBar } from './QuestBar.tsx';
 
@@ -18,8 +19,8 @@ type State =
   | { kind: 'ready'; me: MeResponse }
   | { kind: 'error'; text: string };
 
-type Tab = 'shop' | 'packs' | 'counter' | 'inventory' | 'collection';
-const TABS: Array<[Tab, string]> = [['shop', '店铺'], ['packs', '进货'], ['counter', '柜台'], ['inventory', '库存'], ['collection', '图鉴']];
+type Tab = 'shop' | 'packs' | 'counter' | 'appraisal' | 'inventory' | 'collection';
+const TABS: Array<[Tab, string]> = [['shop', '店铺'], ['packs', '进货'], ['counter', '柜台'], ['appraisal', '鉴定'], ['inventory', '库存'], ['collection', '图鉴']];
 
 export function App() {
   const [state, setState] = useState<State>({ kind: 'loading', text: '正在开店…' });
@@ -73,6 +74,7 @@ export function App() {
         {tab === 'shop' && <Shop me={me} onChange={patchMe} />}
         {tab === 'packs' && <Packs me={me} onChange={patchMe} />}
         {tab === 'counter' && <Counter onChange={patchMe} />}
+        {tab === 'appraisal' && <Appraisal onChange={patchMe} />}
         {tab === 'inventory' && <Inventory onChange={patchMe} />}
         {tab === 'collection' && <Collection />}
       </main>

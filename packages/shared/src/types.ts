@@ -39,7 +39,8 @@ export interface WalletView {
 // ---------- 卡牌（M2） ----------
 // 只放玩家能知道的信息（FR-INV-2、NFR-SEC-2）：真伪、真实品相、来源永远不出现在这里。
 
-export type CardLocation = 'inventory' | 'showcase';
+/** inventory 库存（卡册或桌面）、showcase 珍藏柜、lab 在鉴定机构、grading 在评级社 */
+export type CardLocation = 'inventory' | 'showcase' | 'lab' | 'grading';
 
 export interface CardView {
   id: number;
@@ -62,6 +63,73 @@ export interface CardView {
   /** 公开市场价（没封壳按未评级算） */
   price: number;
   createdAt: number;
+  /** 鉴定机构验过真（公开标记，DESIGN 5.1） */
+  verified: boolean;
+  /** 评级社封壳的评分（公开）：总分 1–10 或 BL（黑标），四个分项 centering / corners / edges / surface */
+  slab: { score: string; subgrades: Record<string, number> } | null;
+  /** 评级社拒评（疑似假卡，公开标记） */
+  gradeRejected: boolean;
+  /** 在鉴定机构 / 评级社时，第几个营业日出结果 */
+  readyDay: number | null;
+}
+
+// ---------- 鉴定（M3，DESIGN 5） ----------
+
+/** 鉴定方式：肉眼 / 放大镜看真伪，鉴定机构；肉眼 / 放大镜估品相，送评 */
+export type AppraisalMethod = 'eye_auth' | 'loupe_auth' | 'lab' | 'eye_grade' | 'loupe_grade' | 'grading';
+
+/** 这张卡做过的鉴定和结论（只给卡的主人看） */
+export interface AppraisalNotes {
+  /** 看真伪：fake 看出是假的；looks_real 看起来是真的（漏看也这么说） */
+  eyeAuth: 'fake' | 'looks_real' | null;
+  loupeAuth: 'fake' | 'looks_real' | null;
+  /** 鉴定机构的结论：verified 真卡已验真，fake 假卡；pending 还在机构里。赃物会被没收，卡就没了 */
+  lab: 'verified' | 'fake' | 'pending' | null;
+  /** 肉眼估品相：low 差 1–3、mid 中 4–6、high 好 7–10 */
+  eyeGrade: 'low' | 'mid' | 'high' | null;
+  /** 放大镜估品相：相邻两档，如 ["8","9"]、["10","BL"] */
+  loupeGrade: [string, string] | null;
+  /** 送评：slab 已封壳、rejected 被拒评、pending 还在评级社 */
+  grading: 'slab' | 'rejected' | 'pending' | null;
+}
+
+/** GET /api/cards/:id/appraisal */
+export interface CardAppraisalResponse {
+  ok: true;
+  card: CardView;
+  notes: AppraisalNotes;
+  /** 各种方式的费用（肉眼免费） */
+  fees: { loupe: number; lab: number; grading: number };
+  /** 现在还能做哪些（做过的、在机构里的、已封壳的就不能再做） */
+  can: Record<AppraisalMethod, boolean>;
+}
+
+/** POST /api/cards/:id/appraise { method } */
+export interface AppraiseResponse {
+  ok: true;
+  credits: number;
+  card: CardView;
+  notes: AppraisalNotes;
+  can: Record<AppraisalMethod, boolean>;
+}
+
+/** 打烊时鉴定机构 / 评级社出的结果（只给主人看） */
+export interface AppraisalOutcome {
+  cardId: number;
+  name: string;
+  method: 'lab' | 'grading';
+  /** lab：verified / fake / stolen（没收）；grading：slab / rejected */
+  outcome: 'verified' | 'fake' | 'stolen' | 'slab' | 'rejected';
+  /** 封壳时的评分 */
+  score: string | null;
+}
+
+/** GET /api/appraisal：鉴定台（在机构里的卡 + 最近的结果） */
+export interface AppraisalDeskResponse {
+  ok: true;
+  day: number;
+  lab: CardView[];
+  grading: CardView[];
 }
 
 // ---------- 进货和卡包（DESIGN 4，2026-11-17 卡包重做） ----------
@@ -181,6 +249,8 @@ export interface EndDayResponse {
   ok: true;
   /** 打烊后进入的新营业日 */
   day: number;
+  /** 这次打烊出结果的鉴定 / 送评 */
+  appraisals: AppraisalOutcome[];
 }
 
 export interface EligibleCardsResponse {

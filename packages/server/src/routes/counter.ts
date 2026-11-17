@@ -19,6 +19,7 @@ import {
 } from '../game/customers.ts';
 import { loadLines, type LineEvent } from '../content.ts';
 import { grandChancePpm, showcaseEffects, showcaseScore } from '../game/showcase.ts';
+import { settleAppraisals } from './appraisal.ts';
 import { chance } from '../game/rng.ts';
 
 const lines = loadLines();
@@ -130,7 +131,9 @@ export function registerCounterRoutes(app: FastifyInstance, deps: Deps, now: () 
       const worn = deps.binders!.wear(userId);
       repo.advanceDay(userId);
       repo.logEvent(userId, now(), 'day_end', { day: player.game_day, customers: today.length, worn });
-      const response: EndDayResponse = { ok: true, day: player.game_day + 1 };
+      // 鉴定机构 / 评级社按营业日出结果（DESIGN 5，2026-11-17 改成打烊时出）
+      const appraisals = settleAppraisals(deps, userId, player.game_day + 1, now());
+      const response: EndDayResponse = { ok: true, day: player.game_day + 1, appraisals };
       repo.putIdempotent(userId, key, response, now());
       return response;
     })();

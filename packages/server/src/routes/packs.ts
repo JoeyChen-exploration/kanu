@@ -149,7 +149,8 @@ export function registerPackRoutes(app: FastifyInstance, deps: Deps, now: () => 
           serialNo = repo.takeSerial(tpl.id, SERIAL_LIMIT);
           if (serialNo === null) style = 'standard';
         }
-        return repo.insertCard({ templateId: tpl.id, ownerId: userId, authenticity: c.authenticity, grade: String(c.grade), origin: c.origin, style, serialNo, now: t });
+        // 图鉴按公开的来源点亮：电脑订货的卡包保证正品，拆出来就点亮；其他来源（以后的电话批发）等验真
+        return repo.insertCard({ templateId: tpl.id, ownerId: userId, authenticity: c.authenticity, grade: String(c.grade), origin: c.origin, style, serialNo, now: t, collect: sealed.source === 'store' });
       });
 
       deps.binders!.placeNew(userId, ids, player.game_day);

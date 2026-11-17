@@ -124,10 +124,10 @@ export const UNGRADED_MULT = 0.85;
 export const APPRAISAL = {
   /** 放大镜（看真伪或看品相各收一次）：fixed + 基准价 × pct */
   loupe: { fixed: 15, pct: 0.05 },
-  /** 鉴定机构：max(min, 基准价 × 风格系数 × pct)，等 hours 小时 */
-  lab: { min: 10, pct: 0.1, hours: 24 },
-  /** 送评：max(min, 基准价 × 风格系数 × pct)，等 hours 小时 */
-  grading: { min: 20, pct: 0.15, hours: 24 },
+  /** 鉴定机构：max(min, 基准价 × 风格系数 × pct)；送去后过 days 个营业日（打烊时）出结果（2026-11-17 用户定：原来等 24 小时，改成按营业日） */
+  lab: { min: 10, pct: 0.1, days: 1 },
+  /** 送评：max(min, 基准价 × 风格系数 × pct)；送去后过 days 个营业日出结果 */
+  grading: { min: 20, pct: 0.15, days: 1 },
   /** 识破率（ppm）：肉眼看真伪 */
   eyeDetect: { low_fake: 500_000, high_fake: 0 },
   /** 识破率（ppm）：放大镜看真伪 */

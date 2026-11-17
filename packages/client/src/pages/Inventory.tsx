@@ -3,13 +3,14 @@
 import { useContext, useEffect, useState } from 'react';
 import { LOOSE, RARITIES, SHOWCASE } from '@kanu/shared/balance';
 import type {
-  BinderPageResponse, BinderView, BindersResponse, CardView, InventoryResponse, MeResponse, ShowcaseResponse, ShowcaseStatus, ShowcaseUpgradeResponse,
+  BinderPageResponse, BinderView, BindersResponse, CardAppraisalResponse, CardView, InventoryResponse, MeResponse, ShowcaseResponse, ShowcaseStatus, ShowcaseUpgradeResponse,
 } from '@kanu/shared/types';
 import { api, newIdempotencyKey } from '../api.ts';
 import { Card, GameDayContext, fmt } from '../Card.tsx';
 import { DragGhost, FloatWindow, useDrag } from '../drag.tsx';
+import { describeNotes } from './Appraisal.tsx';
 
-type Bind = ReturnType<typeof useDrag<CardView>>['bind'];
+export type Bind = ReturnType<typeof useDrag<CardView>>['bind'];
 
 export function Inventory({ onChange }: { onChange: (p: Partial<MeResponse>) => void }) {
   const [data, setData] = useState<BindersResponse | null>(null);
@@ -185,7 +186,7 @@ function ShowcasePanel({ status, cards, onPick, onUpgrade, bind, dropClass }: {
 }
 
 /** 浮窗里的一本卡册：3 × 3 一页，左右翻；卡可以拖去珍藏柜 */
-function BinderPages({ binder, version, onPick, bind, draggingId }: {
+export function BinderPages({ binder, version, onPick, bind, draggingId }: {
   binder: BinderView;
   /** 变了就重新拉这一页（拖卡改了位置以后） */
   version: number;
@@ -254,14 +255,23 @@ function AllCards({ onPick }: { onPick: (c: CardView) => void }) {
 
 function CardSheet({ card, onClose, onToggle }: { card: CardView; onClose: () => void; onToggle: (c: CardView) => Promise<void> }) {
   const day = useContext(GameDayContext);
+  // 这张卡的鉴定结论（只有自己看得到）
+  const [notes, setNotes] = useState<string[] | null>(null);
+  useEffect(() => { api<CardAppraisalResponse>(`/cards/${card.id}/appraisal`).then((r) => setNotes(describeNotes(r.notes))).catch(() => setNotes([])); }, [card.id]);
+  const SUB: Record<string, string> = { centering: '居中', corners: '边角', edges: '边缘', surface: '表面' };
   return (
     <div className="sheet" onClick={onClose}>
       <div className="sheet-body" onClick={(e) => e.stopPropagation()}>
         <Card card={card} />
         {card.flavor && <p className="flavor">"{card.flavor}"</p>}
-        <p>{card.seriesName} · 市场价约 {fmt(card.price)} 信用点（未评级）</p>
+        <p>{card.seriesName} · 市场价约 {fmt(card.price)} 信用点{card.slab ? `（星港评级 ${card.slab.score === 'BL' ? '黑标' : card.slab.score}）` : '（未评级）'}</p>
+        {card.slab && <p className="hint">分项：{Object.entries(card.slab.subgrades).map(([k, v]) => `${SUB[k] ?? k} ${v}`).join(' · ')}</p>}
+        {card.verified && <p className="hint">✓ 鉴定机构已验真</p>}
+        {card.gradeRejected && <p className="loose-note">评级社拒评：疑似假卡</p>}
         {card.looseSinceDay !== null && <p className="loose-note">散放在桌面上 {day - card.looseSinceDay} 天，可能已经磨损</p>}
-        <p className="hint">真伪、品相、来源都还是"?"，鉴定下一步就来。</p>
+        {notes && notes.length > 0
+          ? <ul className="station-notes">{notes.map((n) => <li key={n}>{n}</li>)}</ul>
+          : <p className="hint">还没鉴定过。到"鉴定"页把卡拖到鉴定台上看看。</p>}
         <button className="primary" onClick={() => onToggle(card)}>{card.location === 'showcase' ? '取出珍藏柜' : '放进珍藏柜'}</button>
         <button className="secondary" onClick={onClose}>关闭</button>
       </div>

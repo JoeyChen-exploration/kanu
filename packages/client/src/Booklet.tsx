@@ -2,7 +2,7 @@
 // 数字全部从 balance.ts 读，调了数值手册跟着变。只讲公开规则，不写顾客心理价位怎么算、品相掉没掉这类隐藏信息。
 import { useRef, useState, type ReactNode } from 'react';
 import {
-  ANNOUNCE, BINDER_KINDS, GRAND_COLLECTOR, BINDERS, COUNTER, CUSTOMER, CUSTOMER_TYPES, EXCHANGE, LOOSE, PACKS, PITY, RARITIES, RARITY,
+  ANNOUNCE, APPRAISAL, BINDER_KINDS, GRAND_COLLECTOR, BINDERS, COUNTER, CUSTOMER, CUSTOMER_TYPES, EXCHANGE, LOOSE, PACKS, PITY, RARITIES, RARITY,
   RENT, SERIAL_LIMIT, SHOP_PRICE, SHOWCASE, STARTER_BINDER, STORE, STYLE, STYLES, UNGRADED_MULT, type CustomerWants,
 } from '@kanu/shared/balance';
 import { Card, GameDayContext, fmt } from './Card.tsx';
@@ -213,13 +213,24 @@ const PAGES: Array<{ title: string; body: ReactNode }> = [
     ),
   },
   {
-    title: '快开放：鉴定和房租',
+    title: '鉴定台',
     body: (
       <>
-        <p>这些还在装修，先告诉你规则：</p>
+        <p>每张卡都有看不见的<b>真伪</b>、<b>品相</b>和<b>来源</b>。电脑订的货都是正品；以后别的渠道可能混进假货和赃物。到"鉴定"页，把卡拖到鉴定台上：</p>
         <ul>
-          <li><b>真假和品相</b>：每张卡都有看不见的真伪、品相和来源。电脑订的货都是正品；别的渠道可能混进假货。</li>
-          <li><b>鉴定</b>：用放大镜自己看，或者花钱送鉴定机构、送评级。评了高分的卡值钱得多。</li>
+          <li><b>放大镜</b>：肉眼看免费，放大镜收一点钱。马上有结论，只有你知道，不改卡价。放大镜也可能看漏高仿。</li>
+          <li><b>鉴定机构</b>：验真 100% 准，真卡拿到公开的 ✓"已验真"。<b>赃物会被当场没收</b>。下次打烊出结果。</li>
+          <li><b>星港评级社</b>：真卡封壳出分（1–10 分、四个分项，还有比 10 分更稀有的<b>黑标</b>），卡价按分数算，10 分是未评级的好几倍。送了假卡会被拒评，信誉 −{APPRAISAL.gradeRejectRepLoss}。下次打烊出结果。</li>
+          <li>窍门：先用放大镜挑出品相 9–10 的卡，再送评。每张卡每种鉴定只能做一次。</li>
+        </ul>
+      </>
+    ),
+  },
+  {
+    title: '房租和金币',
+    body: (
+      <>
+        <ul>
           <li><b>摊位费</b>：每 {RENT.everyDays} 个营业日交一次，从 {fmt(RENT.base)} 起，每周涨 {Math.round((RENT.growth - 1) * 100)}%，第 {RENT.capWeek} 周以后不再涨。交不起就倒闭，从头开始。</li>
           <li><b>买下店铺</b>：攒够 {fmt(SHOP_PRICE)} 信用点买下来，以后就不用交摊位费了。</li>
           <li><b>换金币</b>：信用点可以按 {EXCHANGE.creditsPerCoin} : 1 换成旺财金币，每周最多 {fmt(EXCHANGE.weeklyCapCoins)} 金币。</li>

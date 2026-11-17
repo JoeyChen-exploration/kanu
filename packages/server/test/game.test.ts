@@ -166,10 +166,10 @@ describe('价格（DESIGN 5、7、9.2）', () => {
 
   it('摊位费第 8 周封顶（软赛季，周数不清零）', () => {
     expect(rentForWeek(9)).toBe(rentForWeek(8));
-    expect(rentForWeek(30)).toBe(11921);
+    expect(rentForWeek(30)).toBe(15286);
   });
 
-  it('摊位费按 DESIGN 7 的表', () => {
-    expect([1, 2, 3, 4, 5, 6, 7, 8].map(rentForWeek)).toEqual([2500, 3125, 3906, 4883, 6104, 7629, 9537, 11921]);
+  it('摊位费按 DESIGN 7 的表（2026-11-17 新手任务上线后重调）', () => {
+    expect([1, 2, 3, 4, 5, 6, 7, 8].map(rentForWeek)).toEqual([3800, 4636, 5656, 6900, 8418, 10270, 12530, 15286]);
   });
 });

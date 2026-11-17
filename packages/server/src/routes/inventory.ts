@@ -1,6 +1,7 @@
 // 库存、珍藏柜、图鉴（FR-INV-1、2、4、5、6）。返回的卡牌一律经过 toCardView，只有公开信息。
 import type { FastifyInstance } from 'fastify';
-import { RARITIES, SHOWCASE } from '@kanu/shared/balance';
+import { RARITIES } from '@kanu/shared/balance';
+import { showcaseSlots } from '../game/showcase.ts';
 import type { CardLocation, CollectionResponse, InventoryResponse } from '@kanu/shared/types';
 import { fail, type Deps } from '../app.ts';
 
@@ -27,8 +28,10 @@ export function registerInventoryRoutes(app: FastifyInstance, deps: Deps) {
       const card = repo.ownedInstance(req.user!.id, id);
       if (!card) return fail(reply, 404, 'not_found', '找不到这张卡');
       if (card.location !== 'inventory' && card.location !== 'showcase') return fail(reply, 400, 'busy', '这张卡现在不能动');
-      if (on && card.location !== 'showcase' && repo.countLocation(req.user!.id, 'showcase') >= SHOWCASE.slots) {
-        return fail(reply, 400, 'showcase_full', `珍藏柜只有 ${SHOWCASE.slots} 格，先取出一张`);
+      const slots = showcaseSlots(repo.getPlayer(req.user!.id)?.showcase_level ?? 0);
+      if (on && card.location !== 'showcase' && slots === 0) return fail(reply, 400, 'showcase_locked', '还没有珍藏柜，先在库存页解锁');
+      if (on && card.location !== 'showcase' && repo.countLocation(req.user!.id, 'showcase') >= slots) {
+        return fail(reply, 400, 'showcase_full', `珍藏柜只有 ${slots} 格，先取出一张或者升级珍藏柜`);
       }
       if (on === (card.location === 'showcase')) return { ok: true, card: repo.cardView(id) };
       if (on) {

@@ -275,3 +275,31 @@ export interface BuyBinderResponse {
   /** 买完自动从桌面收进来几张散卡 */
   placed: number;
 }
+
+/** 珍藏柜的状态（FR-INV-11）：展示分只按公开的稀有度和风格算 */
+export interface ShowcaseStatus {
+  /** 0 = 还没解锁 */
+  level: number;
+  slots: number;
+  used: number;
+  score: number;
+  /** 顾客预算和心理价位加了几 %（整数） */
+  priceBonusPct: number;
+  patienceBonus: number;
+  /** 下一级；已经满级为 null */
+  next: { level: number; price: number; slots: number } | null;
+}
+
+/** GET /api/showcase */
+export interface ShowcaseResponse {
+  ok: true;
+  status: ShowcaseStatus;
+  cards: CardView[];
+}
+
+/** POST /api/showcase/upgrade：解锁或升一级 */
+export interface ShowcaseUpgradeResponse {
+  ok: true;
+  credits: number;
+  status: ShowcaseStatus;
+}

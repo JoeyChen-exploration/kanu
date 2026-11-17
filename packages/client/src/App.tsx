@@ -67,7 +67,7 @@ export function App() {
         {tab === 'shop' && <Shop me={me} onChange={patchMe} />}
         {tab === 'packs' && <Packs me={me} onChange={patchMe} />}
         {tab === 'counter' && <Counter onChange={patchMe} />}
-        {tab === 'inventory' && <Inventory />}
+        {tab === 'inventory' && <Inventory onChange={patchMe} />}
         {tab === 'collection' && <Collection />}
       </main>
       <nav className="tabs">

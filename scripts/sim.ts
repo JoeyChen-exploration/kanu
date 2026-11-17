@@ -15,13 +15,14 @@
 // 2026-11-17 定的目标（每天 2 包、周五起留租金）：破产率约 15%、买店率约 70%、每周交租前净赚中位约 10,000 信用点（约 1,000 金币）。
 // 没算进去的：送评、鉴定、科技树、顾客的具体标签、抵押赎回、新闻和供需。
 import {
-  COUNTER, CUSTOMER, CUSTOMER_TYPES, EXCHANGE, PACKS, PLAYER, RARITY, RENT, SEASON, SHOP_PRICE,
+  COUNTER, CUSTOMER, CUSTOMER_TYPES, EXCHANGE, PACKS, PLAYER, RARITY, RENT, SEASON, SHOP_PRICE, SHOWCASE,
   type CustomerType, type Rarity, type Style,
 } from '@kanu/shared/balance';
 import { openPack } from '../packages/server/src/game/cards.ts';
 import { publicPrice, rentForWeek } from '../packages/server/src/game/price.ts';
 import { between, chance, pickPpm, seeded, type Rng } from '../packages/server/src/game/rng.ts';
 import { rollCustomerCount } from '../packages/server/src/game/customers.ts';
+import { showcaseEffects, showcaseScore, showcaseSlots } from '../packages/server/src/game/showcase.ts';
 
 interface Card { rarity: Rarity; style: Style; value: number }
 
@@ -44,14 +45,23 @@ RENT.growth = arg('rent-growth', RENT.growth);
 const priceArg = process.argv.indexOf('--price');
 if (priceArg >= 0) for (const kv of String(process.argv[priceArg + 1]).split(',')) { const [r, v] = kv.split('='); RARITY[r as Rarity].basePrice = Number(v); }
 
+// 珍藏柜调参：--sc-prices 2000,8000,25000 各级价格、--sc-pts 每几分 +1%、--sc-cap 加成上限（0–1）
+const scPrices = process.argv.indexOf('--sc-prices');
+if (scPrices >= 0) String(process.argv[scPrices + 1]).split(',').forEach((v, i) => { if (SHOWCASE.levels[i + 1]) SHOWCASE.levels[i + 1]!.price = Number(v); });
+SHOWCASE.pointsPerPct = arg('sc-pts', SHOWCASE.pointsPerPct);
+SHOWCASE.maxPriceBonus = arg('sc-cap', SHOWCASE.maxPriceBonus);
+
 const MVP_TYPES = CUSTOMER_TYPES.filter((t) => CUSTOMER[t].mvp);
 const SHOP_BUFFER = 2000;
+/** 珍藏柜策略：买完还要剩下这周租金 + 这么多 */
+const SHOWCASE_BUFFER = 1000;
 const MIDDLEMAN_STOCK = 30;
 
-function sell(rng: Rng, card: Card, type: CustomerType): number {
+function sell(rng: Rng, card: Card, type: CustomerType, showcaseMult = 1): number {
   const w = CUSTOMER[type].wants;
   const bonus = w.kind === 'card' && w.styleBonus && card.style !== 'standard' ? w.styleBonus : 1;
-  const ask = card.value * CUSTOMER[type].priceCoef * bonus;
+  // 珍藏柜加成：玩家知道自己的展示分，开价跟着抬
+  const ask = card.value * CUSTOMER[type].priceCoef * bonus * showcaseMult;
   const mind = ask * between(rng, COUNTER.floatMin, COUNTER.floatMax);
   return Math.round(mind >= ask ? ask : mind * between(rng, 0.9, 1));
 }
@@ -66,12 +76,26 @@ function takeRandom(rng: Rng, inv: Card[], ok: (c: Card) => boolean): Card | nul
 interface SeasonResult {
   bankrupts: number;
   shopWeek: number | null;
-  /** 每周交租前净赚：卖卡收入 − 卡包支出 */
+  /** 每周交租前净赚：卖卡收入 − 卡包支出（珍藏柜花费另算） */
   weeklyNet: number[];
   endCredits: number;
+  /** 珍藏柜：赛季末等级、每天展示分、花在珍藏柜上的钱、第几周解锁 */
+  showcaseLevel: number;
+  dailyScore: number[];
+  showcaseSpent: number;
+  showcaseWeek: number | null;
 }
 
-function season(rng: Rng, packsPerDay: number, reserveFromDay: number): SeasonResult {
+const cardScore = (c: Card) => showcaseScore([c]);
+
+/**
+ * 珍藏柜策略：off 不用；hoard 柜里的卡不卖（只当门面）；sell 柜里的卡有人要照样卖，第二天再补上。
+ * 展示分按每天开门时柜里的卡算。
+ */
+type ShowcaseMode = 'off' | 'hoard' | 'sell';
+
+function season(rng: Rng, packsPerDay: number, reserveFromDay: number, mode: ShowcaseMode): SeasonResult {
+  const useShowcase = mode !== 'off';
   let credits = PLAYER.startCredits;
   let week = 1; // 玩家自己的第几周，破产后从 1 重算
   let pity = 0;
@@ -79,6 +103,19 @@ function season(rng: Rng, packsPerDay: number, reserveFromDay: number): SeasonRe
   let bankrupts = 0;
   let inv: Card[] = [];
   const weeklyNet: number[] = [];
+  // 珍藏柜：钱够（留出这周租金 + 缓冲）就解锁 / 升级；每天开门前把展示分最高的卡换进柜里
+  let level = 0;
+  let shelf: Card[] = [];
+  let showcaseSpent = 0;
+  let showcaseWeek: number | null = null;
+  const dailyScore: number[] = [];
+  const restock = () => {
+    const slots = showcaseSlots(level);
+    const pool = [...shelf, ...inv].sort((a, b) => cardScore(b) - cardScore(a) || b.value - a.value);
+    shelf = pool.slice(0, slots).filter((c) => cardScore(c) > 0);
+    const kept = new Set(shelf);
+    inv = pool.filter((c) => !kept.has(c));
+  };
 
   for (let w = 1; w <= SEASON.weeks; w += 1) {
     let income = 0, spent = 0;
@@ -91,6 +128,20 @@ function season(rng: Rng, packsPerDay: number, reserveFromDay: number): SeasonRe
         pity = r.pityCount;
         for (const c of r.cards) inv.push({ rarity: c.rarity, style: c.style, value: publicPrice({ rarity: c.rarity, style: c.style, publicGrade: null }) });
       }
+      if (useShowcase) {
+        const next = SHOWCASE.levels[level + 1];
+        const keep = (shopWeek ? 0 : rentForWeek(week)) + SHOWCASE_BUFFER;
+        if (next && credits - next.price >= keep) {
+          credits -= next.price; showcaseSpent += next.price; level += 1;
+          showcaseWeek ??= w;
+        }
+        restock();
+      }
+      const score = showcaseScore(shelf);
+      dailyScore.push(score);
+      const mult = showcaseEffects(score).priceMult;
+      // 照卖：柜里的卡放回可卖的池子，今天卖掉的明天再补
+      if (mode === 'sell') { inv.push(...shelf); shelf = []; }
       const todayCustomers = rollCustomerCount(rng, PER_DAY_SHIFT);
       for (let k = 0; k < todayCustomers; k += 1) {
         const type = pickPpm(rng, MVP_TYPES, (t) => CUSTOMER[t].ppm);
@@ -105,10 +156,12 @@ function season(rng: Rng, packsPerDay: number, reserveFromDay: number): SeasonRe
           }
         } else if (wants.kind === 'card' && chance(rng, COUNTER.demandHitPpm)) {
           card = takeRandom(rng, inv, (c) => wants.rarities.includes(c.rarity));
-          if (card) price = sell(rng, card, type);
+          if (card) price = sell(rng, card, type, mult);
         }
         credits += price; income += price;
       }
+      // 打烊后把剩下的好卡放回柜里（柜里的卡交租时不能抵押，破产时留下）
+      if (mode === 'sell') restock();
     }
     weeklyNet.push(income - spent);
 
@@ -116,6 +169,7 @@ function season(rng: Rng, packsPerDay: number, reserveFromDay: number): SeasonRe
       const due = rentForWeek(week);
       inv.sort((a, b) => b.value - a.value);
       while (credits < due && inv.length) credits += Math.round(inv.shift()!.value * 0.5);
+      // 珍藏柜里的卡不能抵押；破产时珍藏柜和柜里的卡都留下
       if (credits < due) {
         bankrupts += 1; credits = PLAYER.restartCredits; inv = []; week = 1;
       } else {
@@ -124,16 +178,24 @@ function season(rng: Rng, packsPerDay: number, reserveFromDay: number): SeasonRe
     }
     if (!shopWeek && credits >= SHOP + SHOP_BUFFER) { credits -= SHOP; shopWeek = w; }
   }
-  return { bankrupts, shopWeek, weeklyNet, endCredits: credits };
+  return { bankrupts, shopWeek, weeklyNet, endCredits: credits, showcaseLevel: level, dailyScore, showcaseSpent, showcaseWeek };
 }
 
 const pct = (xs: number[], p: number) => { const s = [...xs].sort((a, b) => a - b); return s[Math.min(s.length - 1, Math.floor(p * s.length))]!; };
 const fmt = (n: number) => Math.round(n).toLocaleString('en-US');
 
 console.log(`卡奴经济模拟：只走正规，${SEASONS} 个赛季 × ${SEASON.weeks} 周，种子 ${SEED}\n`);
-for (const [packsPerDay, reserveFromDay, label] of (ONLY_MAIN ? [[2, 5, '周五起才留租金']] : [[2, 5, '周五起才留租金'], [5, 5, '周五起才留租金']]) as ReadonlyArray<readonly [number, number, string]>) {
+const MODE_LABEL: Record<ShowcaseMode, string> = { off: '', hoard: '，珍藏柜（柜里的卡不卖）', sell: '，珍藏柜（柜里的卡照卖）' };
+const VARIANTS = ([
+  [2, 'off'], [2, 'sell'], [2, 'hoard'],
+  ...(ONLY_MAIN ? [] : [[5, 'off'], [5, 'sell'], [5, 'hoard']]),
+]) as ReadonlyArray<readonly [number, ShowcaseMode]>;
+for (const [packsPerDay, mode] of VARIANTS) {
+  const reserveFromDay = 5;
+  const label = `周五起才留租金${MODE_LABEL[mode]}`;
+  const useShowcase = mode !== 'off';
   const rng = seeded(SEED);
-  const rs = Array.from({ length: SEASONS }, () => season(rng, packsPerDay, reserveFromDay));
+  const rs = Array.from({ length: SEASONS }, () => season(rng, packsPerDay, reserveFromDay, mode));
   const nets = rs.flatMap((r) => r.weeklyNet);
   const shopWeeks = rs.flatMap((r) => (r.shopWeek ? [r.shopWeek] : []));
   const bankruptRate = rs.filter((r) => r.bankrupts > 0).length / SEASONS;
@@ -145,5 +207,18 @@ for (const [packsPerDay, reserveFromDay, label] of (ONLY_MAIN ? [[2, 5, '周五�
   console.log(`每周交租前净赚 中位 / 平均  ${fmt(pct(nets, 0.5))} / ${fmt(nets.reduce((s, v) => s + v, 0) / nets.length)} 信用点`);
   console.log(`  折合金币 中位 / 平均      ${fmt(pct(nets, 0.5) / EXCHANGE.creditsPerCoin)} / ${fmt(nets.reduce((s, v) => s + v, 0) / nets.length / EXCHANGE.creditsPerCoin)}（目标：中位约 1,000）`);
   console.log(`  P10 / P90                 ${fmt(pct(nets, 0.1))} / ${fmt(pct(nets, 0.9))}`);
-  console.log(`赛季末信用点 中位           ${fmt(pct(rs.map((r) => r.endCredits), 0.5))}\n`);
+  console.log(`赛季末信用点 中位           ${fmt(pct(rs.map((r) => r.endCredits), 0.5))}`);
+  if (useShowcase) {
+    const levels = rs.map((r) => r.showcaseLevel);
+    const unlockWeeks = rs.flatMap((r) => (r.showcaseWeek ? [r.showcaseWeek] : []));
+    const scores = rs.flatMap((r) => r.dailyScore);
+    const lastWeekScores = rs.flatMap((r) => r.dailyScore.slice(-7));
+    const bonus = (s: number) => Math.round((showcaseEffects(s).priceMult - 1) * 100);
+    console.log(`珍藏柜 解锁率               ${((unlockWeeks.length / SEASONS) * 100).toFixed(1)}%（解锁周 中位 第 ${unlockWeeks.length ? pct(unlockWeeks, 0.5) : '-'} 周）`);
+    console.log(`  赛季末等级分布            ${SHOWCASE.levels.map((_, lv) => `${lv} 级 ${((levels.filter((x) => x === lv).length / SEASONS) * 100).toFixed(0)}%`).join(' / ')}`);
+    console.log(`  展示分 中位（全季 / 最后一周）  ${pct(scores, 0.5)} / ${pct(lastWeekScores, 0.5)}，P90 ${pct(lastWeekScores, 0.9)}`);
+    console.log(`  预算加成 中位（最后一周）  +${bonus(pct(lastWeekScores, 0.5))}%，P90 +${bonus(pct(lastWeekScores, 0.9))}%；耐心 +1 的天数 ${((scores.filter((s) => s >= SHOWCASE.patienceAt).length / scores.length) * 100).toFixed(0)}%`);
+    console.log(`  花在珍藏柜上 中位          ${fmt(pct(rs.map((r) => r.showcaseSpent), 0.5))} 信用点`);
+  }
+  console.log('');
 }

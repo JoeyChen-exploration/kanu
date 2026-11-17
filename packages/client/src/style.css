@@ -240,6 +240,11 @@ h2 small { color: var(--muted); font-weight: normal; font-size: 13px; margin-lef
 .cell.match { border-radius: 10px; box-shadow: 0 0 0 2px var(--accent), 0 0 12px color-mix(in srgb, var(--accent) 55%, transparent); }
 .cell.dim { opacity: 0.3; filter: grayscale(0.8); pointer-events: none; }
 
+/* 珍藏柜：展示分和效果 */
+.showcase-locked { background: var(--panel); border: 1px dashed var(--accent); border-radius: 12px; padding: 4px 14px 14px; }
+.showcase-score { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; color: var(--muted); margin-top: 8px; }
+.showcase-score b { color: var(--accent); }
+
 /* 新手手册：像一本小册子，左右翻页 */
 .topbar-book { flex: none; width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); font-size: 18px; }
 .booklet-backdrop { align-items: center; padding: 16px; }

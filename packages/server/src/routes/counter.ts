@@ -18,6 +18,7 @@ import {
   rollCustomer, rollCustomerCount, type Demand, type SellableCard, type SellablePack,
 } from '../game/customers.ts';
 import { loadLines, type LineEvent } from '../content.ts';
+import { showcaseEffects, showcaseScore } from '../game/showcase.ts';
 
 const lines = loadLines();
 
@@ -50,7 +51,7 @@ export function toCustomerView(row: CustomerRow): CustomerView {
     budgetLow: row.budget_low,
     budgetHigh: row.budget_high,
     patience: row.patience,
-    maxPatience: CUSTOMER[type].patience,
+    maxPatience: Math.max(row.max_patience ?? 0, row.patience, CUSTOMER[type].patience),
     status: row.status as CustomerView['status'],
     counterPrice: row.counter_price,
   };
@@ -83,10 +84,12 @@ export function registerCounterRoutes(app: FastifyInstance, deps: Deps, now: () 
       const series = repo.allSeries().map((s) => ({ id: s.id, name: s.name, price: PACKS[s.kind].price }));
       const templates = repo.allTemplates().map((x) => ({ id: x.id, name: x.name, rarity: x.rarity, tags: JSON.parse(x.tags) as string[] }));
       const forceType = rows.length >= player.day_customer_count - extra ? 'collector' as const : undefined;
-      const c = rollCustomer(rng, { inventory: repo.sellableCards(ownerId).map(toSellable), packs: sellablePacks(ownerId), templates, series, typicalPrice, forceType });
+      // 珍藏柜是门面：按顾客进门那一刻柜里的卡算展示分，抬高预算、心理价位和耐心
+      const showcase = showcaseEffects(showcaseScore(repo.showcaseCards(ownerId).map((x) => ({ rarity: x.rarity as Rarity, style: x.style }))));
+      const c = rollCustomer(rng, { inventory: repo.sellableCards(ownerId).map(toSellable), packs: sellablePacks(ownerId), templates, series, typicalPrice, forceType, showcase });
       repo.insertCustomer({
         owner_id: ownerId, day_key: day, slot: 0, seat: rows.length, type: c.type, demand: JSON.stringify(c.demand), float: c.float,
-        patience: c.patience, line: say(c.type, 'greet', { demand: demandText(c.type, c.demand) }), budget_low: c.budgetLow, budget_high: c.budgetHigh, created_at: t,
+        patience: c.patience, max_patience: c.patience, line: say(c.type, 'greet', { demand: demandText(c.type, c.demand) }), budget_low: c.budgetLow, budget_high: c.budgetHigh, created_at: t,
       });
       rows = repo.customersFor(ownerId, day);
     }

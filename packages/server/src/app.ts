@@ -15,6 +15,8 @@ import { registerMeRoutes } from './routes/me.ts';
 import { registerPackRoutes } from './routes/packs.ts';
 import { registerInventoryRoutes } from './routes/inventory.ts';
 import { registerCounterRoutes } from './routes/counter.ts';
+import { registerBinderRoutes } from './routes/binders.ts';
+import { createBinderService, type BinderService } from './binders.ts';
 
 export interface Deps {
   config: Config;
@@ -28,6 +30,8 @@ export interface Deps {
   /** 正规卡包开哪个系列 */
   currentSeries: string;
   now?: () => number;
+  /** 卡册服务；不传就由 buildApp 用 repo 和 rng 建一个 */
+  binders?: BinderService;
 }
 
 export const fail = (reply: FastifyReply, status: number, code: string, message: string) =>
@@ -52,7 +56,8 @@ declare module 'fastify' {
   }
 }
 
-export function buildApp(deps: Deps) {
+export function buildApp(input: Deps) {
+  const deps: Deps = { ...input, binders: input.binders ?? createBinderService(input.repo, input.rng) };
   const app = Fastify({ logger: { level: process.env.LOG_LEVEL || 'info' } });
   const now = deps.now ?? Date.now;
 
@@ -83,6 +88,7 @@ export function buildApp(deps: Deps) {
   registerPackRoutes(app, deps, now);
   registerInventoryRoutes(app, deps);
   registerCounterRoutes(app, deps, now);
+  registerBinderRoutes(app, deps, now);
 
   app.setErrorHandler((err, req, reply) => {
     if (err instanceof ApiError) return fail(reply, err.status, err.code, err.message);

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { COUNTER, CUSTOMER, MVP_TYPES_CHECK, PACKS, PLAYER, REPUTATION } from './counter-helpers.ts';
-import type { CounterResponse, EligibleCardsResponse, OfferResponse } from '@kanu/shared/types';
+import type { CounterBinderPageResponse, CounterResponse, EligibleCardsResponse, OfferResponse } from '@kanu/shared/types';
 import { evaluateOffer, mindPrice, mindPricePack, quickPrice, rollCustomer, rollCustomerCount, type SellableCard } from '../src/game/customers.ts';
 import { seeded, type Rng } from '../src/game/rng.ts';
 import { dayKey } from '../src/db/index.ts';
@@ -197,6 +197,40 @@ describe('出价（FR-CTR-4）', () => {
     expect((await offer(app, h, customerId, { instanceId: other, price: 1 })).json().code).toBe('not_wanted');
     const counterView = (await counter(app, h)).current!;
     expect(counterView.demand.text).toContain('霓虹龙·影');
+  });
+
+  it('柜台翻卡册：每本标出符合的张数；符合的高亮、默认排前面，关掉就按原顺序', async () => {
+    const { app, repo } = setup();
+    cleanup = () => app.close();
+    const h = await login(app);
+    for (let i = 0; i < 12; i += 1) repo.insertCard({ templateId: 'MEC-19', ownerId: UID, authenticity: 'real', grade: '7', origin: 'legit', style: 'standard', serialNo: null, now: NOW });
+    const { cardId, customerId } = seedSale(repo, { type: 'nostalgic', template: 'NEO-19', demand: { kind: 'card', rarities: ['UR'], tag: null, templateId: 'NEO-19', templateName: '霓虹龙·影' } });
+    await app.inject({ method: 'POST', url: '/api/binders/organize', headers: h });
+    const binderId = repo.bindersOf(UID)[0]!.id;
+    // 原顺序是按放进去的先后：目标卡在第 2 页
+    repo.db.prepare('UPDATE card_instances SET binder_id = ? WHERE owner_id = ?').run(binderId, UID);
+
+    const stock = (await app.inject({ method: 'GET', url: `/api/counter/${customerId}/cards`, headers: h })).json() as EligibleCardsResponse;
+    expect(stock.binders).toEqual([expect.objectContaining({ id: binderId, used: 13, matchCount: 1 })]);
+    expect(stock.loose).toEqual({ count: 0, matchCount: 0 });
+
+    const page = async (q: string) => (await app.inject({ method: 'GET', url: `/api/counter/${customerId}/binder/${binderId}?${q}`, headers: h })).json() as CounterBinderPageResponse;
+    const first = await page('page=1');
+    expect(first.matchFirst).toBe(true);
+    expect(first.pages).toBe(2);
+    expect(first.cards[0]).toMatchObject({ card: { id: cardId }, match: true });
+    expect(first.cards[0]!.quickPrice).toBeGreaterThan(0);
+    expect(first.cards.slice(1).every((c) => !c.match && c.quickPrice === null)).toBe(true);
+
+    const natural = await page('page=1&matchFirst=0');
+    expect(natural.cards.some((c) => c.match)).toBe(false);
+    const p2 = await page('page=2&matchFirst=0');
+    expect(p2.cards.find((c) => c.match)?.card.id).toBe(cardId);
+
+    const loose = await app.inject({ method: 'GET', url: `/api/counter/${customerId}/binder/0`, headers: h });
+    expect(loose.json()).toMatchObject({ binder: { id: 0 }, cards: [] });
+    expect((await app.inject({ method: 'GET', url: `/api/counter/${customerId}/binder/99999`, headers: h })).statusCode).toBe(404);
+    for (const body of [stock, first, natural, p2]) expect(findKeys(body, HIDDEN)).toEqual([]);
   });
 
   it('开箱主播收没拆的卡包，成交后卡包从库存消失', async () => {

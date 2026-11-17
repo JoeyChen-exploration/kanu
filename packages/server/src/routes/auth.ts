@@ -7,7 +7,10 @@ import { AuthError } from '../auth/discord.ts';
 
 export function registerAuthRoutes(app: FastifyInstance, deps: Deps, now: () => number) {
   const login = (user: SessionUser, accessToken: string | null): AuthTokenResponse => {
-    deps.repo.ensurePlayer(user, now());
+    deps.repo.db.transaction(() => {
+      const player = deps.repo.ensurePlayer(user, now());
+      deps.binders!.ensureStarter(user.id, now(), player.game_day);
+    })();
     return { ok: true, accessToken, session: deps.sessions.issue(user, now()), user };
   };
 

@@ -246,6 +246,45 @@ export const SEASON = { weeks: 8 };
 /** 珍藏柜（DESIGN 8.1、FR-INV-6）：默认格数，科技树 S1 可扩 */
 export const SHOWCASE = { slots: 3 };
 
+// ---------- 卡册（DESIGN 4.5，2026-11-17 用户定） ----------
+// 卡要放进卡册才算收好；所有卡册的格数加起来就是库存上限。卡册满了，新开的卡只能散放在桌面上（最多 LOOSE.slots 张），
+// 再满就不能拆新包。散放的卡每过一个营业日有 LOOSE.wearPpm 的概率品相掉 1 分（隐藏属性，送评才知道）。
+// 没拆的卡包和珍藏柜不占卡册格子。
+export const BINDER_KINDS = ['basic', 'grid', 'humidor', 'leather'] as const;
+export type BinderKind = (typeof BINDER_KINDS)[number];
+
+export const BINDERS: Record<BinderKind, {
+  name: string;
+  price: number;
+  slots: number;
+  /** 放在里面的卡卖给收藏家时，心理价位乘 (1 + collectorBonus) */
+  collectorBonus: number;
+  /** 放在里面的卡卖给任何顾客时，心理价位乘 (1 + allBonus) */
+  allBonus: number;
+  /** 拥有这种卡册时，每个营业日多来几位收藏家（不叠加：有一本就算） */
+  extraCollectors: number;
+  /** 给玩家看的效果说明 */
+  effect: string;
+}> = {
+  basic: { name: '简易卡册', price: 200, slots: 27, collectorBonus: 0, allBonus: 0, extraCollectors: 0, effect: '防磨损' },
+  grid: { name: '九宫格活页册', price: 1000, slots: 90, collectorBonus: 0, allBonus: 0, extraCollectors: 0, effect: '防磨损' },
+  humidor: { name: '防潮收藏册', price: 4000, slots: 180, collectorBonus: 0.05, allBonus: 0, extraCollectors: 0, effect: '防磨损；里面的卡卖给收藏家，心理价位 +5%' },
+  leather: { name: '典藏皮面册', price: 15000, slots: 360, collectorBonus: 0, allBonus: 0.05, extraCollectors: 1, effect: '防磨损；里面的卡卖给任何顾客，心理价位 +5%；每个营业日多来 1 位收藏家' },
+};
+
+/** 开局送的卡册 */
+export const STARTER_BINDER: BinderKind = 'basic';
+
+/** 卡册一页几格（3 × 3），只影响显示 */
+export const BINDER_PAGE_SIZE = 9;
+
+export const LOOSE = {
+  /** 桌面最多散放几张 */
+  slots: 20,
+  /** 每过一个营业日，每张散放的卡品相掉 1 分的概率（ppm） */
+  wearPpm: 100_000,
+};
+
 /** 开包播报（FR-PACK-6）：开出这个稀有度及以上、或编号限定时全服播报 */
 export const ANNOUNCE = { minRarity: 'UR' as Rarity };
 

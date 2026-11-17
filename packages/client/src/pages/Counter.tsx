@@ -2,11 +2,11 @@
 // 不知道下一位是谁、今天还剩几位。挑卡（或卡包）→ 开价 / 接受还价 / 快速出售 / 请走。都接待完就能打烊。
 import { useEffect, useState } from 'react';
 import { STORE } from '@kanu/shared/balance';
-import type { CounterResponse, CustomerView, EligibleCardsResponse, EndDayResponse, MeResponse, OfferResponse } from '@kanu/shared/types';
+import type { CardView, CounterBinderPageResponse, CounterResponse, CustomerView, EligibleCardsResponse, EndDayResponse, MeResponse, OfferResponse } from '@kanu/shared/types';
 import { api, newIdempotencyKey } from '../api.ts';
 import { Card, fmt } from '../Card.tsx';
 
-const AVATAR: Record<string, string> = {
+export const AVATAR: Record<string, string> = {
   resident: '🧑‍🔧', student: '🧒', tourist: '🧳', collector: '🧐', nostalgic: '👴',
   rich: '🤵', speculator: '📈', streamer: '🎥', middleman: '🕶️',
 };
@@ -85,6 +85,62 @@ function Patience({ c }: { c: CustomerView }) {
 
 type Picked = { kind: 'card' | 'pack'; id: number; name: string; price: number; quickPrice: number };
 
+/** "符合的排前面"开关记在本机，下次进柜台还是上次的选择 */
+const MATCH_FIRST_KEY = 'kanu.counter.matchFirst';
+const readMatchFirst = () => { try { return localStorage.getItem(MATCH_FIRST_KEY) !== '0'; } catch { return true; } };
+
+/** 柜台上翻一本卡册：一页 3 × 3，符合这位顾客的高亮可点，不符合的变暗 */
+function BinderPicker({ customerId, binder, onBack, onPick }: {
+  customerId: number;
+  binder: { id: number; name: string };
+  onBack: () => void;
+  onPick: (card: CardView, quickPrice: number) => void;
+}) {
+  const [matchFirst, setMatchFirst] = useState(readMatchFirst);
+  const [page, setPage] = useState(1);
+  const [data, setData] = useState<CounterBinderPageResponse | null>(null);
+  const [err, setErr] = useState('');
+  useEffect(() => {
+    api<CounterBinderPageResponse>(`/counter/${customerId}/binder/${binder.id}?page=${page}&matchFirst=${matchFirst ? 1 : 0}`)
+      .then(setData).catch((e: Error) => setErr(e.message));
+  }, [customerId, binder.id, page, matchFirst]);
+  const toggle = () => {
+    const next = !matchFirst;
+    try { localStorage.setItem(MATCH_FIRST_KEY, next ? '1' : '0'); } catch { /* 存不了就算了 */ }
+    setMatchFirst(next);
+    setPage(1);
+  };
+  const cards = data?.cards ?? [];
+  return (
+    <div className="binder-picker">
+      <div className="picker-head">
+        <button className="chip" onClick={onBack}>← 换一本</button>
+        <b>{binder.name}</b>
+        <button className={matchFirst ? 'chip on' : 'chip'} onClick={toggle}>符合的排前面</button>
+      </div>
+      <div className="binder-page">
+        {cards.map(({ card, match, quickPrice }) => (
+          match
+            ? (
+              <button key={card.id} className="cell match" onClick={() => onPick(card, quickPrice ?? 0)}>
+                <Card card={card} small />
+                <span className="cell-price">快卖 {fmt(quickPrice ?? 0)}</span>
+              </button>
+            )
+            : <div key={card.id} className="cell dim" aria-disabled><Card card={card} small /></div>
+        ))}
+        {Array.from({ length: Math.max(0, 9 - cards.length) }, (_, i) => <div key={`e${i}`} className="binder-slot" />)}
+      </div>
+      <div className="pager">
+        <button className="chip" disabled={page <= 1} onClick={() => setPage(page - 1)}>上一页</button>
+        <span>第 {data?.page ?? page} / {data?.pages ?? 1} 页</span>
+        <button className="chip" disabled={!data || page >= data.pages} onClick={() => setPage(page + 1)}>下一页</button>
+      </div>
+      {err && <p className="error">{err}</p>}
+    </div>
+  );
+}
+
 /** 眼前这一位：顾客信息 + 挑货 + 开价 */
 function Deal({ customer, onChange, onDone, onUpdate }: {
   customer: CustomerView;
@@ -94,6 +150,8 @@ function Deal({ customer, onChange, onDone, onUpdate }: {
 }) {
   const [stock, setStock] = useState<EligibleCardsResponse | null>(null);
   const [picked, setPicked] = useState<Picked | null>(null);
+  /** 正在翻的卡册（id 0 = 桌面散放）；挑完卡点"换一样"会回到这本 */
+  const [openBinder, setOpenBinder] = useState<{ id: number; name: string } | null>(null);
   const [price, setPrice] = useState('');
   const [step, setStep] = useState(10);
   const [busy, setBusy] = useState(false);
@@ -152,23 +210,54 @@ function Deal({ customer, onChange, onDone, onUpdate }: {
         </div>
       </div>
 
-      {!picked && (
+      {!picked && openBinder && (
+        <BinderPicker customerId={customer.id} binder={openBinder} onBack={() => setOpenBinder(null)}
+          onPick={(card, quickPrice) => { setPicked({ kind: 'card', id: card.id, name: card.name, price: card.price, quickPrice }); setPrice(String(card.price)); }} />
+      )}
+
+      {!picked && !openBinder && stock && (
         <>
           {empty && <p className="hint">你手上没有他要的东西。</p>}
-          <div className="grid">
-            {stock?.packs.map((p) => (
-              <button key={`p${p.id}`} className="cell" onClick={() => { setPicked({ kind: 'pack', id: p.id, name: p.name, price: p.quickPrice, quickPrice: p.quickPrice }); setPrice(String(p.quickPrice)); }}>
-                <div className={`pack-art kind-${p.kind}`} aria-hidden>{p.name.slice(0, 2)}</div>
-                <span className="cell-price">快卖 {fmt(p.quickPrice)}</span>
-              </button>
-            ))}
-            {stock?.cards.map(({ card, quickPrice }) => (
-              <button key={card.id} className="cell" onClick={() => { setPicked({ kind: 'card', id: card.id, name: card.name, price: card.price, quickPrice }); setPrice(String(card.price)); }}>
-                <Card card={card} small />
-                <span className="cell-price">快卖 {fmt(quickPrice)}</span>
-              </button>
-            ))}
-          </div>
+          {stock.packs.length > 0 && (
+            <>
+              <h3>没拆的卡包</h3>
+              <div className="grid">
+                {stock.packs.map((p) => (
+                  <button key={`p${p.id}`} className="cell" onClick={() => { setPicked({ kind: 'pack', id: p.id, name: p.name, price: p.quickPrice, quickPrice: p.quickPrice }); setPrice(String(p.quickPrice)); }}>
+                    <div className={`pack-art kind-${p.kind}`} aria-hidden>{p.name.slice(0, 2)}</div>
+                    <span className="cell-price">快卖 {fmt(p.quickPrice)}</span>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+          {customer.demand.kind === 'card' && (
+            <>
+              <h3>翻卡册找卡 <small>符合的一共 {stock.cards.length} 张</small></h3>
+              <div className="binder-list">
+                {stock.binders.map((b) => (
+                  <button key={b.id} className={b.matchCount ? 'binder-item has-match' : 'binder-item'} onClick={() => setOpenBinder({ id: b.id, name: b.name })}>
+                    <div className={`binder-cover binder-${b.kind}`} aria-hidden>{b.name.slice(0, 2)}</div>
+                    <div className="binder-body">
+                      <b>{b.name}</b>
+                      <span className="hint">{b.used} / {b.slots} 张</span>
+                    </div>
+                    <span className={b.matchCount ? 'match-badge' : 'match-badge none'}>{b.matchCount ? `${b.matchCount} 张符合` : '没有符合的'}</span>
+                  </button>
+                ))}
+                {stock.loose.count > 0 && (
+                  <button className={stock.loose.matchCount ? 'binder-item has-match' : 'binder-item'} onClick={() => setOpenBinder({ id: 0, name: '桌面散放' })}>
+                    <div className="binder-cover binder-loose" aria-hidden>桌面</div>
+                    <div className="binder-body">
+                      <b>桌面散放</b>
+                      <span className="hint">{stock.loose.count} 张</span>
+                    </div>
+                    <span className={stock.loose.matchCount ? 'match-badge' : 'match-badge none'}>{stock.loose.matchCount ? `${stock.loose.matchCount} 张符合` : '没有符合的'}</span>
+                  </button>
+                )}
+              </div>
+            </>
+          )}
         </>
       )}
 

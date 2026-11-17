@@ -55,6 +55,10 @@ export interface CardView {
   /** 编号限定的序列号（如 7 表示 07/50），其他风格是 null */
   serialNo: number | null;
   location: CardLocation;
+  /** 放在哪本卡册里；散放在桌面上是 null */
+  binderId: number | null;
+  /** 散放在桌面上时，从第几个营业日开始散放（前端按天数画磨损；只是公开的天数，不代表真实品相） */
+  looseSinceDay: number | null;
   /** 公开市场价（没封壳按未评级算） */
   price: number;
   createdAt: number;
@@ -179,6 +183,21 @@ export interface EligibleCardsResponse {
   cards: Array<{ card: CardView; quickPrice: number }>;
   /** 开箱主播要的是没拆的卡包 */
   packs: Array<{ id: number; seriesId: string; name: string; kind: string; quickPrice: number }>;
+  /** 柜台翻卡册用：每本卡册里有几张符合这位顾客 */
+  binders: Array<{ id: number; kind: string; name: string; used: number; slots: number; matchCount: number }>;
+  /** 桌面散放的卡（翻卡册接口里 binderId = 0） */
+  loose: { count: number; matchCount: number };
+}
+
+/** GET /api/counter/:id/binder/:binderId?page=&matchFirst= ：按这位顾客翻一本卡册（0 = 桌面散放） */
+export interface CounterBinderPageResponse {
+  ok: true;
+  binder: { id: number; kind: string; name: string };
+  page: number;
+  pages: number;
+  matchFirst: boolean;
+  /** match = 符合这位顾客的要求；不符合的 quickPrice 为 null，前端变暗、不能点 */
+  cards: Array<{ card: CardView; match: boolean; quickPrice: number | null }>;
 }
 
 export interface OfferResponse {
@@ -209,4 +228,48 @@ export interface MeResponse {
   gameDay: number;
   /** 测试账号（DEV_AUTH=1 且在 DEV_UNLIMITED_IDS 里）才是 true：前端显示测试工具 */
   devTools: boolean;
+}
+
+// ---------- 卡册（DESIGN 4.5） ----------
+
+export interface BinderView {
+  id: number;
+  kind: string;
+  name: string;
+  slots: number;
+  used: number;
+  effect: string;
+}
+
+export interface BinderCatalogItem {
+  kind: string;
+  name: string;
+  price: number;
+  slots: number;
+  effect: string;
+}
+
+export interface BindersResponse {
+  ok: true;
+  binders: BinderView[];
+  /** 桌面上散放的卡（会磨损） */
+  loose: { slots: number; cards: CardView[] };
+  /** 用品店里能买的卡册 */
+  catalog: BinderCatalogItem[];
+}
+
+export interface BinderPageResponse {
+  ok: true;
+  binder: BinderView;
+  page: number;
+  pages: number;
+  cards: CardView[];
+}
+
+export interface BuyBinderResponse {
+  ok: true;
+  credits: number;
+  binder: BinderView;
+  /** 买完自动从桌面收进来几张散卡 */
+  placed: number;
 }

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { COUNTER, CUSTOMER, PLAYER, REPUTATION } from '@kanu/shared/balance';
 import type { CounterResponse, EligibleCardsResponse, OfferResponse } from '@kanu/shared/types';
-import { evaluateOffer, mindPrice, quickPrice, rollCustomer } from '../src/game/customers.ts';
+import { evaluateOffer, mindPrice, quickPrice, rollCustomer, rollCustomerCount } from '../src/game/customers.ts';
 import { seeded, type Rng } from '../src/game/rng.ts';
 import { dayKey } from '../src/db/index.ts';
 import { HIDDEN_KEYS, NOW, findKeys, idem, login, setup } from './helpers.ts';
@@ -28,13 +28,14 @@ const offer = (app: ReturnType<typeof setup>['app'], h: Record<string, string>, 
   app.inject({ method: 'POST', url: `/api/counter/${customerId}/offer`, headers: { ...h, ...key }, payload: { instanceId, price } });
 
 describe('营业日和顾客生成（FR-CTR-1～3）', () => {
-  it('第一次打开柜台一次来 6 位，再打开还是同一批', async () => {
+  it('第一次打开柜台一次来 4–8 位，再打开还是同一批', async () => {
     const { app } = setup();
     cleanup = () => app.close();
     const h = await login(app);
     const a = (await app.inject({ method: 'GET', url: '/api/counter', headers: h })).json() as CounterResponse;
     expect(a.day).toBe(1);
-    expect(a.customers).toHaveLength(COUNTER.customersPerDay);
+    expect(a.customers.length).toBeGreaterThanOrEqual(4);
+    expect(a.customers.length).toBeLessThanOrEqual(8);
     const b = (await app.inject({ method: 'GET', url: '/api/counter', headers: h })).json() as CounterResponse;
     expect(b.customers.map((c) => c.id)).toEqual(a.customers.map((c) => c.id));
   });
@@ -53,7 +54,7 @@ describe('营业日和顾客生成（FR-CTR-1～3）', () => {
     expect(repo.getPlayer(UID)!.game_day).toBe(2);
     const day2 = (await app.inject({ method: 'GET', url: '/api/counter', headers: h })).json() as CounterResponse;
     expect(day2.day).toBe(2);
-    expect(day2.customers).toHaveLength(COUNTER.customersPerDay);
+    expect(day2.customers.length).toBeGreaterThanOrEqual(4);
     expect(day2.customers.some((c) => day1.customers.some((x) => x.id === c.id))).toBe(false);
     const old = await app.inject({ method: 'GET', url: `/api/counter/${day1.customers[0]!.id}/cards`, headers: h });
     expect(old.statusCode).toBe(404);
@@ -70,6 +71,17 @@ describe('营业日和顾客生成（FR-CTR-1～3）', () => {
     await app.inject({ method: 'POST', url: '/api/day/end', headers: { ...h, ...key } });
     await app.inject({ method: 'POST', url: '/api/day/end', headers: { ...h, ...key } });
     expect(repo.getPlayer(UID)!.game_day).toBe(2);
+  });
+
+  it('每天来几位按 4–8 位随机，平均 6 位（不改经济）', () => {
+    const rng = seeded(9);
+    const n = 20_000;
+    let sum = 0;
+    const seen = new Set<number>();
+    for (let i = 0; i < n; i += 1) { const c = rollCustomerCount(rng); sum += c; seen.add(c); }
+    expect([...seen].sort()).toEqual([4, 5, 6, 7, 8]);
+    expect(sum / n).toBeCloseTo(COUNTER.customersPerDay, 1);
+    expect(rollCustomerCount(seeded(1), 2)).toBeGreaterThanOrEqual(6);
   });
 
   it('MVP 只有四类顾客，需求和预算区间都有', () => {

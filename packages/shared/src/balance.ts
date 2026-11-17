@@ -165,6 +165,11 @@ export const COUNTER = {
    * 接待完（或请走）就能打烊，马上进入下一天。不再按悉尼时间分早中晚。
    */
   customersPerDay: 6,
+  /**
+   * 每个营业日实际来几位：按这张表随机（ppm），平均正好 customersPerDay，所以经济模拟的结论不变。
+   * 2026-11-17 用户要求每天客人不固定。科技树客流节点、特殊事件在这个基础上加人。
+   */
+  customersPerDayDist: { 4: 100_000, 5: 200_000, 6: 400_000, 7: 200_000, 8: 100_000 } as Record<number, number>,
   /** 心理价位随机浮动范围 */
   floatMin: 0.85,
   floatMax: 1.25,

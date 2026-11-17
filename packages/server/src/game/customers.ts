@@ -33,6 +33,12 @@ export interface RolledCustomer {
   budgetHigh: number;
 }
 
+/** 这个营业日来几位顾客（COUNTER.customersPerDayDist，平均 customersPerDay）；bonus 是科技树和事件额外加的人 */
+export function rollCustomerCount(rng: Rng, bonus = 0): number {
+  const counts = Object.keys(COUNTER.customersPerDayDist).map(Number).sort((a, b) => a - b);
+  return pickPpm(rng, counts, (n) => COUNTER.customersPerDayDist[n]!) + bonus;
+}
+
 /** 每类顾客收哪些稀有度 */
 export function rarityClass(type: CustomerType): Rarity[] {
   switch (type) {

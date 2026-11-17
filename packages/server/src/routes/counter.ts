@@ -12,7 +12,7 @@ import { COUNTER, CUSTOMER, PACKS, RARITIES, RARITY, REPUTATION, type CustomerTy
 import type { CardView, CounterResponse, CustomerView, EligibleCardsResponse, EndDayResponse, OfferResponse } from '@kanu/shared/types';
 import { ApiError, fail, idempotencyKey, type Deps } from '../app.ts';
 import { dayKey, type CustomerRow } from '../db/index.ts';
-import { detectFake, evaluateOffer, matches, mindPrice, quickPrice, rollCustomer, type Demand, type SellableCard } from '../game/customers.ts';
+import { detectFake, evaluateOffer, matches, mindPrice, quickPrice, rollCustomer, rollCustomerCount, type Demand, type SellableCard } from '../game/customers.ts';
 import { loadLines, type LineEvent } from '../content.ts';
 
 const lines = loadLines();
@@ -56,16 +56,16 @@ export function registerCounterRoutes(app: FastifyInstance, deps: Deps, now: () 
   const say = (type: string, ev: LineEvent, vars: Record<string, string> = {}) =>
     pick(lines.byType[type]?.[ev] ?? ['……']).replace(/\{(\w+)\}/g, (_, k: string) => vars[k] ?? '');
 
-  /** 本营业日的顾客：第一次打开柜台时一次生成 customersPerDay 位（FR-CTR-1）；打烊后的不再出现（FR-CTR-2） */
+  /** 本营业日的顾客：第一次打开柜台时决定来几位（4–8 位，平均 6）并一次生成（FR-CTR-1）；打烊后的不再出现（FR-CTR-2） */
   const ensureCustomers = repo.db.transaction((ownerId: string, t: number) => {
     const player = repo.getPlayer(ownerId)!;
     const day = dayKey(player.game_day);
     const existing = repo.customersFor(ownerId, day);
-    if (existing.length >= COUNTER.customersPerDay) return { day: player.game_day, rows: existing };
+    if (existing.length > 0) return { day: player.game_day, rows: existing };
     const inventory = repo.sellableCards(ownerId).map(toSellable);
     const allTags = [...new Set(repo.allTemplates().filter((x) => x.series_id === deps.currentSeries).flatMap((x) => JSON.parse(x.tags) as string[]))];
-    for (let seat = 0; seat < COUNTER.customersPerDay; seat += 1) {
-      if (existing.some((c) => c.seat === seat)) continue;
+    const count = rollCustomerCount(rng);
+    for (let seat = 0; seat < count; seat += 1) {
       const c = rollCustomer(rng, { inventory, allTags, typicalPrice });
       const text = demandText(c.type, c.demand);
       repo.insertCustomer({
@@ -93,7 +93,7 @@ export function registerCounterRoutes(app: FastifyInstance, deps: Deps, now: () 
       if (replay) return replay;
       const player = repo.getPlayer(userId)!;
       const today = repo.customersFor(userId, dayKey(player.game_day));
-      if (today.length < COUNTER.customersPerDay) throw new ApiError(400, 'not_open', '今天还没开门，先去柜台看看顾客');
+      if (today.length === 0) throw new ApiError(400, 'not_open', '今天还没开门，先去柜台看看顾客');
       if (today.some((c) => c.status === 'waiting')) throw new ApiError(400, 'customers_waiting', '还有顾客在等，接待完或请走再打烊');
       repo.advanceDay(userId);
       repo.logEvent(userId, now(), 'day_end', { day: player.game_day });

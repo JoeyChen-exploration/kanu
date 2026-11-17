@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import Database from 'better-sqlite3';
-import { PLAYER, RARITY, type Rarity, type Style } from '@kanu/shared/balance';
+import { PLAYER, RARITY, type QuestMetric, type Rarity, type Style } from '@kanu/shared/balance';
 import type { CardLocation, CardView, SessionUser } from '@kanu/shared/types';
 import { publicPrice } from '../game/price.ts';
 
@@ -157,6 +157,14 @@ const MIGRATIONS: string[] = [
    );
    INSERT OR IGNORE INTO collection_styles (discord_id, template_id, style, first_at)
      SELECT owner_id, template_id, style, MIN(created_at) FROM card_instances WHERE authenticity = 'real' GROUP BY owner_id, template_id, style;`,
+
+  // 11：任务栏 / 新手指引（2026-11-17）：领过哪些任务的奖励
+  `CREATE TABLE quest_claims (
+     discord_id TEXT NOT NULL,
+     quest_id   TEXT NOT NULL,
+     claimed_at INTEGER NOT NULL,
+     PRIMARY KEY (discord_id, quest_id)
+   );`,
 ];
 
 /** 营业日在 customers、daily_usage 里的键 */
@@ -467,6 +475,26 @@ function createRepo(db: Database.Database) {
     setGrade: (cardId: number, grade: string) => db.prepare('UPDATE card_instances SET grade = ? WHERE id = ?').run(grade, cardId),
     looseInstances: (ownerId: string) =>
       db.prepare("SELECT * FROM card_instances WHERE owner_id = ? AND location = 'inventory' AND binder_id IS NULL").all(ownerId) as InstanceRow[],
+
+    /** 任务进度：从流水和库存里数（不另记计数） */
+    questStats(ownerId: string): Record<QuestMetric, number> {
+      const count = (sql: string) => (db.prepare(sql).get(ownerId) as { n: number }).n;
+      const player = q.getPlayer.get(ownerId);
+      return {
+        packsBought: count("SELECT COUNT(*) AS n FROM events_log WHERE discord_id = ? AND kind = 'credits' AND json_extract(data, '$.why') IN ('store', 'store_test_free')"),
+        packsOpened: count("SELECT COUNT(*) AS n FROM events_log WHERE discord_id = ? AND kind = 'pack_open'"),
+        sales: count("SELECT COUNT(*) AS n FROM events_log WHERE discord_id = ? AND kind = 'credits' AND json_extract(data, '$.why') = 'sale'"),
+        daysEnded: count("SELECT COUNT(*) AS n FROM events_log WHERE discord_id = ? AND kind = 'day_end'"),
+        collected: count('SELECT COUNT(*) AS n FROM collection WHERE discord_id = ?'),
+        showcaseLevel: player?.showcase_level ?? 0,
+        showcaseCards: count("SELECT COUNT(*) AS n FROM card_instances WHERE owner_id = ? AND location = 'showcase'"),
+        binders: count('SELECT COUNT(*) AS n FROM binders WHERE owner_id = ?'),
+      };
+    },
+    questClaims: (ownerId: string) =>
+      new Set((db.prepare('SELECT quest_id FROM quest_claims WHERE discord_id = ?').all(ownerId) as Array<{ quest_id: string }>).map((r) => r.quest_id)),
+    claimQuest: (ownerId: string, questId: string, now: number) =>
+      db.prepare('INSERT INTO quest_claims (discord_id, quest_id, claimed_at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING').run(ownerId, questId, now).changes > 0,
 
     collection(ownerId: string) {
       const owned = new Set((db.prepare('SELECT template_id FROM collection WHERE discord_id = ?').all(ownerId) as Array<{ template_id: string }>).map((r) => r.template_id));

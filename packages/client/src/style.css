@@ -303,6 +303,30 @@ h2 small { color: var(--muted); font-weight: normal; font-size: 13px; margin-lef
 .counter-sources { margin-top: 14px; }
 .picker-head { justify-content: space-between; }
 
+/* 任务栏（FR-UI-4）：顶部三角收起 / 展开。不盖住内容：
+   方屏 / 竖屏是顶栏下面的一条（把内容往下推）；横屏展开时占主画面右边一栏，收起时缩成右上角一个小标签 */
+.quest-bar {
+  flex: none; margin: 6px 12px 0; background: rgba(23, 26, 35, 0.96); border: 1px solid var(--line);
+  border-radius: 12px; overflow: hidden;
+}
+.quest-head { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 12px; background: none; border: none; text-align: left; }
+.quest-tri { font-size: 11px; color: var(--accent); }
+.quest-count { color: var(--muted); font-size: 12px; }
+.quest-ready { margin-left: auto; font-size: 11px; font-weight: 700; color: #111; background: var(--accent); border-radius: 999px; padding: 1px 8px; animation: quest-pulse 1.6s ease-in-out infinite; }
+@keyframes quest-pulse { 50% { opacity: 0.55; } }
+.quest-body { display: grid; gap: 6px; padding: 0 8px 8px; max-height: 34dvh; overflow-y: auto; }
+.quest { display: grid; gap: 4px; background: var(--panel-2); border-radius: 10px; padding: 6px; }
+.quest.done { outline: 1px solid var(--accent); }
+.quest-main { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 8px; background: none; border: none; padding: 0; text-align: left; }
+.quest-title { font-weight: 700; font-size: 13px; }
+.quest-hint { grid-column: 1 / -1; grid-row: 2; font-size: 11px; color: var(--muted); line-height: 1.35; }
+.quest-prog { grid-column: 1; grid-row: 3; align-self: center; height: 4px; border-radius: 2px; background: rgba(0, 0, 0, 0.35); overflow: hidden; }
+.quest-prog span { display: block; height: 100%; background: var(--accent); }
+.quest-num { grid-column: 2; grid-row: 3; font-size: 11px; color: var(--muted); }
+.quest-reward { font-size: 11px; color: var(--muted); text-align: right; }
+.quest-claim { min-height: 30px; border: none; border-radius: 8px; background: var(--accent); color: #111; font-weight: 700; font-size: 13px; }
+.quest-flash { margin: 2px 4px; text-align: center; color: var(--accent); font-weight: 700; }
+
 /* 图鉴：五本册子摆在书架上（美术到位后换封面图） */
 .book-shelf { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; margin-top: 8px; }
 .book { position: relative; display: flex; text-align: left; padding: 0; border: none; background: none; border-radius: 4px 12px 12px 4px; transition: transform 0.15s; }
@@ -426,4 +450,25 @@ h2 small { color: var(--muted); font-weight: normal; font-size: 13px; margin-lef
   .topbar { display: flex; flex-wrap: wrap; justify-content: center; border: none; background: none; padding: 8px; }
   .topbar-name { flex: none; }
   .topbar-day { display: block; grid-column: auto; }
+}
+
+/* 任务栏在横屏：展开时占右边一栏（主画面让出来），收起时缩成右上角小标签 */
+@container app (aspect-ratio >= 1.25) {
+  .shell {
+    grid-template-columns: clamp(150px, 17cqw, 210px) minmax(0, 1fr) auto;
+    grid-template-areas: "top main quest" "nav main quest";
+  }
+  .quest-bar.open {
+    grid-area: quest; grid-row: 1 / -1; align-self: start; width: clamp(210px, 22cqw, 270px);
+    margin: 8px 8px 8px 0; max-height: calc(100cqh - 16px); display: flex; flex-direction: column;
+  }
+  .quest-bar.open .quest-body { max-height: none; flex: 1; min-height: 0; }
+  .quest-bar:not(.open) {
+    position: fixed; z-index: 18; top: calc(8px + var(--island-top, 0px)); right: calc(8px + var(--island-right, 0px)); margin: 0;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+  }
+  .quest-bar:not(.open) .quest-head { padding: 6px 10px; }
+}
+@container app (max-height: 300px) {
+  .quest-bar { display: none; }
 }

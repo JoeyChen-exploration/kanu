@@ -28,5 +28,10 @@ export async function api<T>(path: string, init: { method?: 'GET' | 'POST'; body
     const err = (data ?? {}) as Partial<ApiError>;
     throw new ApiFailure(res.status, err.code ?? 'network', err.message ?? '网络出错了，稍后再试');
   }
+  // 写操作成功后广播一下，任务栏这类"跟着进度走"的地方自己刷新
+  if (init.method === 'POST' && !path.startsWith('/quests')) window.dispatchEvent(new Event(WRITE_EVENT));
   return data as T;
 }
+
+/** 写操作成功后在 window 上广播的事件名 */
+export const WRITE_EVENT = 'kanu:write';

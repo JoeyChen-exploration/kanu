@@ -39,6 +39,8 @@ COUNTER.demandHitPpm = Math.round(arg('hit', COUNTER.demandHitPpm / 1e6) * 1e6);
 const ONLY_MAIN = arg('only-main', 0) === 1;
 // --shop 买店价、--rent-base 第 1 周租金、--rent-growth 每周倍率
 const SHOP = arg('shop', SHOP_PRICE);
+// --start 开局信用点（估新手任务奖励的影响：任务奖励大多在第一周拿到，用"开局 + 全部奖励"当上限）
+PLAYER.startCredits = arg('start', PLAYER.startCredits);
 RENT.base = arg('rent-base', RENT.base);
 RENT.growth = arg('rent-growth', RENT.growth);
 // --price SR=800,SSR=2500：临时改某几档的基准价

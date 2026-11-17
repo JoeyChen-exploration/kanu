@@ -24,9 +24,9 @@ describe('珍藏柜展示分（FR-INV-11，纯函数）', () => {
     expect(showcaseScore([{ rarity: 'N', style: 'gold' }])).toBe(0);
   });
 
-  it('每 10 分 +1%，封顶；到门槛耐心 +1', () => {
+  it('每 pointsPerPct 分 +1%（不足的不算），封顶；到门槛耐心 +1', () => {
     expect(showcaseEffects(0)).toEqual({ priceMult: 1, patienceBonus: 0 });
-    expect(showcaseEffects(SHOWCASE.pointsPerPct * 3 + 5).priceMult).toBeCloseTo(1.03);
+    expect(showcaseEffects(SHOWCASE.pointsPerPct * 3 + SHOWCASE.pointsPerPct - 1).priceMult).toBeCloseTo(1.03);
     expect(showcaseEffects(100_000).priceMult).toBeCloseTo(1 + SHOWCASE.maxPriceBonus);
     expect(showcaseEffects(SHOWCASE.patienceAt - 1).patienceBonus).toBe(0);
     expect(showcaseEffects(SHOWCASE.patienceAt).patienceBonus).toBe(SHOWCASE.patienceBonus);
@@ -50,7 +50,9 @@ describe('珍藏柜解锁和升级（FR-INV-11）', () => {
     cleanup = () => app.close();
     const h = await login(app);
     expect(await status(app, h)).toMatchObject({ level: 0, slots: 0, used: 0, next: { level: 1, price: SHOWCASE.levels[1]!.price } });
-    expect((await upgrade(app, h)).json().code).toBe(PLAYER.startCredits < SHOWCASE.levels[1]!.price ? 'insufficient_credits' : undefined);
+    repo.db.prepare(`UPDATE players SET credits = ${SHOWCASE.levels[1]!.price - 1}`).run();
+    expect((await upgrade(app, h)).json().code).toBe('insufficient_credits');
+    expect(PLAYER.startCredits).toBeGreaterThan(0);
 
     repo.db.prepare('UPDATE players SET credits = 1000000').run();
     const key = idem();

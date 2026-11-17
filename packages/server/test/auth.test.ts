@@ -1,37 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { PLAYER } from '@kanu/shared/balance';
-import { buildApp } from '../src/app.ts';
-import { loadConfig } from '../src/config.ts';
-import { openDb } from '../src/db/index.ts';
 import { createSessionCodec } from '../src/auth/session.ts';
-import { AuthError, type DiscordAuth } from '../src/auth/discord.ts';
-import { createWalletClient } from '../src/wallet/client.ts';
-
-const NOW = 1_800_000_000_000;
-
-function setup(opts: { devAuth?: boolean; discord?: DiscordAuth; disabled?: boolean } = {}) {
-  const config = {
-    ...loadConfig({ DEV_AUTH: opts.devAuth ? '1' : '0', SESSION_SECRET: 'test-secret', KANU_DISABLED: opts.disabled ? '1' : '0' }),
-    clientDist: '/nonexistent',
-  };
-  const repo = openDb(':memory:');
-  const discord: DiscordAuth = opts.discord ?? {
-    exchange: async (code) => {
-      if (code === 'bad') throw new AuthError('discord_token', 'Discord 登录失败，请重新打开');
-      if (code === 'outsider') throw new AuthError('wrong_guild', '卡奴只在本服务器开放');
-      return { accessToken: 'at-123', user: { id: '123456789012345678', name: '阿奴', avatar: null } };
-    },
-  };
-  const app = buildApp({
-    config,
-    repo,
-    sessions: createSessionCodec('test-secret'),
-    discord,
-    wallet: createWalletClient({ mode: 'mock', port: null, secret: null, mockCoins: 321 }),
-    now: () => NOW,
-  });
-  return { app, repo };
-}
+import { NOW, setup } from './helpers.ts';
 
 let cleanup: (() => Promise<void>) | null = null;
 afterEach(async () => { await cleanup?.(); cleanup = null; });

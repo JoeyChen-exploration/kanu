@@ -183,6 +183,18 @@ export const PLAYER = {
 
 export const SEASON = { weeks: 8 };
 
+/** 珍藏柜（DESIGN 8.1、FR-INV-6）：默认格数，科技树 S1 可扩 */
+export const SHOWCASE = { slots: 3 };
+
+/** 开包播报（FR-PACK-6）：开出这个稀有度及以上、或编号限定时全服播报 */
+export const ANNOUNCE = { minRarity: 'UR' as Rarity };
+
+/** 播报节流（FR-NOTIFY-3）：同一频道每分钟最多几条，多出来的合并成一条 */
+export const NOTIFY = { perMinute: 5 };
+
+/** 幂等记录保留多久（SRS 第 5 节 idempotency） */
+export const IDEMPOTENCY = { ttlMs: 48 * 3600e3 };
+
 // ---------- 金币兑换（DESIGN 11） ----------
 export const EXCHANGE = {
   /** 多少信用点换 1 金币 */

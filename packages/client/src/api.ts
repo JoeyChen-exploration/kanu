@@ -10,12 +10,16 @@ export class ApiFailure extends Error {
   }
 }
 
-export async function api<T>(path: string, init: { method?: 'GET' | 'POST'; body?: unknown } = {}): Promise<T> {
+/** 每次点击生成一个新的幂等 key（NFR-SEC-5）；网络重试时复用同一个 key，服务器只执行一次 */
+export const newIdempotencyKey = () => crypto.randomUUID();
+
+export async function api<T>(path: string, init: { method?: 'GET' | 'POST'; body?: unknown; idempotencyKey?: string } = {}): Promise<T> {
   const res = await fetch(`/api${path}`, {
     method: init.method ?? 'GET',
     headers: {
       ...(init.body !== undefined ? { 'content-type': 'application/json' } : {}),
       ...(session ? { authorization: `Bearer ${session}` } : {}),
+      ...(init.idempotencyKey ? { 'idempotency-key': init.idempotencyKey } : {}),
     },
     body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
   });

@@ -1,8 +1,12 @@
-// M0 首页：你好，<名字>、信用点、旺财金币余额（SRS M0 / FR-AUTH-7）。
+// 卡奴前端：登录 → 底部四个标签页（店铺、进货、库存、图鉴）。
 import { useEffect, useRef, useState } from 'react';
 import type { ConfigResponse, MeResponse } from '@kanu/shared/types';
 import { api } from './api.ts';
 import { devLogin, insideDiscord, loginWithDiscord } from './discord.ts';
+import { fmt } from './Card.tsx';
+import { Packs } from './pages/Packs.tsx';
+import { Inventory } from './pages/Inventory.tsx';
+import { Collection } from './pages/Collection.tsx';
 
 type State =
   | { kind: 'loading'; text: string }
@@ -10,10 +14,12 @@ type State =
   | { kind: 'ready'; me: MeResponse }
   | { kind: 'error'; text: string };
 
-const fmt = (n: number) => n.toLocaleString('zh-CN');
+type Tab = 'shop' | 'packs' | 'inventory' | 'collection';
+const TABS: Array<[Tab, string]> = [['shop', '店铺'], ['packs', '进货'], ['inventory', '库存'], ['collection', '图鉴']];
 
 export function App() {
   const [state, setState] = useState<State>({ kind: 'loading', text: '正在开店…' });
+  const [tab, setTab] = useState<Tab>('shop');
   const started = useRef(false);
 
   const loadMe = async () => setState({ kind: 'ready', me: await api<MeResponse>('/me') });
@@ -41,34 +47,45 @@ export function App() {
   if (state.kind === 'dev-login') return <DevLogin onLogin={async (name) => { await devLogin(name); await loadMe(); }} />;
 
   const { me } = state;
+  const patchMe = (p: Partial<MeResponse>) => setState({ kind: 'ready', me: { ...me, ...p } });
+
   return (
-    <main className="shop">
-      <header>
+    <div className="app">
+      <header className="topbar">
         <Avatar url={me.user.avatar} />
-        <h1>你好，{me.user.name}</h1>
+        <span className="topbar-name">{me.user.name}</span>
+        <span className="topbar-credits">{fmt(me.credits)} 信用点</span>
       </header>
+      <main className="content">
+        {tab === 'shop' && <Shop me={me} />}
+        {tab === 'packs' && <Packs me={me} onChange={patchMe} />}
+        {tab === 'inventory' && <Inventory />}
+        {tab === 'collection' && <Collection />}
+      </main>
+      <nav className="tabs">
+        {TABS.map(([k, label]) => (
+          <button key={k} className={tab === k ? 'on' : ''} onClick={() => { setTab(k); if (k === 'shop') loadMe().catch(() => {}); }}>{label}</button>
+        ))}
+      </nav>
+    </div>
+  );
+}
+
+function Shop({ me }: { me: MeResponse }) {
+  return (
+    <section className="page">
+      <h1>你好，{me.user.name}</h1>
       <section className="stats">
-        <div className="stat">
-          <span className="label">信用点</span>
-          <span className="value">{fmt(me.credits)}</span>
-        </div>
+        <div className="stat"><span className="label">信用点</span><span className="value">{fmt(me.credits)}</span></div>
         <div className="stat">
           <span className="label">旺财金币</span>
-          <span className="value">
-            {me.wallet.coins === null ? '暂时查不到' : !me.wallet.opened ? '还没开户' : fmt(me.wallet.coins)}
-          </span>
+          <span className="value">{me.wallet.coins === null ? '暂时查不到' : !me.wallet.opened ? '还没开户' : fmt(me.wallet.coins)}</span>
         </div>
-        <div className="stat">
-          <span className="label">信誉</span>
-          <span className="value">{me.reputation}</span>
-        </div>
-        <div className="stat">
-          <span className="label">摊位</span>
-          <span className="value">第 {me.weekNo} 周</span>
-        </div>
+        <div className="stat"><span className="label">信誉</span><span className="value">{me.reputation}</span></div>
+        <div className="stat"><span className="label">摊位</span><span className="value">第 {me.weekNo} 周</span></div>
       </section>
-      <p className="hint">店铺还在装修，开包、鉴定和柜台下一步就来。</p>
-    </main>
+      <p className="hint">柜台、鉴定和房租还在装修。先去"进货"开几包吧。</p>
+    </section>
   );
 }
 

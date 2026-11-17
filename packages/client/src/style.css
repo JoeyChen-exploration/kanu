@@ -1,30 +1,140 @@
-/* M0 的临时样式：手机竖屏 360 px 起（NFR-UX-2），正式美术到位后替换 */
+/* 临时样式：手机竖屏 360 px 起（NFR-UX-2），按钮不小于 44 px。正式美术到位后替换卡面和配色 */
 :root {
   --bg: #0d0f14;
   --panel: #171a23;
+  --panel-2: #20242f;
+  --line: #2a2f3c;
   --text: #e8e6e3;
   --muted: #8a8f9c;
   --accent: #f5c542;
+  --tabs-h: 56px;
   color-scheme: dark;
   font-family: system-ui, -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
 }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--text); min-height: 100dvh; }
+button { font: inherit; color: inherit; cursor: pointer; }
+button:disabled { opacity: 0.45; cursor: default; }
+h1 { font-size: 22px; margin: 4px 0 16px; }
+h2 { font-size: 17px; margin: 18px 0 10px; }
+h2 small { color: var(--muted); font-weight: normal; font-size: 13px; margin-left: 6px; }
+.hint { color: var(--muted); font-size: 14px; }
+.error { color: #ff6b6b; }
+
 .center { min-height: 100dvh; display: grid; place-items: center; padding: max(16px, var(--island-top, 0px)) 16px max(16px, var(--island-bottom, 0px)); text-align: center; color: var(--muted); }
-/* 顶部避开灵动岛 / 刘海、底部避开主屏指示条，数值由 safe-area.ts 算 */
-.shop { max-width: 480px; margin: 0 auto; padding: max(16px, var(--island-top, 0px)) 16px max(16px, var(--island-bottom, 0px)); }
-header { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
-h1 { font-size: 22px; margin: 0; }
-.avatar { width: 44px; height: 44px; border-radius: 50%; }
-.avatar.placeholder { background: var(--panel); }
+
+/* ---- 整体布局：顶栏 + 内容 + 底部标签栏 ---- */
+.app { max-width: 520px; margin: 0 auto; min-height: 100dvh; }
+.topbar {
+  position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 10px;
+  padding: max(10px, var(--island-top, 0px)) 16px 10px; background: rgba(13, 15, 20, 0.92); backdrop-filter: blur(6px);
+  border-bottom: 1px solid var(--line);
+}
+.topbar-name { flex: 1; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.topbar-credits { color: var(--accent); font-weight: 600; white-space: nowrap; }
+.avatar { width: 32px; height: 32px; border-radius: 50%; flex: none; }
+.avatar.placeholder { background: var(--panel-2); }
+.content { padding: 4px 16px calc(var(--tabs-h) + max(16px, var(--island-bottom, 0px)) + 8px); }
+.tabs {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; display: flex; justify-content: center;
+  background: rgba(13, 15, 20, 0.96); border-top: 1px solid var(--line); padding-bottom: var(--island-bottom, 0px);
+}
+.tabs button { flex: 1; max-width: 130px; height: var(--tabs-h); background: none; border: none; color: var(--muted); font-size: 15px; }
+.tabs button.on { color: var(--accent); font-weight: 600; }
+
+/* ---- 首页 ---- */
 .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .stat { background: var(--panel); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 6px; }
 .label { font-size: 13px; color: var(--muted); }
 .value { font-size: 20px; font-weight: 600; color: var(--accent); }
-.hint { margin-top: 20px; color: var(--muted); font-size: 14px; }
+
+/* ---- 按钮 ---- */
+.primary, .secondary { display: block; width: 100%; min-height: 48px; border-radius: 12px; border: none; font-size: 16px; font-weight: 600; margin-top: 12px; }
+.primary { background: var(--accent); color: #1a1a1a; }
+.secondary { background: var(--panel-2); }
+.chip { min-height: 36px; padding: 0 14px; border-radius: 18px; border: 1px solid var(--line); background: var(--panel); font-size: 14px; }
+.chip.on { background: var(--accent); color: #1a1a1a; border-color: var(--accent); font-weight: 600; }
+.filters { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 8px; }
+.filters .chip { flex: none; }
+.pager { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 12px; color: var(--muted); }
+
+/* ---- 开包 ---- */
+.pack-info { background: var(--panel); border-radius: 12px; padding: 12px 14px; display: grid; gap: 6px; font-size: 14px; color: var(--muted); }
+.pack-info b { color: var(--text); }
+.pity-hit { text-align: center; color: var(--accent); font-weight: 700; }
+.pack-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 14px; }
+.pack-cards > :nth-child(4) { grid-column: 1 / 2; margin-left: 50%; }
+.pack-cards > :nth-child(5) { margin-left: 50%; }
+.flip { background: none; border: none; padding: 0; perspective: 800px; }
+.flip-inner { position: relative; transition: transform 0.55s cubic-bezier(0.2, 0.7, 0.2, 1); transform-style: preserve-3d; }
+.flip.flipped .flip-inner { transform: rotateY(180deg); }
+.flip-back, .flip-front { backface-visibility: hidden; }
+.flip-front { position: absolute; inset: 0; transform: rotateY(180deg); }
+
+/* ---- 卡牌（占位卡面） ---- */
+.card { --r1: #3a3f4d; --r2: #232733; aspect-ratio: 63 / 88; width: 100%; border-radius: 10px; padding: 4px; background: #4a4f5c; position: relative; overflow: hidden; }
+.card-face {
+  height: 100%; border-radius: 7px; background: linear-gradient(160deg, var(--r1), var(--r2));
+  display: flex; flex-direction: column; padding: 6px; gap: 4px; position: relative; overflow: hidden;
+}
+.card-top { display: flex; justify-content: space-between; font-size: 11px; font-weight: 700; }
+.card-rarity { background: rgba(0, 0, 0, 0.45); padding: 1px 6px; border-radius: 6px; }
+.card-serial { background: rgba(0, 0, 0, 0.55); padding: 1px 6px; border-radius: 6px; color: #e8e8f0; }
+.card-art { flex: 1; display: grid; place-items: center; font-size: 34px; font-weight: 800; color: rgba(255, 255, 255, 0.85); text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5); }
+.card-name { font-size: 13px; font-weight: 700; text-align: center; line-height: 1.2; }
+.card-tags { font-size: 11px; color: rgba(255, 255, 255, 0.7); text-align: center; }
+.card-style { position: absolute; bottom: 6px; right: 6px; font-size: 10px; background: rgba(0, 0, 0, 0.55); padding: 1px 6px; border-radius: 6px; }
+.card.small .card-art { font-size: 22px; }
+.card.small .card-name { font-size: 11px; }
+.card.small .card-top { font-size: 10px; }
+
+.rarity-N { --r1: #4b5160; --r2: #2c303a; }
+.rarity-R { --r1: #2f6b9a; --r2: #1c3550; }
+.rarity-SR { --r1: #7b4bc2; --r2: #3a2366; }
+.rarity-SSR { --r1: #d08a1f; --r2: #6b3d0b; }
+.rarity-UR { --r1: #d23f6b; --r2: #5e1430; }
+.rarity-LR { --r1: #1fb5a4; --r2: #0b4d47; }
+.rarity-MR { --r1: #ff6a3d; --r2: #3b0d6b; }
+
+/* 外层风格：外框颜色 + 卡面叠加效果 */
+.style-holo .card-face::after, .style-ice .card-face::after, .style-dark .card-face::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+}
+.style-holo .card-face::after { background: linear-gradient(115deg, transparent 30%, rgba(255, 255, 255, 0.35) 45%, rgba(120, 220, 255, 0.25) 55%, transparent 70%); background-size: 250% 100%; animation: sheen 3s linear infinite; }
+.style-ice .card-face::after { background: repeating-linear-gradient(60deg, rgba(255, 255, 255, 0.12) 0 2px, transparent 2px 9px), repeating-linear-gradient(-30deg, rgba(160, 220, 255, 0.12) 0 1px, transparent 1px 7px); }
+.style-gold { background: linear-gradient(135deg, #f7dc7a, #b8860b, #f7dc7a); }
+.style-gold .card-name { color: #ffe08a; }
+.style-dark { background: #050508; }
+.style-dark .card-face { background: radial-gradient(circle at 30% 20%, var(--r1), #050508 70%); }
+.style-dark .card-face::after { background-image: radial-gradient(1px 1px at 20% 30%, #fff, transparent), radial-gradient(1px 1px at 70% 60%, #cfe, transparent), radial-gradient(1px 1px at 40% 80%, #fff, transparent); animation: twinkle 2.5s ease-in-out infinite alternate; }
+.style-serial { background: linear-gradient(135deg, #e6e8ee, #8a8f9c, #e6e8ee); }
+@keyframes sheen { from { background-position: 150% 0; } to { background-position: -100% 0; } }
+@keyframes twinkle { from { opacity: 0.4; } to { opacity: 1; } }
+
+.card-back { background: #1d2230; }
+.card-back .card-face { background: repeating-linear-gradient(45deg, #232a3c 0 8px, #1a2030 8px 16px); justify-content: center; align-items: center; }
+.card-back-logo { font-size: 20px; font-weight: 800; color: var(--accent); letter-spacing: 2px; }
+.silhouette { background: var(--panel); }
+.silhouette .card-face { background: var(--panel-2); display: grid; place-items: center; color: var(--muted); font-size: 22px; }
+
+/* ---- 网格（库存、图鉴、珍藏柜） ---- */
+.grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+@media (max-width: 380px) { .grid { grid-template-columns: repeat(3, 1fr); } }
+.cell { position: relative; background: none; border: none; padding: 0; }
+.cell.locked { opacity: 0.55; }
+.empty-slot { aspect-ratio: 63 / 88; border: 1px dashed var(--line); border-radius: 10px; display: grid; place-items: center; color: var(--muted); font-size: 13px; }
+.count { position: absolute; right: 4px; bottom: 4px; background: rgba(0, 0, 0, 0.7); border-radius: 8px; padding: 0 6px; font-size: 11px; }
+.progress { height: 6px; background: var(--panel); border-radius: 3px; overflow: hidden; margin-bottom: 12px; }
+.progress div { height: 100%; background: var(--accent); }
+
+/* ---- 底部弹出的卡片详情 ---- */
+.sheet { position: fixed; inset: 0; z-index: 10; background: rgba(0, 0, 0, 0.6); display: flex; align-items: flex-end; justify-content: center; }
+.sheet-body { width: min(520px, 100%); background: var(--panel); border-radius: 16px 16px 0 0; padding: 16px 16px calc(16px + var(--island-bottom, 0px)); max-height: 90dvh; overflow-y: auto; }
+.sheet-body .card { width: 160px; margin: 0 auto 8px; }
+.flavor { color: var(--muted); font-style: italic; text-align: center; }
+
+/* ---- 开发登录 ---- */
 .dev-login { display: flex; flex-direction: column; gap: 10px; width: min(300px, 100%); }
-.dev-login input, .dev-login button { min-height: 44px; border-radius: 10px; border: 1px solid #2a2f3c; font-size: 16px; padding: 0 12px; }
+.dev-login input, .dev-login button { min-height: 44px; border-radius: 10px; border: 1px solid var(--line); font-size: 16px; padding: 0 12px; }
 .dev-login input { background: var(--panel); color: var(--text); }
 .dev-login button { background: var(--accent); color: #1a1a1a; font-weight: 600; border: none; }
-.dev-login button:disabled { opacity: 0.5; }
-.error { color: #ff6b6b; }

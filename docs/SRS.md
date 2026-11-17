@@ -278,7 +278,9 @@ MVP 需要的表（字段为主要字段，类型和索引在实现时定）：
 | POST | /api/auth/token | 用授权码换 token 和会话 | MVP |
 | GET | /api/me | 玩家状态：信用点、金币余额、周数、下次扣租、保底计数、今日剩余限购、本周剩余兑换额度 | MVP |
 | POST | /api/packs/open | `{ packType }` 开包，返回 5 张卡（只含已知信息） | MVP |
-| GET | /api/inventory | 分页和筛选参数，返回库存 | MVP |
+| GET | /api/inventory | 分页和筛选参数（`rarity`、`location`、`page`），返回库存 | MVP |
+| POST | /api/inventory/:id/showcase | `{ on }` 放进 / 取出珍藏柜（设成目标状态，天然幂等，不要求幂等 key） | MVP |
+| GET | /api/collection | 普通图鉴：每个系列的点亮进度、每张卡有没有过、现在有几张 | MVP |
 | POST | /api/appraise | `{ instanceId, track, method }`，track 是 `auth`（真伪）或 `grade`（品相） | MVP |
 | GET | /api/counter | 当前时段的顾客 | MVP |
 | POST | /api/counter/:id/offer | `{ instanceId, price }`，返回成交、还价或离开 | MVP |

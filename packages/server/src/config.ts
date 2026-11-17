@@ -16,6 +16,10 @@ export interface Config {
   dbPath: string;
   wallet: { mode: 'mock' | 'live'; port: number | null; secret: string | null; mockCoins: number };
   clientDist: string;
+  botToken: string | null;
+  announceChannelId: string | null;
+  /** 正规卡包开哪个系列（content/series 里的 id） */
+  currentSeries: string;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -40,6 +44,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       mockCoins: Number(env.DEV_WALLET_COINS ?? 500),
     },
     clientDist: path.resolve(ROOT, 'packages', 'client', 'dist'),
+    botToken: env.DISCORD_BOT_TOKEN || null,
+    announceChannelId: env.ANNOUNCE_CHANNEL_ID || null,
+    currentSeries: env.CURRENT_SERIES || 'NEO',
   };
 }
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { CUSTOMER, CUSTOMER_TYPES, GRADE, GRADES, PACKS, RARITIES, STYLE, STYLES, atLeast } from '@kanu/shared/balance';
+import { CUSTOMER, CUSTOMER_TYPES, ERRATA, GRADE, GRADES, PACKS, RARITIES, STYLE, STYLES, atLeast } from '@kanu/shared/balance';
 import { openPack, rollGrade, rollRarity, rollStyle, rollSubgrades } from '../src/game/cards.ts';
-import { gradingFee, labFee, loupeFee, publicPrice, rentForWeek } from '../src/game/price.ts';
+import { gradingFee, publicPrice, rentForWeek } from '../src/game/price.ts';
 import { PPM, seeded } from '../src/game/rng.ts';
 
 const always = () => true;
@@ -158,10 +158,10 @@ describe('价格（DESIGN 5、7、9.2）', () => {
     expect(publicPrice({ rarity: 'N', style: 'standard', publicGrade: 'BL' })).toBe(375);
   });
 
-  it('鉴定费', () => {
-    expect(loupeFee('SSR')).toBe(125);
-    expect(labFee('N', 'standard')).toBe(10);
+  it('送评费；封壳认定的错版价格再乘倍数，没封壳不读错版', () => {
     expect(gradingFee('UR', 'gold')).toBe(2700);
+    const base = publicPrice({ rarity: 'SR', style: 'standard', publicGrade: 9 });
+    expect(publicPrice({ rarity: 'SR', style: 'standard', publicGrade: 9, publicErrata: true })).toBe(base * ERRATA.mult);
   });
 
   it('摊位费第 8 周封顶（软赛季，周数不清零）', () => {

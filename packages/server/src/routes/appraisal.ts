@@ -1,95 +1,59 @@
-// 鉴定（M3，DESIGN 5，SRS FR-APPR-1～5）：
-//   GET  /api/appraisal                 鉴定台：在鉴定机构、评级社里的卡
-//   GET  /api/cards/:id/appraisal       一张卡做过的鉴定和结论、费用、还能做哪些
-//   POST /api/cards/:id/appraise        { method } 做一次鉴定（要幂等 key）
-//     肉眼 / 放大镜：马上出结论，只给主人看，不改价格；
-//     鉴定机构 / 评级社：扣费，卡送走（不能卖），过 APPRAISAL.*.days 个营业日在打烊时出结果（settleAppraisals）。
-// 每张卡每种方式最多做一次，结论存库不再变（FR-APPR-1）。一条线的结论不提另一条线的属性。
+// 鉴定（M3，DESIGN 5，2026-11-17 用户重定）：
+//   GET  /api/cards/:id/appraisal   一张卡的放大镜结论、送评状态、送评费
+//   POST /api/cards/:id/inspect     放大镜查验（柜台上的道具，拖到卡上）：免费，每张卡只查一次，结论存库不再变；
+//                                   重复请求返回同一个结论（设成目标状态，不需要幂等 key）
+//   GET  /api/phone                 电话：买了没有、价格、在评级社的卡
+//   POST /api/phone/buy             买电话（要幂等 key）
+//   POST /api/cards/:id/grade       打电话给星港评级社送评（要电话、要幂等 key、扣费）：卡送走不能卖，下次打烊出结果
+// 结论只给主人看；卡价只看封壳后公开的评分和错版（FR-APPR-5）。
 import type { FastifyInstance } from 'fastify';
-import { APPRAISAL, type Rarity, type Style } from '@kanu/shared/balance';
+import { APPRAISAL, PHONE, type Rarity, type Style } from '@kanu/shared/balance';
 import type {
-  AppraisalDeskResponse, AppraisalMethod, AppraisalNotes, AppraisalOutcome, AppraiseResponse, CardAppraisalResponse, CardView,
+  AppraisalOutcome, BuyPhoneResponse, CardAppraisalResponse, CardView, GradeResponse, InspectionView, PhoneResponse,
 } from '@kanu/shared/types';
 import { ApiError, fail, idempotencyKey, type Deps } from '../app.ts';
-import type { InstanceRow } from '../db/index.ts';
-import { eyeAuth, eyeGrade, gradeCard, labVerdict, loupeAuth, loupeGrade } from '../game/appraisal.ts';
-import { gradingFee, labFee, loupeFee } from '../game/price.ts';
+import { gradeCard, inspect } from '../game/appraisal.ts';
+import { gradingFee } from '../game/price.ts';
 
-const METHODS: AppraisalMethod[] = ['eye_auth', 'loupe_auth', 'lab', 'eye_grade', 'loupe_grade', 'grading'];
-const isMethod = (m: string): m is AppraisalMethod => (METHODS as string[]).includes(m);
-
-/** 这张卡的鉴定结论（只给主人） */
-export function notesOf(repo: Deps['repo'], cardId: number): AppraisalNotes {
-  const a = repo.appraisalsOf(cardId);
-  const get = <T>(m: string) => (a.get(m) as T | undefined) ?? null;
-  return {
-    eyeAuth: get('eye_auth'), loupeAuth: get('loupe_auth'), lab: get('lab'),
-    eyeGrade: get('eye_grade'), loupeGrade: get('loupe_grade'), grading: get('grading'),
-  };
-}
-
-/** 现在还能做哪些鉴定 */
-export function canOf(card: CardView, notes: AppraisalNotes): Record<AppraisalMethod, boolean> {
+/** 这张卡的鉴定状态（只给主人） */
+export function appraisalOf(repo: Deps['repo'], card: CardView): CardAppraisalResponse {
+  const a = repo.appraisalsOf(card.id);
+  const inspection = (a.get('inspect') as InspectionView | undefined) ?? null;
+  const grading = (a.get('grading') as CardAppraisalResponse['grading'] | undefined) ?? null;
   const here = card.location === 'inventory' || card.location === 'showcase';
   return {
-    eye_auth: here && notes.eyeAuth === null,
-    loupe_auth: here && notes.loupeAuth === null,
-    lab: here && notes.lab === null && !card.verified,
-    eye_grade: here && notes.eyeGrade === null && !card.slab,
-    loupe_grade: here && notes.loupeGrade === null && !card.slab,
-    grading: here && notes.grading === null && !card.slab && !card.gradeRejected,
+    ok: true, card, inspection, grading,
+    gradingFee: gradingFee(card.rarity as Rarity, card.style as Style),
+    canInspect: here && inspection === null,
+    canGrade: here && !card.slab && !card.gradeRejected && grading === null,
   };
 }
 
-const feesOf = (card: CardView) => ({
-  loupe: loupeFee(card.rarity as Rarity),
-  lab: labFee(card.rarity as Rarity, card.style as Style),
-  grading: gradingFee(card.rarity as Rarity, card.style as Style),
-});
-
 /**
- * 打烊时出结果（FR-APPR-3、4）：到期的卡按真实属性出结论，回到卡册或桌面。
- * 鉴定机构：真卡已验真（点亮图鉴）、假卡告诉主人、赃物没收；评级社：真卡封壳（点亮图鉴）、假卡拒评扣信誉。
- * 只能在事务里调用。返回给主人看的结果。
+ * 打烊时评级社出结果（FR-APPR-4）：真卡封壳（评分、分项、错版公开，点亮图鉴）；假卡拒评、打公开标记、扣信誉。
+ * 回来的卡放回卡册或桌面。只能在事务里调用。
  */
 export function settleAppraisals(deps: Deps, ownerId: string, day: number, now: number): AppraisalOutcome[] {
   const { repo } = deps;
   const out: AppraisalOutcome[] = [];
-  const due: InstanceRow[] = repo.dueAppraisals(ownerId, day);
-  for (const inst of due) {
-    const view = repo.cardView(inst.id)!;
-    if (inst.location === 'lab') {
-      const verdict = labVerdict(inst.authenticity, inst.origin);
-      repo.setAppraisal(inst.id, 'lab', verdict === 'stolen' ? 'stolen' : verdict);
-      if (verdict === 'stolen') {
-        // 赃物当场没收（DESIGN 5.1：鉴定机构是个陷阱）
-        repo.deleteCard(inst.id);
-        repo.logEvent(ownerId, now, 'lab_confiscated', { card: inst.id, template: inst.template_id });
-      } else {
-        repo.backFromAway(inst.id, { verified: verdict === 'verified' });
-        deps.binders!.placeNew(ownerId, [inst.id], day);
-        if (verdict === 'verified') repo.markCollected(ownerId, inst.template_id, inst.style, now);
-        repo.logEvent(ownerId, now, 'lab_result', { card: inst.id, verdict });
-      }
-      out.push({ cardId: inst.id, name: view.name, method: 'lab', outcome: verdict, score: null });
+  for (const inst of repo.dueGrading(ownerId, day)) {
+    const name = repo.cardView(inst.id)!.name;
+    const r = gradeCard(deps.rng, { authenticity: inst.authenticity, grade: inst.grade, misprint: inst.misprint === 1 });
+    if (r.kind === 'slab') {
+      repo.setAppraisal(inst.id, 'grading', 'slab');
+      repo.backFromGrading(inst.id, { slab: r.slab });
+      repo.markCollected(ownerId, inst.template_id, inst.style, now);
+      out.push({ cardId: inst.id, name, outcome: 'slab', score: r.slab.score, errata: r.slab.errata });
     } else {
-      const r = gradeCard(deps.rng, inst.authenticity, inst.grade);
-      if (r.kind === 'slab') {
-        repo.setAppraisal(inst.id, 'grading', 'slab');
-        repo.backFromAway(inst.id, { slab: r.slab });
-        repo.markCollected(ownerId, inst.template_id, inst.style, now);
-        out.push({ cardId: inst.id, name: view.name, method: 'grading', outcome: 'slab', score: r.slab.score });
-      } else {
-        // 假卡拒评：不封壳、费用不退、打公开的拒评标记、扣信誉（DESIGN 5.2）
-        repo.setAppraisal(inst.id, 'grading', 'rejected');
-        repo.backFromAway(inst.id, { rejected: true });
-        const p = repo.getPlayer(ownerId)!;
-        repo.setCreditsReputation(ownerId, p.credits, Math.max(0, p.reputation - APPRAISAL.gradeRejectRepLoss));
-        out.push({ cardId: inst.id, name: view.name, method: 'grading', outcome: 'rejected', score: null });
-      }
-      deps.binders!.placeNew(ownerId, [inst.id], day);
-      repo.logEvent(ownerId, now, 'grading_result', { card: inst.id, outcome: r.kind });
+      // 假卡拒评：不封壳、费用不退、打公开的拒评标记、扣信誉（DESIGN 5.2）
+      repo.setAppraisal(inst.id, 'grading', 'rejected');
+      repo.backFromGrading(inst.id, { rejected: true });
+      const p = repo.getPlayer(ownerId)!;
+      repo.setCreditsReputation(ownerId, p.credits, Math.max(0, p.reputation - APPRAISAL.gradeRejectRepLoss));
+      out.push({ cardId: inst.id, name, outcome: 'rejected', score: null, errata: false });
     }
+    deps.binders!.placeNew(ownerId, [inst.id], day);
+    repo.logEvent(ownerId, now, 'grading_result', { card: inst.id, outcome: r.kind });
   }
   return out;
 }
@@ -103,65 +67,85 @@ export function registerAppraisalRoutes(app: FastifyInstance, deps: Deps, now: (
     return { inst, card: repo.cardView(id)! };
   };
 
-  app.get('/api/appraisal', async (req, reply) => {
-    if (!req.user) return fail(reply, 401, 'unauthorized', '请重新打开卡奴登录');
-    const player = repo.getPlayer(req.user.id);
-    if (!player) return fail(reply, 401, 'unauthorized', '请重新打开卡奴登录');
-    return { ok: true, day: player.game_day, lab: repo.awayCards(req.user.id, 'lab'), grading: repo.awayCards(req.user.id, 'grading') } satisfies AppraisalDeskResponse;
-  });
-
   app.get<{ Params: { id: string } }>('/api/cards/:id/appraisal', async (req, reply) => {
     if (!req.user) return fail(reply, 401, 'unauthorized', '请重新打开卡奴登录');
     const { card } = ownCard(req.user.id, Number.parseInt(req.params.id, 10));
-    const notes = notesOf(repo, card.id);
-    return { ok: true, card, notes, fees: feesOf(card), can: canOf(card, notes) } satisfies CardAppraisalResponse;
+    return appraisalOf(repo, card) satisfies CardAppraisalResponse;
   });
 
-  app.post<{ Params: { id: string }; Body: { method?: unknown } }>('/api/cards/:id/appraise', async (req, reply) => {
+  app.post<{ Params: { id: string } }>('/api/cards/:id/inspect', async (req, reply) => {
+    if (!req.user) return fail(reply, 401, 'unauthorized', '请重新打开卡奴登录');
+    const userId = req.user.id;
+    const cardId = Number.parseInt(req.params.id, 10);
+    return repo.db.transaction((): CardAppraisalResponse => {
+      const { inst, card } = ownCard(userId, cardId);
+      const before = appraisalOf(repo, card);
+      if (before.inspection) return before; // 只查一次：再拖上去还是同一个结论
+      if (!before.canInspect) throw new ApiError(400, 'cannot_inspect', '这张卡在评级社，等它回来再看');
+      const result = inspect(rng, { authenticity: inst.authenticity, grade: inst.grade, misprint: inst.misprint === 1 });
+      repo.putAppraisal(card.id, 'inspect', result, now());
+      repo.logEvent(userId, now(), 'inspect', { card: card.id });
+      return appraisalOf(repo, card);
+    })();
+  });
+
+  app.get('/api/phone', async (req, reply) => {
+    if (!req.user) return fail(reply, 401, 'unauthorized', '请重新打开卡奴登录');
+    const player = repo.getPlayer(req.user.id);
+    if (!player) return fail(reply, 401, 'unauthorized', '请重新打开卡奴登录');
+    return { ok: true, owned: player.phone === 1, price: PHONE.price, day: player.game_day, grading: repo.gradingCards(req.user.id) } satisfies PhoneResponse;
+  });
+
+  app.post('/api/phone/buy', async (req, reply) => {
     if (!req.user) return fail(reply, 401, 'unauthorized', '请重新打开卡奴登录');
     const key = idempotencyKey(req);
     if (!key) return fail(reply, 400, 'missing_idempotency_key', '请求缺少幂等 key，请刷新后再试');
-    const method = String(req.body?.method ?? '');
-    if (!isMethod(method)) return fail(reply, 400, 'bad_method', '没有这种鉴定方式');
     const userId = req.user.id;
-    const cardId = Number.parseInt(req.params.id, 10);
-    return repo.db.transaction((): AppraiseResponse => {
-      const replay = repo.getIdempotent<AppraiseResponse>(userId, key);
+    return repo.db.transaction((): BuyPhoneResponse => {
+      const replay = repo.getIdempotent<BuyPhoneResponse>(userId, key);
       if (replay) return replay;
       const t = now();
       const player = repo.getPlayer(userId);
       if (!player) throw new ApiError(401, 'unauthorized', '请重新打开卡奴登录');
-      const { inst, card } = ownCard(userId, cardId);
-      const before = notesOf(repo, card.id);
-      if (!canOf(card, before)[method]) {
-        throw new ApiError(400, 'cannot_appraise', card.location === 'lab' || card.location === 'grading' ? '这张卡还在外面，等结果回来' : '这张卡已经做过这种鉴定了，结论不会变');
-      }
-      const fees = feesOf(card);
-      const price = method === 'loupe_auth' || method === 'loupe_grade' ? fees.loupe : method === 'lab' ? fees.lab : method === 'grading' ? fees.grading : 0;
-      const cost = deps.config.devUnlimitedIds.has(userId) ? 0 : price;
+      if (player.phone === 1) throw new ApiError(400, 'owned', '已经有电话了');
+      const free = deps.config.devUnlimitedIds.has(userId);
+      const cost = free ? 0 : PHONE.price;
       if (player.credits < cost) throw new ApiError(400, 'insufficient_credits', `信用点不够：要 ${cost}，你有 ${player.credits}`);
       const credits = player.credits - cost;
-      if (cost > 0 || price > 0) {
-        repo.setCreditsPity(userId, credits, player.pity_count);
-        repo.logCredits(userId, t, -cost, cost ? `appraise_${method}` : `appraise_${method}_test_free`, credits, { card: card.id });
-      }
+      repo.setCreditsPity(userId, credits, player.pity_count);
+      repo.setPhone(userId);
+      repo.logCredits(userId, t, -cost, free ? 'phone_test_free' : 'phone', credits);
+      const response: BuyPhoneResponse = { ok: true, credits };
+      repo.putIdempotent(userId, key, response, t);
+      return response;
+    })();
+  });
 
-      // 结论：只按这条线的属性算，不提另一条线
-      if (method === 'eye_auth') repo.putAppraisal(card.id, method, eyeAuth(rng, inst.authenticity), t);
-      else if (method === 'loupe_auth') repo.putAppraisal(card.id, method, loupeAuth(rng, inst.authenticity), t);
-      else if (method === 'eye_grade') repo.putAppraisal(card.id, method, eyeGrade(inst.grade), t);
-      else if (method === 'loupe_grade') repo.putAppraisal(card.id, method, loupeGrade(rng, inst.grade), t);
-      else {
-        // 鉴定机构 / 评级社：送走，打烊时出结果
-        const days = method === 'lab' ? APPRAISAL.lab.days : APPRAISAL.grading.days;
-        repo.putAppraisal(card.id, method, 'pending', t);
-        repo.sendAway(card.id, method === 'lab' ? 'lab' : 'grading', player.game_day + days);
-      }
-      repo.logEvent(userId, t, 'appraise', { card: card.id, method });
-
-      const after = repo.cardView(card.id)!;
-      const notes = notesOf(repo, card.id);
-      const response: AppraiseResponse = { ok: true, credits, card: after, notes, can: canOf(after, notes) };
+  app.post<{ Params: { id: string } }>('/api/cards/:id/grade', async (req, reply) => {
+    if (!req.user) return fail(reply, 401, 'unauthorized', '请重新打开卡奴登录');
+    const key = idempotencyKey(req);
+    if (!key) return fail(reply, 400, 'missing_idempotency_key', '请求缺少幂等 key，请刷新后再试');
+    const userId = req.user.id;
+    const cardId = Number.parseInt(req.params.id, 10);
+    return repo.db.transaction((): GradeResponse => {
+      const replay = repo.getIdempotent<GradeResponse>(userId, key);
+      if (replay) return replay;
+      const t = now();
+      const player = repo.getPlayer(userId);
+      if (!player) throw new ApiError(401, 'unauthorized', '请重新打开卡奴登录');
+      if (player.phone !== 1) throw new ApiError(400, 'no_phone', '还没有电话，先买一部电话才能打给评级社');
+      const { card } = ownCard(userId, cardId);
+      const st = appraisalOf(repo, card);
+      if (!st.canGrade) throw new ApiError(400, 'cannot_grade', card.slab ? '这张卡已经封壳了' : card.gradeRejected ? '评级社拒评过这张卡' : '这张卡已经在评级社了');
+      const free = deps.config.devUnlimitedIds.has(userId);
+      const cost = free ? 0 : st.gradingFee;
+      if (player.credits < cost) throw new ApiError(400, 'insufficient_credits', `信用点不够：要 ${cost}，你有 ${player.credits}`);
+      const credits = player.credits - cost;
+      repo.setCreditsPity(userId, credits, player.pity_count);
+      repo.logCredits(userId, t, -cost, free ? 'grading_test_free' : 'grading', credits, { card: card.id });
+      repo.putAppraisal(card.id, 'grading', 'pending', t);
+      repo.sendToGrading(card.id, player.game_day + APPRAISAL.grading.days);
+      const response: GradeResponse = { ok: true, credits, card: repo.cardView(card.id)! };
       repo.putIdempotent(userId, key, response, t);
       return response;
     })();

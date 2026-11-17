@@ -2,10 +2,12 @@
 // 不知道下一位是谁、今天还剩几位。挑卡（或卡包）→ 开价 / 接受还价 / 快速出售 / 请走。都接待完就能打烊。
 import { useEffect, useState } from 'react';
 import { COUNTER, STORE } from '@kanu/shared/balance';
-import type { CardView, CounterBinderPageResponse, CounterResponse, CustomerView, EligibleCardsResponse, EndDayResponse, MeResponse, OfferResponse } from '@kanu/shared/types';
+import type { CardAppraisalResponse, CardView, CounterBinderPageResponse, CounterResponse, CustomerView, EligibleCardsResponse, EndDayResponse, MeResponse, OfferResponse } from '@kanu/shared/types';
 import { api, newIdempotencyKey } from '../api.ts';
 import { Card, fmt } from '../Card.tsx';
 import { DragGhost, FloatWindow, useDrag } from '../drag.tsx';
+import { inspectionText } from '../appraisalText.ts';
+import { PHONE_ZONE, dropOnPhone } from '../Phone.tsx';
 
 export const AVATAR: Record<string, string> = {
   resident: '🧑‍🔧', student: '🧒', tourist: '🧳', collector: '🧐', nostalgic: '👴',
@@ -41,8 +43,10 @@ export function Counter({ onChange }: { onChange: (patch: Partial<MeResponse>) =
       const r = await api<EndDayResponse>('/day/end', { method: 'POST', body: {}, idempotencyKey: newIdempotencyKey() });
       onChange({ gameDay: r.day, packsLeftToday: STORE.packsPerDay });
       // 鉴定机构 / 评级社在打烊时出结果
-      const OUT: Record<string, string> = { verified: '真卡，已验真', fake: '是假卡', stolen: '是赃物，被没收了', rejected: '被拒评（疑似假卡），信誉下降' };
-      setMsg(r.appraisals.map((a) => `「${a.name}」${a.outcome === 'slab' ? `封壳了：${a.score === 'BL' ? '黑标' : `${a.score} 分`}` : OUT[a.outcome]}`).join('；'));
+      // 星港评级社在打烊时出结果
+      setMsg(r.appraisals.map((a) => `「${a.name}」${a.outcome === 'slab'
+        ? `封壳了：${a.score === 'BL' ? '黑标' : `${a.score} 分`}${a.errata ? '，还是错版！' : ''}`
+        : '被评级社拒评（疑似假卡），信誉下降'}`).join('；'));
       await load();
     } catch (e) {
       setErr((e as Error).message);
@@ -153,7 +157,7 @@ function BinderPicker({ customerId, binder, onPick, bind, draggingId, onTable }:
           }
           const item = cardItem(card, quickPrice ?? 0);
           return (
-            <button key={card.id} className={draggingId === card.id ? 'cell match draggable dragging' : 'cell match draggable'} onClick={() => onPick(item)} {...bind(item)}>
+            <button key={card.id} className={draggingId === card.id ? 'cell match draggable dragging' : 'cell match draggable'} onClick={() => onPick(item)} {...bind(item)} data-drop={`card-${card.id}`}>
               <Card card={card} small />
               <span className="cell-price">快卖 {fmt(quickPrice ?? 0)}</span>
             </button>
@@ -248,12 +252,37 @@ function Deal({ customer, onChange, onDone, onUpdate, openBinders, setOpenBinder
     setTable((xs) => xs.filter((x) => keyOf(x) !== keyOf(it)));
     if (selectedKey === keyOf(it)) setSelectedKey(null);
   };
-  // 拖到台面 = 放上去；台面上的拖到别处（卡册浮窗、货源、页面空白处）= 拿回来
+  // 拖到台面 = 放上去；台面上的拖到别处（卡册浮窗、货源、页面空白处）= 拿回来；拖到电话的评级社上 = 准备送评
+  const onCounterZone = (zone: string) => zone === 'counter' || table.some((t) => t.kind === 'card' && zone === `card-${t.id}`);
   const { drag, bind } = useDrag<Dragging>(({ item, from }, zone) => {
-    if (zone === 'counter' && from === 'source') place(item);
-    else if (zone !== 'counter' && from === 'table') takeBack(item);
+    if (zone === PHONE_ZONE) { if (item.kind === 'card') dropOnPhone(item.card); return; }
+    if (onCounterZone(zone) && from === 'source') place(item);
+    else if (!onCounterZone(zone) && from === 'table') takeBack(item);
   });
   const sourceBind = (it: Item): BindProps => bind({ item: it, from: 'source' });
+
+  // 放大镜（柜台上的道具，学深空当铺）：把放大镜拖到卡上查验。每张卡只查一次，结论不变，只有自己知道
+  const [looks, setLooks] = useState<Record<number, string>>({});
+  const inspectCard = async (cardId: number) => {
+    try {
+      const r = await api<CardAppraisalResponse>(`/cards/${cardId}/inspect`, { method: 'POST', body: {} });
+      if (r.inspection) {
+        const text = inspectionText(r.inspection);
+        setLooks((m) => ({ ...m, [cardId]: text }));
+        setNote(`🔍「${r.card.name}」：${text}`);
+      }
+    } catch (e) { setNote((e as Error).message); }
+  };
+  const loupe = useDrag<'loupe'>((_, zone) => { if (zone.startsWith('card-')) void inspectCard(Number(zone.slice(5))); });
+  // 台面上的卡以前查过的，把结论也带出来
+  useEffect(() => {
+    for (const it of table) {
+      if (it.kind !== 'card' || looks[it.id] !== undefined) continue;
+      api<CardAppraisalResponse>(`/cards/${it.id}/appraisal`)
+        .then((r) => setLooks((m) => ({ ...m, [it.id]: r.inspection ? inspectionText(r.inspection) : '' })))
+        .catch(() => {});
+    }
+  }, [table]);
 
   const send = async (path: 'offer' | 'quick', p?: number) => {
     if (!selected) return;
@@ -314,16 +343,20 @@ function Deal({ customer, onChange, onDone, onUpdate, openBinders, setOpenBinder
         {/* 柜台台面：上半是客人那一侧（以后客人卖卡时摆在这里），下半是你放上来的东西 */}
         <div className={`counter-top${dropClass}`} data-drop="counter">
           <div className="counter-side customer-side" aria-hidden />
+          {/* 放大镜：柜台上的道具，按住拖到卡上查验 */}
+          <button className={loupe.drag ? 'loupe-tool lifted' : 'loupe-tool'} title="放大镜：拖到卡上查验" aria-label="放大镜" {...loupe.bind('loupe')}>🔍</button>
           <div className="counter-side my-side">
             {table.length === 0 && <p className="counter-empty">{fromSource ? '松手放到柜台上' : '把要卖的卡拖到柜台上，可以摆好几张'}</p>}
             {table.map((it) => {
               const k = keyOf(it);
               const ok = wanted.has(k);
-              const cls = `table-item draggable${selected && keyOf(selected) === k ? ' on' : ''}${ok ? '' : ' unwanted'}${draggingKey === k ? ' dragging' : ''}`;
+              const hover = loupe.drag && it.kind === 'card' && loupe.drag.zone === `card-${it.id}`;
+              const cls = `table-item draggable${selected && keyOf(selected) === k ? ' on' : ''}${ok ? '' : ' unwanted'}${draggingKey === k ? ' dragging' : ''}${hover ? ' loupe-over' : ''}`;
               return (
-                <button key={k} className={cls} onClick={() => select(it)} {...bind({ item: it, from: 'table' })}>
+                <button key={k} className={cls} onClick={() => select(it)} {...bind({ item: it, from: 'table' })} data-drop={it.kind === 'card' ? `card-${it.id}` : undefined}>
                   <ItemArt item={it} />
                   <span className="cell-price">{ok ? `快卖 ${fmt(wanted.get(k)!)}` : '这位不要'}</span>
+                  {it.kind === 'card' && looks[it.id] && <span className="look-chip">🔍 {looks[it.id]}</span>}
                 </button>
               );
             })}
@@ -406,6 +439,12 @@ function Deal({ customer, onChange, onDone, onUpdate, openBinders, setOpenBinder
             onTable={new Set(table.filter((t) => t.kind === 'card').map((t) => t.id))} />
         </FloatWindow>
       ))}
+      {loupe.drag && (
+        <DragGhost x={loupe.drag.x} y={loupe.drag.y}>
+          <span className="loupe-ghost" aria-hidden>🔍</span>
+          <span className="ghost-hint">{loupe.drag.zone?.startsWith('card-') ? '松手查验这张卡' : '拖到要查验的卡上'}</span>
+        </DragGhost>
+      )}
       {drag && (
         <DragGhost x={drag.x} y={drag.y}>
           <ItemArt item={drag.item.item} />

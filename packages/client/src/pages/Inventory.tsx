@@ -8,7 +8,8 @@ import type {
 import { api, newIdempotencyKey } from '../api.ts';
 import { Card, GameDayContext, fmt } from '../Card.tsx';
 import { DragGhost, FloatWindow, useDrag } from '../drag.tsx';
-import { describeNotes } from './Appraisal.tsx';
+import { appraisalLines } from '../appraisalText.ts';
+import { PHONE_ZONE, dropOnPhone } from '../Phone.tsx';
 
 export type Bind = ReturnType<typeof useDrag<CardView>>['bind'];
 
@@ -72,6 +73,7 @@ export function Inventory({ onChange }: { onChange: (p: Partial<MeResponse>) => 
   const { drag, bind } = useDrag<CardView>((card, zone) => {
     if (zone === 'showcase' && card.location !== 'showcase') void setShowcaseOn(card, true);
     else if (zone === 'stash' && card.location === 'showcase') void setShowcaseOn(card, false);
+    else if (zone === PHONE_ZONE) dropOnPhone(card); // 拖到电话的评级社上送评
   });
   const dropping = (zone: string) => (drag ? (drag.zone === zone ? ' drop-target drop-over' : ' drop-target') : '');
 
@@ -257,7 +259,7 @@ function CardSheet({ card, onClose, onToggle }: { card: CardView; onClose: () =>
   const day = useContext(GameDayContext);
   // 这张卡的鉴定结论（只有自己看得到）
   const [notes, setNotes] = useState<string[] | null>(null);
-  useEffect(() => { api<CardAppraisalResponse>(`/cards/${card.id}/appraisal`).then((r) => setNotes(describeNotes(r.notes))).catch(() => setNotes([])); }, [card.id]);
+  useEffect(() => { api<CardAppraisalResponse>(`/cards/${card.id}/appraisal`).then((r) => setNotes(appraisalLines(r))).catch(() => setNotes([])); }, [card.id]);
   const SUB: Record<string, string> = { centering: '居中', corners: '边角', edges: '边缘', surface: '表面' };
   return (
     <div className="sheet" onClick={onClose}>
@@ -266,12 +268,12 @@ function CardSheet({ card, onClose, onToggle }: { card: CardView; onClose: () =>
         {card.flavor && <p className="flavor">"{card.flavor}"</p>}
         <p>{card.seriesName} · 市场价约 {fmt(card.price)} 信用点{card.slab ? `（星港评级 ${card.slab.score === 'BL' ? '黑标' : card.slab.score}）` : '（未评级）'}</p>
         {card.slab && <p className="hint">分项：{Object.entries(card.slab.subgrades).map(([k, v]) => `${SUB[k] ?? k} ${v}`).join(' · ')}</p>}
-        {card.verified && <p className="hint">✓ 鉴定机构已验真</p>}
+        {card.slab?.errata && <p className="hint">星港评级社认定：错版</p>}
         {card.gradeRejected && <p className="loose-note">评级社拒评：疑似假卡</p>}
         {card.looseSinceDay !== null && <p className="loose-note">散放在桌面上 {day - card.looseSinceDay} 天，可能已经磨损</p>}
         {notes && notes.length > 0
           ? <ul className="station-notes">{notes.map((n) => <li key={n}>{n}</li>)}</ul>
-          : <p className="hint">还没鉴定过。到"鉴定"页把卡拖到鉴定台上看看。</p>}
+          : <p className="hint">还没查验过。把卡放到柜台上，拖柜台上的放大镜过去看看；想送评就拖到电话的评级社上。</p>}
         <button className="primary" onClick={() => onToggle(card)}>{card.location === 'showcase' ? '取出珍藏柜' : '放进珍藏柜'}</button>
         <button className="secondary" onClick={onClose}>关闭</button>
       </div>

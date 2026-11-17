@@ -2,7 +2,7 @@
 // 数字全部从 balance.ts 读，调了数值手册跟着变。只讲公开规则，不写顾客心理价位怎么算、品相掉没掉这类隐藏信息。
 import { useRef, useState, type ReactNode } from 'react';
 import {
-  ANNOUNCE, APPRAISAL, BINDER_KINDS, GRAND_COLLECTOR, BINDERS, COUNTER, CUSTOMER, CUSTOMER_TYPES, EXCHANGE, LOOSE, PACKS, PITY, RARITIES, RARITY,
+  ANNOUNCE, APPRAISAL, BINDER_KINDS, ERRATA, PHONE, GRAND_COLLECTOR, BINDERS, COUNTER, CUSTOMER, CUSTOMER_TYPES, EXCHANGE, LOOSE, PACKS, PITY, RARITIES, RARITY,
   RENT, SERIAL_LIMIT, SHOP_PRICE, SHOWCASE, STARTER_BINDER, STORE, STYLE, STYLES, UNGRADED_MULT, type CustomerWants,
 } from '@kanu/shared/balance';
 import { Card, GameDayContext, fmt } from './Card.tsx';
@@ -213,15 +213,15 @@ const PAGES: Array<{ title: string; body: ReactNode }> = [
     ),
   },
   {
-    title: '鉴定台',
+    title: '放大镜和送评',
     body: (
       <>
-        <p>每张卡都有看不见的<b>真伪</b>、<b>品相</b>和<b>来源</b>。电脑订的货都是正品；以后别的渠道可能混进假货和赃物。到"鉴定"页，把卡拖到鉴定台上：</p>
+        <p>每张卡都有看不见的<b>真伪</b>、<b>品相</b>，少数还是<b>错版</b>（约 {ERRATA.ppm / 10_000}%）。电脑订的货都是正品；以后别的渠道可能混进假货。</p>
         <ul>
-          <li><b>放大镜</b>：肉眼看免费，放大镜收一点钱。马上有结论，只有你知道，不改卡价。放大镜也可能看漏高仿。</li>
-          <li><b>鉴定机构</b>：验真 100% 准，真卡拿到公开的 ✓"已验真"。<b>赃物会被当场没收</b>。下次打烊出结果。</li>
-          <li><b>星港评级社</b>：真卡封壳出分（1–10 分、四个分项，还有比 10 分更稀有的<b>黑标</b>），卡价按分数算，10 分是未评级的好几倍。送了假卡会被拒评，信誉 −{APPRAISAL.gradeRejectRepLoss}。下次打烊出结果。</li>
-          <li>窍门：先用放大镜挑出品相 9–10 的卡，再送评。每张卡每种鉴定只能做一次。</li>
+          <li><b>放大镜 🔍</b>：在柜台上。按住它拖到卡上就能查验（柜台台面上的卡、卡册浮窗里的卡都行）：看起来真不真、品相大概几分、是不是错版。免费，每张卡只能查一次，只有你知道，不改卡价。放大镜也可能看漏高仿。</li>
+          <li><b>电话 📞</b>：花 {fmt(PHONE.price)} 信用点买一部。打给<b>星港评级社</b>送评：把卡拖到电话上，按"送评"。下次打烊出结果。</li>
+          <li><b>送评结果</b>：真卡封壳出分（1–10 分、四个分项，还有比 10 分更稀有的<b>黑标</b>），卡价按分数算，10 分是未评级的好几倍；错版会被公开认定，价格再 ×{ERRATA.mult}。送了假卡会被拒评，信誉 −{APPRAISAL.gradeRejectRepLoss}。</li>
+          <li>窍门：先用放大镜挑出品相 9–10、或者错版的卡，再送评。</li>
         </ul>
       </>
     ),

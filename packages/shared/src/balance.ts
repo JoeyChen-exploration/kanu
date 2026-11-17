@@ -343,7 +343,7 @@ export const QUESTS: Array<{ id: string; title: string; hint: string; tab: Quest
   { id: 'buy_binder', title: '添一本卡册', hint: '到"进货"页的"用品"买一本卡册', tab: 'packs', metric: 'binders', target: 2, reward: 200 },
   { id: 'week_one', title: '撑过第一周', hint: '营业满 7 天（打烊 7 次）', tab: 'counter', metric: 'daysEnded', target: 7, reward: 500 },
 ];
-/** 任务栏里同时显示几条还没领奖的任务 */
+/** 任务栏里同时显示几条还没领奖的任务（能领奖的置顶且全部显示，不受这个数限制） */
 export const QUEST_BAR = { visible: 3 };
 
 /** 开包播报（FR-PACK-6）：开出这个稀有度及以上、或编号限定时全服播报 */

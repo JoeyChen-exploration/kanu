@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { APPRAISAL, ERRATA, PHONE, REPUTATION } from '@kanu/shared/balance';
-import type { BuyPhoneResponse, CardAppraisalResponse, EndDayResponse, GradeResponse, InventoryResponse, PhoneResponse } from '@kanu/shared/types';
+import type { BuyPhoneResponse, CardAppraisalResponse, EndDayResponse, GradeBatchResponse, GradeResponse, InventoryResponse, PhoneResponse } from '@kanu/shared/types';
 import { gradeCard, inspect, loupeGrade, rollErrata } from '../src/game/appraisal.ts';
 import { seeded } from '../src/game/rng.ts';
 import { HIDDEN_KEYS, NOW, findKeys, idem, login, setup } from './helpers.ts';
@@ -132,6 +132,36 @@ describe('电话 + 送评（星港评级社）', () => {
     expect(neo.cards.find((c: { templateId: string }) => c.templateId === 'NEO-17').owned).toBe(true);
     expect(neo.cards.find((c: { templateId: string }) => c.templateId === 'NEO-18').owned).toBe(false);
     expect(findKeys(end, HIDDEN)).toEqual([]);
+  });
+
+  it('一次寄好几张：合计扣钱、一起送走、一起出结果；有一张不能送就整批不动；幂等', async () => {
+    const { app, repo } = setup();
+    cleanup = () => app.close();
+    const h = await login(app);
+    repo.db.prepare('UPDATE players SET credits = 100000, phone = 1').run();
+    const ids = [add(repo, { grade: '8' }), add(repo, { grade: '9', template: 'NEO-18' }), add(repo, { grade: '7', template: 'NEO-19' })];
+    const fees = await Promise.all(ids.map(async (id) => (await info(app, h, id)).gradingFee));
+    const batch = (ks: number[], key = idem()) => app.inject({ method: 'POST', url: '/api/phone/grade', headers: { ...h, ...key }, payload: { cardIds: ks } });
+
+    // 先单独送一张，再整批送（含这张）→ 整批不动、不扣钱
+    await grade(app, h, ids[0]!);
+    const before = repo.getPlayer(UID)!.credits;
+    expect((await batch(ids)).json().code).toBe('cannot_grade');
+    expect(repo.getPlayer(UID)!.credits).toBe(before);
+    expect((await info(app, h, ids[1]!)).card.location).toBe('inventory');
+
+    const key = idem();
+    const r = (await batch(ids.slice(1), key)).json() as GradeBatchResponse;
+    expect((await batch(ids.slice(1), key)).json()).toEqual(r);
+    expect(r.cost).toBe(fees[1]! + fees[2]!);
+    expect(r.credits).toBe(before - r.cost);
+    expect(r.cards.every((c) => c.location === 'grading')).toBe(true);
+    expect((await batch([])).json().code).toBe('no_cards');
+    expect((await batch(Array.from({ length: PHONE.gradingBatch + 1 }, (_, i) => i + 1))).json().code).toBe('too_many');
+
+    const end = await closeDay(app, h);
+    expect(end.appraisals.map((a) => a.cardId).sort()).toEqual([...ids].sort());
+    expect(findKeys(r, HIDDEN)).toEqual([]);
   });
 
   it('钱不够、别人的卡都拒绝', async () => {

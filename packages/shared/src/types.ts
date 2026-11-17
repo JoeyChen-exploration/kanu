@@ -123,11 +123,20 @@ export interface BuyPhoneResponse {
   credits: number;
 }
 
-/** POST /api/cards/:id/grade：送评（要电话） */
+/** POST /api/cards/:id/grade：送评一张（要电话） */
 export interface GradeResponse {
   ok: true;
   credits: number;
   card: CardView;
+}
+
+/** POST /api/phone/grade { cardIds }：一次寄好几张去送评（全部能送才扣钱，一起送走） */
+export interface GradeBatchResponse {
+  ok: true;
+  credits: number;
+  /** 一共扣了多少 */
+  cost: number;
+  cards: CardView[];
 }
 
 // ---------- 进货和卡包（DESIGN 4，2026-11-17 卡包重做） ----------

@@ -144,7 +144,11 @@ export const APPRAISAL = {
 export const ERRATA = { ppm: 5_000, mult: 3 };
 
 /** 电话（2026-11-17 用户定）：花信用点买，买了才能打给星港评级社送评；批发商的号码下一步开通 */
-export const PHONE = { price: 2000 };
+export const PHONE = {
+  price: 2000,
+  /** 一次电话最多寄几张卡去送评（2026-11-18 用户要求能一次放很多张；只是防误操作的上限） */
+  gradingBatch: 20,
+};
 
 // ---------- 柜台顾客（DESIGN 6，SRS 8.5） ----------
 export const CUSTOMER_TYPES = ['resident', 'student', 'tourist', 'collector', 'nostalgic', 'rich', 'speculator', 'streamer', 'middleman', 'grand', 'dealer', 'undercover'] as const;

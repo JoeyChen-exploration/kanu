@@ -93,6 +93,9 @@ export const STYLE: Record<Style, { name: string; ppm: number; mult: number; min
   dark: { name: '暗物质', ppm: 4_500, mult: 6, minRarity: 'SR' },
   serial: { name: '编号限定', ppm: 500, mult: 10, minRarity: 'SSR' },
 };
+/** 这个稀有度可能出哪些外层风格（暗物质要 SR 以上、编号限定要 SSR 以上）；大师图鉴只算这些 */
+export const stylesFor = (r: Rarity): Style[] => STYLES.filter((s) => STYLE[s].minRarity === null || atLeast(r, STYLE[s].minRarity!));
+
 /** 编号限定：每个卡牌模板全服最多几张 */
 export const SERIAL_LIMIT = 50;
 

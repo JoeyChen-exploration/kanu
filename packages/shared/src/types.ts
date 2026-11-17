@@ -131,11 +131,16 @@ export interface CollectionEntry {
   owned: boolean;
   /** 现在手上有几张 */
   count: number;
+  /** 大师图鉴：这张卡可能出的每种外层风格（不可能出的不列），有过没有、现在手上几张 */
+  styles: Array<{ style: string; name: string; owned: boolean; count: number }>;
+  /** 每种可能的风格都有过 */
+  master: boolean;
 }
 
 export interface CollectionResponse {
   ok: true;
-  series: Array<{ id: string; name: string; total: number; owned: number; cards: CollectionEntry[] }>;
+  /** 每个系列一本图鉴册；kind 是主题包 / 典藏包（封面不同）；master 是集齐所有风格的张数 */
+  series: Array<{ id: string; name: string; kind: string; total: number; owned: number; master: number; cards: CollectionEntry[] }>;
 }
 
 // ---------- 柜台（M4） ----------

@@ -108,7 +108,7 @@ const PAGES: Array<{ title: string; body: ReactNode }> = [
         <p className="booklet-chips">
           {STYLES.filter((s) => s !== 'standard').map((s) => <span key={s} className="badge">{STYLE[s].name} ×{STYLE[s].mult}</span>)}
         </p>
-        <p className="hint">编号限定全服每张卡只有 {SERIAL_LIMIT} 张。</p>
+        <p className="hint">编号限定全服每张卡只有 {SERIAL_LIMIT} 张。图鉴页每个系列一本册子：每张卡有过就点亮（普通图鉴），每种卡面都收集过才算<b>大师图鉴</b> ★。</p>
       </>
     ),
   },

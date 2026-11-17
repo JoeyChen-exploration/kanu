@@ -20,6 +20,8 @@ export function Counter({ onChange }: { onChange: (patch: Partial<MeResponse>) =
   const [msg, setMsg] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  /** 打开的卡册浮窗放在这一层：下一位客人进门时浮窗不关，内容按新客人重新高亮 */
+  const [openBinders, setOpenBinders] = useState<OpenBinder[]>([]);
 
   const load = () => api<CounterResponse>('/counter').then(setData).catch((e: Error) => setErr(e.message));
   useEffect(() => { void load(); }, []);
@@ -53,7 +55,8 @@ export function Counter({ onChange }: { onChange: (patch: Partial<MeResponse>) =
       {msg && <p className="deal-msg">{msg}</p>}
 
       {data.current && (
-        <Deal key={data.current.id} customer={data.current} onChange={onChange} onDone={afterResult} onUpdate={(c) => setData({ ...data, current: c })} />
+        <Deal key={data.current.id} customer={data.current} onChange={onChange} onDone={afterResult} onUpdate={(c) => setData({ ...data, current: c })}
+          openBinders={openBinders} setOpenBinders={setOpenBinders} />
       )}
 
       {data.done && (
@@ -84,6 +87,8 @@ function Patience({ c }: { c: CustomerView }) {
   return <span className="patience" aria-label={`耐心 ${c.patience}/${c.maxPatience}`}>{'●'.repeat(c.patience)}{'○'.repeat(Math.max(0, c.maxPatience - c.patience))}</span>;
 }
 
+
+type OpenBinder = { id: number | 'showcase'; name: string };
 
 /** 放上柜台台面的东西：一张卡或一包没拆的卡包 */
 type Item =
@@ -177,16 +182,18 @@ function SourceButton({ cover, coverClass, name, sub, matchCount, on, onClick }:
  * 把要卖的卡从卡册浮窗（或卡包）拖到柜台台面上 → 调价 → 按"开价 / 接受还价 / 快速出售"。
  * 台面上留了客人那一侧，以后客人卖卡给你时，他的卡也摆在台面上。
  */
-function Deal({ customer, onChange, onDone, onUpdate }: {
+function Deal({ customer, onChange, onDone, onUpdate, openBinders, setOpenBinders }: {
   customer: CustomerView;
   onChange: (patch: Partial<MeResponse>) => void;
   onDone: (text: string) => void;
   onUpdate: (c: CustomerView) => void;
+  /** 柜台上同时打开的卡册浮窗（id 0 = 桌面散放，showcase = 珍藏柜）；放在上一层，换客人时不关 */
+  openBinders: OpenBinder[];
+  setOpenBinders: (f: (xs: OpenBinder[]) => OpenBinder[]) => void;
 }) {
   const [stock, setStock] = useState<EligibleCardsResponse | null>(null);
   const [onCounter, setOnCounter] = useState<Item | null>(null);
-  /** 柜台上打开的卡册浮窗（id 0 = 桌面散放） */
-  const [openBinder, setOpenBinder] = useState<{ id: number | 'showcase'; name: string } | null>(null);
+  const isOpen = (id: number | 'showcase') => openBinders.some((b) => b.id === id);
   const [price, setPrice] = useState('');
   const [step, setStep] = useState(10);
   const [busy, setBusy] = useState(false);
@@ -242,7 +249,9 @@ function Deal({ customer, onChange, onDone, onUpdate }: {
 
   const empty = stock && stock.cards.length === 0 && stock.packs.length === 0;
   const dropClass = drag ? (drag.zone === 'counter' ? ' drop-target drop-over' : ' drop-target') : '';
-  const open = (id: number | 'showcase', name: string) => setOpenBinder(openBinder?.id === id ? null : { id, name });
+  /** 列表里点一项：没开就打开浮窗，开着就关掉 */
+  const open = (id: number | 'showcase', name: string) =>
+    setOpenBinders((xs) => (xs.some((x) => x.id === id) ? xs.filter((x) => x.id !== id) : [...xs, { id, name }]));
 
   return (
     <div className="visitor">
@@ -322,15 +331,15 @@ function Deal({ customer, onChange, onDone, onUpdate }: {
               <div className="binder-list">
                 {stock.binders.map((b) => (
                   <SourceButton key={b.id} cover={b.name.slice(0, 2)} coverClass={`binder-${b.kind}`} name={b.name} sub={`${b.used} / ${b.slots} 张`}
-                    matchCount={b.matchCount} on={openBinder?.id === b.id} onClick={() => open(b.id, b.name)} />
+                    matchCount={b.matchCount} on={isOpen(b.id)} onClick={() => open(b.id, b.name)} />
                 ))}
                 {stock.showcase.count > 0 && (
                   <SourceButton cover="珍藏" coverClass="binder-showcase" name="珍藏柜" sub={`${stock.showcase.count} 张`}
-                    matchCount={stock.showcase.matchCount} on={openBinder?.id === 'showcase'} onClick={() => open('showcase', '珍藏柜')} />
+                    matchCount={stock.showcase.matchCount} on={isOpen('showcase')} onClick={() => open('showcase', '珍藏柜')} />
                 )}
                 {stock.loose.count > 0 && (
                   <SourceButton cover="桌面" coverClass="binder-loose" name="桌面散放" sub={`${stock.loose.count} 张`}
-                    matchCount={stock.loose.matchCount} on={openBinder?.id === 0} onClick={() => open(0, '桌面散放')} />
+                    matchCount={stock.loose.matchCount} on={isOpen(0)} onClick={() => open(0, '桌面散放')} />
                 )}
               </div>
             </>
@@ -340,12 +349,13 @@ function Deal({ customer, onChange, onDone, onUpdate }: {
 
       <button className="secondary" disabled={busy} onClick={dismiss}>请他离开</button>
 
-      {openBinder && (
-        <FloatWindow id="counter-binder" className="float-binder" title={openBinder.name} onClose={() => setOpenBinder(null)}>
-          <BinderPicker customerId={customer.id} binder={openBinder} onPick={place} bind={bind}
+      {openBinders.map((b, i) => (
+        <FloatWindow key={String(b.id)} id={`counter-binder-${b.id}`} cascade={i} className="float-binder" title={b.name}
+          onClose={() => setOpenBinders((xs) => xs.filter((x) => x.id !== b.id))}>
+          <BinderPicker customerId={customer.id} binder={b} onPick={place} bind={bind}
             draggingId={drag?.item.kind === 'card' ? drag.item.id : null} />
         </FloatWindow>
-      )}
+      ))}
       {drag && (
         <DragGhost x={drag.x} y={drag.y}>
           <ItemArt item={drag.item} />

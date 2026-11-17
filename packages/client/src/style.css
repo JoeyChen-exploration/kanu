@@ -128,7 +128,7 @@ h2 small { color: var(--muted); font-weight: normal; font-size: 13px; margin-lef
 .progress div { height: 100%; background: var(--accent); }
 
 /* ---- 底部弹出的卡片详情 ---- */
-.sheet { position: fixed; inset: 0; z-index: 10; background: rgba(0, 0, 0, 0.6); display: flex; align-items: flex-end; justify-content: center; }
+.sheet { position: fixed; inset: 0; z-index: 900000; background: rgba(0, 0, 0, 0.6); display: flex; align-items: flex-end; justify-content: center; }
 .sheet-body { width: min(520px, 100%); background: var(--panel); border-radius: 16px 16px 0 0; padding: 16px 16px calc(16px + var(--island-bottom, 0px)); max-height: 90dvh; overflow-y: auto; }
 .sheet-body .card { width: 160px; margin: 0 auto 8px; }
 .flavor { color: var(--muted); font-style: italic; text-align: center; }
@@ -249,7 +249,7 @@ h2 small { color: var(--muted); font-weight: normal; font-size: 13px; margin-lef
 .topbar-book { flex: none; width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); font-size: 18px; }
 /* 道具浮窗（卡册、新手手册）：拖标题栏移动，不挡后面的页面 */
 .float-window {
-  position: fixed; z-index: 20; width: min(360px, calc(100vw - 16px));
+  position: fixed; width: min(360px, calc(100vw - 16px));
   max-height: calc(100dvh - 16px - var(--island-bottom, 0px));
   display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--line);
   border-radius: 14px; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
@@ -268,7 +268,7 @@ h2 small { color: var(--muted); font-weight: normal; font-size: 13px; margin-lef
 /* 拖卡 */
 .draggable { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
 .cell.dragging { opacity: 0.3; }
-.drag-ghost { position: fixed; z-index: 50; width: 76px; pointer-events: none; transform: translate(-50%, -60%) rotate(-4deg); filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.6)); }
+.drag-ghost { position: fixed; z-index: 1000000; width: 76px; pointer-events: none; transform: translate(-50%, -60%) rotate(-4deg); filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.6)); }
 .ghost-hint { display: block; margin-top: 4px; text-align: center; white-space: nowrap; font-size: 11px; font-weight: 700; color: #111; background: var(--accent); border-radius: 999px; padding: 2px 8px; width: max-content; margin-left: 50%; transform: translateX(-50%); }
 .drop-target { outline: 2px dashed color-mix(in srgb, var(--accent) 60%, transparent); outline-offset: 4px; border-radius: 12px; transition: outline-color 0.1s, background 0.1s; }
 .drop-over { outline: 2px solid var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }

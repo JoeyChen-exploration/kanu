@@ -99,22 +99,29 @@ const readPos = (key: string): { x: number; y: number } | null => {
   try { const v = JSON.parse(localStorage.getItem(key) ?? 'null'); return v && typeof v.x === 'number' ? v : null; } catch { return null; }
 };
 
+/** 浮窗层级：点到哪个，哪个到最前面 */
+let topZ = 20;
+
 /**
- * 道具浮窗（卡册、新手手册……）：拖着标题栏移到屏幕任意位置；每种浮窗的位置分别记在本机，下次打开还在原处。
- * 第一次打开时水平居中。
+ * 道具浮窗（卡册、新手手册……）：一个页面可以同时开好几个。拖着标题栏移到屏幕任意位置；
+ * 每个浮窗的位置按 id 分别记在本机，下次打开还在原处。第一次打开时水平居中，按 cascade 错开一点。
  */
-export function FloatWindow({ id, title, onClose, children, dropZone, className = '' }: {
-  /** 记位置用，每种浮窗一个 */
+export function FloatWindow({ id, title, onClose, children, dropZone, className = '', cascade = 0 }: {
+  /** 记位置用，每个浮窗一个（比如每本卡册一个） */
   id: string;
   title: ReactNode;
   onClose: () => void;
   children: ReactNode;
   dropZone?: string;
   className?: string;
+  /** 第一次打开时往右下错开几格（同时开好几个时不完全叠在一起） */
+  cascade?: number;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const posKey = `kanu.float.${id}`;
-  const [pos, setPos] = useState(() => readPos(posKey) ?? { x: -1, y: 64 });
+  const [z, setZ] = useState(() => ++topZ);
+  const front = () => { if (z !== topZ) setZ(++topZ); };
+  const [pos, setPos] = useState(() => readPos(posKey) ?? { x: -1 - cascade, y: 64 + cascade * 28 });
   const grab = useRef<{ dx: number; dy: number; id: number } | null>(null);
 
   const clamp = useCallback((x: number, y: number) => {
@@ -123,16 +130,16 @@ export function FloatWindow({ id, title, onClose, children, dropZone, className 
     return { x: Math.min(Math.max(0, x), Math.max(0, window.innerWidth - w)), y: Math.min(Math.max(0, y), Math.max(0, window.innerHeight - 48)) };
   }, []);
   useEffect(() => {
-    // x = -1 表示还没摆过：居中
-    setPos((p) => (p.x < 0 ? clamp((window.innerWidth - (ref.current?.offsetWidth ?? 320)) / 2, p.y) : clamp(p.x, p.y)));
+    // x < 0 表示还没摆过：居中，再按 cascade（存在 -1 - cascade 里）往右错开
+    setPos((p) => (p.x < 0 ? clamp((window.innerWidth - (ref.current?.offsetWidth ?? 320)) / 2 + (-1 - p.x) * 20, p.y) : clamp(p.x, p.y)));
     const onResize = () => setPos((p) => clamp(p.x, p.y));
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, [clamp]);
 
-  const style: CSSProperties = { left: Math.max(0, pos.x), top: pos.y, visibility: pos.x < 0 ? 'hidden' : undefined };
+  const style: CSSProperties = { left: Math.max(0, pos.x), top: pos.y, zIndex: z, visibility: pos.x < 0 ? 'hidden' : undefined };
   return (
-    <div ref={ref} className={`float-window ${className}`} style={style} data-drop={dropZone} role="dialog">
+    <div ref={ref} className={`float-window ${className}`} style={style} data-drop={dropZone} role="dialog" onPointerDownCapture={front}>
       <div
         className="float-title"
         onPointerDown={(e) => {

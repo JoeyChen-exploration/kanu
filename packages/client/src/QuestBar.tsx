@@ -50,8 +50,11 @@ export function QuestBar({ onGo, onChange }: { onGo: (tab: string) => void; onCh
 
   if (!quests) return null;
   const pending = quests.filter((q) => !q.claimed);
-  const shown = pending.slice(0, QUEST_BAR.visible);
-  const ready = pending.filter((q) => q.done).length;
+  // 能领奖的置顶，而且全部显示（不被"只显示几条"挤掉）；剩下的位置按顺序补上接下来要做的
+  const claimable = pending.filter((q) => q.done);
+  const todo = pending.filter((q) => !q.done);
+  const shown = [...claimable, ...todo.slice(0, Math.max(0, QUEST_BAR.visible - claimable.length))];
+  const ready = claimable.length;
   const doneCount = quests.length - pending.length;
 
   return (

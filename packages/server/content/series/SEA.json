@@ -1,0 +1,28 @@
+{
+  "id": "SEA",
+  "name": "深海星港",
+  "kind": "themed",
+  "note": "占位内容：卡名、标签、卡面文字都是临时的。",
+  "cards": [
+    { "id": "SEA-01", "name": "霓虹鱼缸", "rarity": "N", "tags": ["水", "霓虹"] },
+    { "id": "SEA-02", "name": "破雨伞", "rarity": "N", "tags": ["水"] },
+    { "id": "SEA-03", "name": "港口吊机", "rarity": "N", "tags": ["机械"] },
+    { "id": "SEA-04", "name": "漂流瓶", "rarity": "N", "tags": ["水"] },
+    { "id": "SEA-05", "name": "旧渔网", "rarity": "N", "tags": ["水"] },
+    { "id": "SEA-06", "name": "灯塔残骸", "rarity": "N", "tags": ["水", "影"] },
+    { "id": "SEA-07", "name": "咸水泡面", "rarity": "N", "tags": ["水", "火"] },
+    { "id": "SEA-08", "name": "下水道鳄鱼", "rarity": "R", "tags": ["兽", "水"] },
+    { "id": "SEA-09", "name": "星港水手", "rarity": "R", "tags": ["水"] },
+    { "id": "SEA-10", "name": "潜水钟", "rarity": "R", "tags": ["水", "机械"] },
+    { "id": "SEA-11", "name": "发光水母", "rarity": "R", "tags": ["水", "霓虹"] },
+    { "id": "SEA-12", "name": "码头搬运工", "rarity": "R", "tags": ["水"] },
+    { "id": "SEA-13", "name": "冰河潜行者", "rarity": "SR", "tags": ["水", "影"], "flavor": "冷却液管道里的水，比外面的天还干净。" },
+    { "id": "SEA-14", "name": "深海探照灯", "rarity": "SR", "tags": ["水", "霓虹"], "flavor": "照见的东西，最好别讲出去。" },
+    { "id": "SEA-15", "name": "港务长", "rarity": "SR", "tags": ["水"], "flavor": "每艘船靠岸，都得先过他这一关。" },
+    { "id": "SEA-16", "name": "鲸骨船", "rarity": "SR", "tags": ["水", "灵"], "flavor": "船上的人说，夜里能听见龙骨在唱歌。" },
+    { "id": "SEA-17", "name": "星港领航员", "rarity": "SSR", "tags": ["水"], "flavor": "没有她，进港的船只能靠运气。" },
+    { "id": "SEA-18", "name": "潮汐巫女", "rarity": "SSR", "tags": ["水", "灵"], "flavor": "她说退潮，海就退了。" },
+    { "id": "SEA-19", "name": "远洋货轮·无名号", "rarity": "UR", "tags": ["水", "机械"], "flavor": "登记册上没有它，可它每个月都会靠岸。" },
+    { "id": "SEA-20", "name": "深渊鲸歌", "rarity": "LR", "tags": ["水", "灵"], "flavor": "空间站最底层有片海，海里有首歌。" }
+  ]
+}

@@ -1,66 +1,80 @@
-// 柜台页（FR-CTR-1～5）：一个营业日 6 位顾客一次到店；点顾客 → 挑卡 → 开价 / 快速出售 / 接受还价。
-// 顾客都接待完（或请走）就能打烊，进入下一个营业日（学深空当铺，2026-11-17）。
+// 柜台页（FR-CTR-1～5）：顾客一位一位进门（学深空当铺）。只看得到眼前这一位，处理完下一位才进来，
+// 不知道下一位是谁、今天还剩几位。挑卡（或卡包）→ 开价 / 接受还价 / 快速出售 / 请走。都接待完就能打烊。
 import { useEffect, useState } from 'react';
-import { PACKS } from '@kanu/shared/balance';
+import { STORE } from '@kanu/shared/balance';
 import type { CounterResponse, CustomerView, EligibleCardsResponse, EndDayResponse, MeResponse, OfferResponse } from '@kanu/shared/types';
 import { api, newIdempotencyKey } from '../api.ts';
 import { Card, fmt } from '../Card.tsx';
 
-const AVATAR: Record<string, string> = { resident: '🧑‍🔧', collector: '🧐', rich: '🤵', middleman: '🕶️' };
-const STATUS: Record<string, string> = { sold: '已成交', left: '已离开', dismissed: '已请走' };
+const AVATAR: Record<string, string> = {
+  resident: '🧑‍🔧', student: '🧒', tourist: '🧳', collector: '🧐', nostalgic: '👴',
+  rich: '🤵', speculator: '📈', streamer: '🎥', middleman: '🕶️',
+};
+const STATUS: Record<string, string> = { sold: '成交', left: '走了', dismissed: '请走' };
+/** 开价时每次加减多少，玩家自己选 */
+const STEPS = [1, 10, 100, 1000];
 
 export function Counter({ onChange }: { onChange: (patch: Partial<MeResponse>) => void }) {
   const [data, setData] = useState<CounterResponse | null>(null);
-  const [active, setActive] = useState<CustomerView | null>(null);
-  const [closing, setClosing] = useState(false);
+  const [msg, setMsg] = useState('');
+  const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
 
   const load = () => api<CounterResponse>('/counter').then(setData).catch((e: Error) => setErr(e.message));
   useEffect(() => { void load(); }, []);
 
-  const update = (c: CustomerView) => {
-    setData((d) => (d ? { ...d, customers: d.customers.map((x) => (x.id === c.id ? c : x)) } : d));
-    setActive(c.status === 'waiting' ? c : null);
+  /** 一位顾客的结果出来后：显示一句结果，下一位进门 */
+  const afterResult = (text: string) => {
+    setMsg(text);
+    void load();
   };
 
   const endDay = async () => {
-    setClosing(true);
+    setBusy(true);
     setErr('');
     try {
       const r = await api<EndDayResponse>('/day/end', { method: 'POST', body: {}, idempotencyKey: newIdempotencyKey() });
-      onChange({ gameDay: r.day, packsLeftToday: PACKS.normal.dailyLimit });
+      onChange({ gameDay: r.day, packsLeftToday: STORE.packsPerDay });
+      setMsg('');
       await load();
     } catch (e) {
       setErr((e as Error).message);
     } finally {
-      setClosing(false);
+      setBusy(false);
     }
   };
 
-  const waiting = data?.customers.filter((c) => c.status === 'waiting').length ?? 0;
+  if (!data) return <section className="page"><p className="hint">开门中…</p>{err && <p className="error">{err}</p>}</section>;
 
   return (
     <section className="page">
-      <h2>柜台 · 第 {data?.day ?? '-'} 天 <small>{waiting} 位在等</small></h2>
-      {data?.customers.map((c) => (
-        <button key={c.id} className={`customer${c.status === 'waiting' ? '' : ' done'}`} disabled={c.status !== 'waiting'} onClick={() => setActive(c)}>
-          <span className="customer-avatar" aria-hidden>{AVATAR[c.type] ?? '🙂'}</span>
-          <span className="customer-body">
-            <span className="customer-head">
-              <b>{c.typeName}</b>
-              {c.status === 'waiting' ? <Patience c={c} /> : <span className="badge">{STATUS[c.status]}</span>}
-            </span>
-            <span className="bubble">{c.line}</span>
-            <span className="customer-meta">想要：{c.demand.text} · 预算约 {fmt(c.budgetLow)}–{fmt(c.budgetHigh)}</span>
-          </span>
-        </button>
-      ))}
-      {data && waiting === 0 && (
-        <button className="primary" disabled={closing} onClick={endDay}>{closing ? '打烊中…' : `打烊，进入第 ${data.day + 1} 天`}</button>
+      <h2>柜台 · 第 {data.day} 天 <small>已接待 {data.served.length} 位</small></h2>
+      {msg && <p className="deal-msg">{msg}</p>}
+
+      {data.current && (
+        <Deal key={data.current.id} customer={data.current} onChange={onChange} onDone={afterResult} onUpdate={(c) => setData({ ...data, current: c })} />
       )}
-      {data && waiting > 0 && <p className="hint">客人都接待完（或者请走）就能打烊，进入下一天。</p>}
+
+      {data.done && (
+        <div className="closing">
+          <p>今天的客人都走了。</p>
+          <button className="primary" disabled={busy} onClick={endDay}>{busy ? '打烊中…' : `打烊，进入第 ${data.day + 1} 天`}</button>
+        </div>
+      )}
+
+      {data.served.length > 0 && (
+        <details className="served">
+          <summary>今天接待过的 {data.served.length} 位</summary>
+          {[...data.served].reverse().map((c) => (
+            <div key={c.id} className="served-row">
+              <span aria-hidden>{AVATAR[c.type] ?? '🙂'}</span>
+              <span>{c.typeName}</span>
+              <span className="badge">{STATUS[c.status]}</span>
+            </div>
+          ))}
+        </details>
+      )}
       {err && <p className="error">{err}</p>}
-      {active && <Deal customer={active} onClose={() => setActive(null)} onUpdate={update} onChange={onChange} />}
     </section>
   );
 }
@@ -69,106 +83,123 @@ function Patience({ c }: { c: CustomerView }) {
   return <span className="patience" aria-label={`耐心 ${c.patience}/${c.maxPatience}`}>{'●'.repeat(c.patience)}{'○'.repeat(Math.max(0, c.maxPatience - c.patience))}</span>;
 }
 
-function Deal({ customer, onClose, onUpdate, onChange }: {
+type Picked = { kind: 'card' | 'pack'; id: number; name: string; price: number; quickPrice: number };
+
+/** 眼前这一位：顾客信息 + 挑货 + 开价 */
+function Deal({ customer, onChange, onDone, onUpdate }: {
   customer: CustomerView;
-  onClose: () => void;
-  onUpdate: (c: CustomerView) => void;
   onChange: (patch: Partial<MeResponse>) => void;
+  onDone: (text: string) => void;
+  onUpdate: (c: CustomerView) => void;
 }) {
-  const [cards, setCards] = useState<EligibleCardsResponse['cards'] | null>(null);
-  const [pickedId, setPickedId] = useState<number | null>(null);
+  const [stock, setStock] = useState<EligibleCardsResponse | null>(null);
+  const [picked, setPicked] = useState<Picked | null>(null);
   const [price, setPrice] = useState('');
+  const [step, setStep] = useState(10);
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState('');
+  const [note, setNote] = useState('');
+  /** 按当前步长加减开价，最低 1 */
+  const bump = (d: number) => setPrice((p) => String(Math.max(1, (Number(p) || 0) + d)));
 
   useEffect(() => {
-    api<EligibleCardsResponse>(`/counter/${customer.id}/cards`).then((r) => setCards(r.cards)).catch((e: Error) => setMsg(e.message));
+    api<EligibleCardsResponse>(`/counter/${customer.id}/cards`).then(setStock).catch((e: Error) => setNote(e.message));
   }, [customer.id]);
-
-  const picked = cards?.find((c) => c.card.id === pickedId) ?? null;
 
   const send = async (path: 'offer' | 'quick', p?: number) => {
     if (!picked) return;
     setBusy(true);
-    setMsg('');
+    setNote('');
     try {
+      const item = picked.kind === 'pack' ? { packId: picked.id } : { instanceId: picked.id };
       const r = await api<OfferResponse>(`/counter/${customer.id}/${path}`, {
-        method: 'POST', idempotencyKey: newIdempotencyKey(), body: { instanceId: picked.card.id, ...(p !== undefined ? { price: p } : {}) },
+        method: 'POST', idempotencyKey: newIdempotencyKey(), body: { ...item, ...(p !== undefined ? { price: p } : {}) },
       });
       onChange({ credits: r.credits, reputation: r.reputation });
-      const text: Record<OfferResponse['outcome'], string> = {
-        deal: `成交！收入 ${fmt(r.price ?? 0)} 信用点`,
-        counter: `对方还价 ${fmt(r.customer.counterPrice ?? 0)}`,
-        too_high: '对方嫌太贵了',
-        left: '对方走了',
-        caught: '被识破是假卡！信誉下降',
-      };
-      setMsg(text[r.outcome]);
-      if (r.outcome === 'deal') setTimeout(() => onUpdate(r.customer), 900);
-      else onUpdate(r.customer);
+      if (r.outcome === 'counter') { setNote(`对方还价 ${fmt(r.customer.counterPrice ?? 0)}`); onUpdate(r.customer); }
+      else if (r.outcome === 'too_high') { setNote('对方嫌太贵了'); onUpdate(r.customer); }
+      else if (r.outcome === 'deal') onDone(`成交！「${picked.name}」卖了 ${fmt(r.price ?? 0)} 信用点`);
+      else if (r.outcome === 'caught') onDone('被识破是假货！信誉下降');
+      else onDone(`${customer.typeName}走了`);
     } catch (e) {
-      setMsg((e as Error).message);
+      setNote((e as Error).message);
     } finally {
       setBusy(false);
     }
   };
 
   const dismiss = async () => {
-    const r = await api<{ customer: CustomerView }>(`/counter/${customer.id}/dismiss`, { method: 'POST', body: {} });
-    onUpdate(r.customer);
+    setBusy(true);
+    try {
+      await api(`/counter/${customer.id}/dismiss`, { method: 'POST', body: {} });
+      onDone(`请${customer.typeName}离开了`);
+    } catch (e) {
+      setNote((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
   };
 
+  const empty = stock && stock.cards.length === 0 && stock.packs.length === 0;
+
   return (
-    <div className="sheet" onClick={onClose}>
-      <div className="sheet-body" onClick={(e) => e.stopPropagation()}>
-        <div className="deal-head">
-          <span className="customer-avatar" aria-hidden>{AVATAR[customer.type] ?? '🙂'}</span>
-          <div>
-            <b>{customer.typeName}</b> <Patience c={customer} />
-            <p className="bubble">{customer.line}</p>
-            <p className="hint">想要：{customer.demand.text} · 预算约 {fmt(customer.budgetLow)}–{fmt(customer.budgetHigh)}</p>
-          </div>
+    <div className="visitor">
+      <div className="visitor-head">
+        <span className="visitor-avatar" aria-hidden>{AVATAR[customer.type] ?? '🙂'}</span>
+        <div>
+          <b>{customer.typeName}</b> <Patience c={customer} />
+          <p className="bubble">{customer.line}</p>
+          <p className="hint">想要：{customer.demand.text} · 预算约 {fmt(customer.budgetLow)}–{fmt(customer.budgetHigh)}</p>
         </div>
-
-        {!picked && (
-          <>
-            <h3>挑一张卡</h3>
-            {cards && cards.length === 0 && <p className="hint">你手上没有他要的卡。</p>}
-            <div className="grid">
-              {cards?.map(({ card, quickPrice }) => (
-                <button key={card.id} className="cell" onClick={() => { setPickedId(card.id); setPrice(String(card.price)); }}>
-                  <Card card={card} small />
-                  <span className="cell-price">快卖 {fmt(quickPrice)}</span>
-                </button>
-              ))}
-            </div>
-          </>
-        )}
-
-        {picked && (
-          <>
-            <div className="deal-card"><Card card={picked.card} small /><div>
-              <b>{picked.card.name}</b>
-              <p className="hint">市场价约 {fmt(picked.card.price)}</p>
-              <button className="chip" onClick={() => setPickedId(null)}>换一张</button>
-            </div></div>
-            <label className="price-input">
-              开价
-              <input inputMode="numeric" value={price} onChange={(e) => setPrice(e.target.value.replace(/\D/g, ''))} />
-              信用点
-            </label>
-            <button className="primary" disabled={busy || !price} onClick={() => send('offer', Number(price))}>开价 {price ? fmt(Number(price)) : ''}</button>
-            {customer.counterPrice !== null && (
-              <button className="secondary" disabled={busy} onClick={() => send('offer', customer.counterPrice!)}>接受还价 {fmt(customer.counterPrice)}</button>
-            )}
-            <button className="secondary" disabled={busy} onClick={() => send('quick')}>快速出售 {fmt(picked.quickPrice)}（必定成交）</button>
-          </>
-        )}
-
-        {msg && <p className="deal-msg">{msg}</p>}
-        <button className="secondary" onClick={dismiss}>请他离开</button>
-        <button className="secondary" onClick={onClose}>关闭</button>
       </div>
+
+      {!picked && (
+        <>
+          {empty && <p className="hint">你手上没有他要的东西。</p>}
+          <div className="grid">
+            {stock?.packs.map((p) => (
+              <button key={`p${p.id}`} className="cell" onClick={() => { setPicked({ kind: 'pack', id: p.id, name: p.name, price: p.quickPrice, quickPrice: p.quickPrice }); setPrice(String(p.quickPrice)); }}>
+                <div className={`pack-art kind-${p.kind}`} aria-hidden>{p.name.slice(0, 2)}</div>
+                <span className="cell-price">快卖 {fmt(p.quickPrice)}</span>
+              </button>
+            ))}
+            {stock?.cards.map(({ card, quickPrice }) => (
+              <button key={card.id} className="cell" onClick={() => { setPicked({ kind: 'card', id: card.id, name: card.name, price: card.price, quickPrice }); setPrice(String(card.price)); }}>
+                <Card card={card} small />
+                <span className="cell-price">快卖 {fmt(quickPrice)}</span>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+
+      {picked && (
+        <>
+          <div className="deal-card">
+            <div><b>{picked.name}</b><p className="hint">{picked.kind === 'pack' ? '没拆的卡包' : `市场价约 ${fmt(picked.price)}`}</p></div>
+            <button className="chip" onClick={() => setPicked(null)}>换一样</button>
+          </div>
+          <div className="price-input">
+            <span>开价</span>
+            <button className="step-btn" aria-label={`减 ${step}`} disabled={!price || Number(price) <= 1} onClick={() => bump(-step)}>−</button>
+            <input inputMode="numeric" aria-label="开价" value={price} onChange={(e) => setPrice(e.target.value.replace(/\D/g, ''))} />
+            <button className="step-btn" aria-label={`加 ${step}`} onClick={() => bump(step)}>+</button>
+          </div>
+          <div className="step-choices">
+            <span className="hint">每次加减</span>
+            {STEPS.map((s) => (
+              <button key={s} className={step === s ? 'chip on' : 'chip'} onClick={() => setStep(s)}>{fmt(s)}</button>
+            ))}
+          </div>
+          <button className="primary" disabled={busy || !price} onClick={() => send('offer', Number(price))}>开价 {price ? fmt(Number(price)) : ''}</button>
+          {customer.counterPrice !== null && (
+            <button className="secondary" disabled={busy} onClick={() => send('offer', customer.counterPrice!)}>接受还价 {fmt(customer.counterPrice)}</button>
+          )}
+          <button className="secondary" disabled={busy} onClick={() => send('quick')}>快速出售 {fmt(picked.quickPrice)}（必定成交）</button>
+        </>
+      )}
+
+      {note && <p className="deal-msg">{note}</p>}
+      <button className="secondary" disabled={busy} onClick={dismiss}>请他离开</button>
     </div>
   );
 }

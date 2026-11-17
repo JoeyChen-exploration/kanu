@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CUSTOMER, CUSTOMER_TYPES, GRADE, GRADES, PACKS, RARITIES, RARITY, STYLE, STYLES, atLeast } from '@kanu/shared/balance';
+import { CUSTOMER, CUSTOMER_TYPES, GRADE, GRADES, PACKS, RARITIES, STYLE, STYLES, atLeast } from '@kanu/shared/balance';
 import { openPack, rollGrade, rollRarity, rollStyle, rollSubgrades } from '../src/game/cards.ts';
 import { gradingFee, labFee, loupeFee, publicPrice, rentForWeek } from '../src/game/price.ts';
 import { PPM, seeded } from '../src/game/rng.ts';
@@ -14,8 +14,13 @@ describe('balance.ts 的概率表', () => {
     expect(CUSTOMER_TYPES.reduce((s, t) => s + CUSTOMER[t].ppm, 0)).toBe(PPM);
   });
 
-  it('一个系列 53 张', () => {
-    expect(RARITIES.reduce((s, r) => s + RARITY[r].perSeries, 0)).toBe(53);
+  it('主题包每种 20 张、没有 MR；典藏包每种 20 张、有 1 张 MR', () => {
+    const sum = (t: 'themed' | 'premium') => RARITIES.reduce((s, r) => s + PACKS[t].composition[r], 0);
+    expect(sum('themed')).toBe(20);
+    expect(sum('premium')).toBe(20);
+    expect(PACKS.themed.composition.MR).toBe(0);
+    expect(PACKS.themed.odds.MR).toBe(0);
+    expect(PACKS.premium.composition.MR).toBe(1);
   });
 });
 
@@ -24,24 +29,24 @@ describe('开包（FR-PACK-1）', () => {
     const rng = seeded(1);
     const n = 200_000;
     const got = Object.fromEntries(RARITIES.map((r) => [r, 0])) as Record<string, number>;
-    for (let i = 0; i < n; i += 1) got[rollRarity(rng, 'normal')]! += 1;
+    for (let i = 0; i < n; i += 1) got[rollRarity(rng, 'themed')]! += 1;
     for (const r of RARITIES) {
-      const p = PACKS.normal.odds[r] / PPM;
+      const p = PACKS.themed.odds[r] / PPM;
       const sd = Math.sqrt(n * p * (1 - p));
       expect(Math.abs(got[r]! - n * p)).toBeLessThan(5 * sd + 1);
     }
   });
 
   it('同一个种子结果完全一样（纯函数、可复现）', () => {
-    const a = openPack(seeded(42), { packType: 'normal', pityCount: 0, serialAvailable: always });
-    const b = openPack(seeded(42), { packType: 'normal', pityCount: 0, serialAvailable: always });
+    const a = openPack(seeded(42), { packType: 'themed', pityCount: 0, serialAvailable: always });
+    const b = openPack(seeded(42), { packType: 'themed', pityCount: 0, serialAvailable: always });
     expect(a).toEqual(b);
   });
 
-  it('正规卡包全是真卡、正规来源', () => {
+  it('主题包全是真卡、正规来源', () => {
     const rng = seeded(7);
     for (let i = 0; i < 2000; i += 1) {
-      for (const c of openPack(rng, { packType: 'normal', pityCount: 0, serialAvailable: always }).cards) {
+      for (const c of openPack(rng, { packType: 'themed', pityCount: 0, serialAvailable: always }).cards) {
         expect(c.authenticity).toBe('real');
         expect(c.origin).toBe('legit');
       }
@@ -91,7 +96,7 @@ describe('保底（FR-PACK-4）', () => {
   it('没出 SSR 以上时计数 +1，出了清零', () => {
     const rng = seeded(11);
     for (let i = 0; i < 5000; i += 1) {
-      const r = openPack(rng, { packType: 'normal', pityCount: 3, serialAvailable: always });
+      const r = openPack(rng, { packType: 'themed', pityCount: 3, serialAvailable: always });
       const hit = r.cards.some((c) => atLeast(c.rarity, 'SSR'));
       expect(r.pityCount).toBe(hit ? 0 : 4);
     }
@@ -101,7 +106,7 @@ describe('保底（FR-PACK-4）', () => {
     const rng = seeded(12);
     let triggered = 0;
     for (let i = 0; i < 5000; i += 1) {
-      const r = openPack(rng, { packType: 'normal', pityCount: 9, serialAvailable: always });
+      const r = openPack(rng, { packType: 'themed', pityCount: 9, serialAvailable: always });
       expect(r.cards.some((c) => atLeast(c.rarity, 'SSR'))).toBe(true);
       expect(r.pityCount).toBe(0);
       if (r.pityTriggered) {

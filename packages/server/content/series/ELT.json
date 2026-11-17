@@ -1,0 +1,28 @@
+{
+  "id": "ELT",
+  "name": "上层区典藏",
+  "kind": "premium",
+  "note": "占位内容：卡名、标签、卡面文字都是临时的。典藏包是唯一有 MR 的卡包。",
+  "cards": [
+    { "id": "ELT-01", "name": "镀金请柬", "rarity": "N", "tags": ["上层"] },
+    { "id": "ELT-02", "name": "香槟塔", "rarity": "N", "tags": ["上层"] },
+    { "id": "ELT-03", "name": "天台花园", "rarity": "N", "tags": ["上层"] },
+    { "id": "ELT-04", "name": "观景电梯", "rarity": "N", "tags": ["上层", "机械"] },
+    { "id": "ELT-05", "name": "私人管家", "rarity": "R", "tags": ["上层"] },
+    { "id": "ELT-06", "name": "拍卖师", "rarity": "R", "tags": ["上层"] },
+    { "id": "ELT-07", "name": "上层区记者", "rarity": "R", "tags": ["上层", "影"] },
+    { "id": "ELT-08", "name": "礼宾机器人", "rarity": "R", "tags": ["上层", "机械"] },
+    { "id": "ELT-09", "name": "收藏家沙龙", "rarity": "SR", "tags": ["上层"], "flavor": "入场券是一张你舍不得卖的卡。" },
+    { "id": "ELT-10", "name": "空中别墅", "rarity": "SR", "tags": ["上层"], "flavor": "从这儿往下看，下层区只是一片光。" },
+    { "id": "ELT-11", "name": "名表匠人", "rarity": "SR", "tags": ["上层", "机械"], "flavor": "他修的表，比戴表的人活得久。" },
+    { "id": "ELT-12", "name": "贵族猎鹰", "rarity": "SR", "tags": ["上层", "兽"], "flavor": "它只吃从下层区抓来的东西。" },
+    { "id": "ELT-13", "name": "星空酒会", "rarity": "SR", "tags": ["上层", "霓虹"], "flavor": "酒杯里的星星是真的，买来的。" },
+    { "id": "ELT-14", "name": "首席鉴定官", "rarity": "SSR", "tags": ["上层"], "flavor": "她一眼就能看出卡的真假，也能看出人的。" },
+    { "id": "ELT-15", "name": "财阀千金", "rarity": "SSR", "tags": ["上层"], "flavor": "她买卡不看价，只看有没有人跟她抢。" },
+    { "id": "ELT-16", "name": "典藏馆长", "rarity": "SSR", "tags": ["上层", "灵"], "flavor": "馆里最贵的那张卡，从来没人见过。" },
+    { "id": "ELT-17", "name": "星港之主", "rarity": "UR", "tags": ["上层", "机械"], "flavor": "每一艘进港的船，都欠她一句谢谢。" },
+    { "id": "ELT-18", "name": "天穹画廊", "rarity": "UR", "tags": ["上层", "霓虹"], "flavor": "每一幅画都要用一整层楼的电来点亮。" },
+    { "id": "ELT-19", "name": "上层区议长", "rarity": "LR", "tags": ["上层", "影"], "flavor": "下层区的规矩，都是他定的。" },
+    { "id": "ELT-20", "name": "霓虹龙皇·终焉", "rarity": "MR", "tags": ["龙", "霓虹", "火"], "flavor": "它睁眼时，整座空间站的灯同时亮起。" }
+  ]
+}

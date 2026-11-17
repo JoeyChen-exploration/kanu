@@ -15,7 +15,7 @@
 // 2026-11-17 定的目标（每天 2 包、周五起留租金）：破产率约 15%、买店率约 70%、每周交租前净赚中位约 10,000 信用点（约 1,000 金币）。
 // 没算进去的：送评、鉴定、科技树、顾客的具体标签、抵押赎回、新闻和供需。
 import {
-  COUNTER, CUSTOMER, CUSTOMER_TYPES, EXCHANGE, GRAND_COLLECTOR, PACKS, PLAYER, RARITY, RENT, SEASON, SHOP_PRICE, SHOWCASE,
+  COUNTER, CUSTOMER, CUSTOMER_TYPES, EXCHANGE, GRAND_COLLECTOR, PACKS, QUESTS, type QuestMetric, PLAYER, RARITY, RENT, SEASON, SHOP_PRICE, SHOWCASE,
   type CustomerType, type Rarity, type Style,
 } from '@kanu/shared/balance';
 import { openPack } from '../packages/server/src/game/cards.ts';
@@ -41,6 +41,10 @@ const ONLY_MAIN = arg('only-main', 0) === 1;
 const SHOP = arg('shop', SHOP_PRICE);
 // --start 开局信用点（估新手任务奖励的影响：任务奖励大多在第一周拿到，用"开局 + 全部奖励"当上限）
 PLAYER.startCredits = arg('start', PLAYER.startCredits);
+// --quests 0：不发新手任务奖励（默认发，和游戏一致）
+const QUESTS_ON = arg('quests', 1) === 1;
+/** 新手任务里"图鉴点亮几张"用的单独随机源 */
+let questRng: Rng = seeded(SEED + 7919);
 RENT.base = arg('rent-base', RENT.base);
 RENT.growth = arg('rent-growth', RENT.growth);
 // --price SR=800,SSR=2500：临时改某几档的基准价
@@ -90,6 +94,9 @@ interface SeasonResult {
   dailyScore: number[];
   showcaseSpent: number;
   showcaseWeek: number | null;
+  /** 新手任务奖励一共领了多少；第一次破产在第几周 */
+  questIncome: number;
+  firstBankruptWeek: number | null;
   /** 大藏家：来了几次、成交几次、成交收入 */
   grandVisits: number;
   grandSales: number;
@@ -113,6 +120,7 @@ function season(rng: Rng, packsPerDay: number, reserveFromDay: number, mode: Sho
   let bankrupts = 0;
   let inv: Card[] = [];
   const weeklyNet: number[] = [];
+  let firstBankruptWeek: number | null = null;
   // 珍藏柜：钱够（留出这周租金 + 缓冲）就解锁 / 升级；每天开门前把展示分最高的卡换进柜里
   let level = 0;
   let shelf: Card[] = [];
@@ -120,6 +128,19 @@ function season(rng: Rng, packsPerDay: number, reserveFromDay: number, mode: Sho
   let showcaseWeek: number | null = null;
   const dailyScore: number[] = [];
   let grandVisits = 0, grandSales = 0, grandIncome = 0;
+  // 新手任务（balance.QUESTS）：达到进度就领奖（一个赛季只领一次，破产重来也不再领）。
+  // 图鉴点亮张数用单独的随机源模拟（不打乱主随机序列，和不开任务的结果可比）
+  const qstats: Record<QuestMetric, number> = { packsBought: 0, packsOpened: 0, sales: 0, daysEnded: 0, collected: 0, showcaseLevel: 0, showcaseCards: 0, binders: 1 };
+  const claimed = new Set<string>();
+  const seen = new Set<string>();
+  let questIncome = 0;
+  const payQuests = () => {
+    if (!QUESTS_ON) return;
+    for (const q of QUESTS) {
+      if (claimed.has(q.id) || qstats[q.metric] < q.target) continue;
+      claimed.add(q.id); credits += q.reward; questIncome += q.reward;
+    }
+  };
   const restock = () => {
     const slots = showcaseSlots(level);
     const pool = [...shelf, ...inv].sort((a, b) => cardScore(b) - cardScore(a) || b.value - a.value);
@@ -138,7 +159,11 @@ function season(rng: Rng, packsPerDay: number, reserveFromDay: number, mode: Sho
         const r = openPack(rng, { packType: 'themed', pityCount: pity, serialAvailable: () => true });
         pity = r.pityCount;
         for (const c of r.cards) inv.push({ rarity: c.rarity, style: c.style, value: publicPrice({ rarity: c.rarity, style: c.style, publicGrade: null }) });
+        // 图鉴：这包是 4 种主题包里随机一种，每张卡是这个稀有度里随机一张
+        const series = questRng.int(4);
+        for (const c of r.cards) seen.add(`${series}-${c.rarity}-${questRng.int(Math.max(1, PACKS.themed.composition[c.rarity]))}`);
       }
+      if (n > 0) { qstats.packsBought += 1; qstats.packsOpened += n; qstats.collected = seen.size; }
       if (useShowcase) {
         const next = SHOWCASE.levels[level + 1];
         const keep = (shopWeek ? 0 : rentForWeek(week)) + SHOWCASE_BUFFER;
@@ -174,9 +199,14 @@ function season(rng: Rng, packsPerDay: number, reserveFromDay: number, mode: Sho
           if (card && type === 'grand') { grandSales += 1; grandIncome += price; }
         }
         credits += price; income += price;
+        if (price > 0) qstats.sales += 1;
       }
       // 打烊后把剩下的好卡放回柜里（柜里的卡交租时不能抵押，破产时留下）
       if (mode === 'sell') restock();
+      qstats.daysEnded += 1;
+      qstats.showcaseLevel = level;
+      qstats.showcaseCards = shelf.length;
+      payQuests();
     }
     weeklyNet.push(income - spent);
 
@@ -187,13 +217,14 @@ function season(rng: Rng, packsPerDay: number, reserveFromDay: number, mode: Sho
       // 珍藏柜里的卡不能抵押；破产时珍藏柜和柜里的卡都留下
       if (credits < due) {
         bankrupts += 1; credits = PLAYER.restartCredits; inv = []; week = 1;
+        firstBankruptWeek ??= w;
       } else {
         credits -= due; week += 1;
       }
     }
     if (!shopWeek && credits >= SHOP + SHOP_BUFFER) { credits -= SHOP; shopWeek = w; }
   }
-  return { bankrupts, shopWeek, weeklyNet, endCredits: credits, showcaseLevel: level, dailyScore, showcaseSpent, showcaseWeek, grandVisits, grandSales, grandIncome };
+  return { bankrupts, shopWeek, weeklyNet, endCredits: credits, showcaseLevel: level, dailyScore, showcaseSpent, showcaseWeek, grandVisits, grandSales, grandIncome, questIncome, firstBankruptWeek };
 }
 
 const pct = (xs: number[], p: number) => { const s = [...xs].sort((a, b) => a - b); return s[Math.min(s.length - 1, Math.floor(p * s.length))]!; };
@@ -210,6 +241,7 @@ for (const [packsPerDay, mode] of VARIANTS) {
   const label = `周五起才留租金${MODE_LABEL[mode]}`;
   const useShowcase = mode !== 'off';
   const rng = seeded(SEED);
+  questRng = seeded(SEED + 7919);
   const rs = Array.from({ length: SEASONS }, () => season(rng, packsPerDay, reserveFromDay, mode));
   const nets = rs.flatMap((r) => r.weeklyNet);
   const shopWeeks = rs.flatMap((r) => (r.shopWeek ? [r.shopWeek] : []));
@@ -223,6 +255,12 @@ for (const [packsPerDay, mode] of VARIANTS) {
   console.log(`  折合金币 中位 / 平均      ${fmt(pct(nets, 0.5) / EXCHANGE.creditsPerCoin)} / ${fmt(nets.reduce((s, v) => s + v, 0) / nets.length / EXCHANGE.creditsPerCoin)}（目标：中位约 1,000）`);
   console.log(`  P10 / P90                 ${fmt(pct(nets, 0.1))} / ${fmt(pct(nets, 0.9))}`);
   console.log(`赛季末信用点 中位           ${fmt(pct(rs.map((r) => r.endCredits), 0.5))}`);
+  const firstWeeks = rs.flatMap((r) => (r.firstBankruptWeek ? [r.firstBankruptWeek] : []));
+  if (firstWeeks.length) {
+    const byWeek = Array.from({ length: SEASON.weeks }, (_, i) => firstWeeks.filter((x) => x === i + 1).length);
+    console.log(`第一次破产在第几周（占全部赛季） ${byWeek.map((n, i) => `${i + 1}:${((n / SEASONS) * 100).toFixed(1)}%`).join(' ')}`);
+  }
+  if (QUESTS_ON) console.log(`新手任务奖励 平均             ${fmt(rs.reduce((s, r) => s + r.questIncome, 0) / SEASONS)} 信用点`);
   if (useShowcase) {
     const levels = rs.map((r) => r.showcaseLevel);
     const unlockWeeks = rs.flatMap((r) => (r.showcaseWeek ? [r.showcaseWeek] : []));

@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { ConfigResponse, MeResponse } from '@kanu/shared/types';
 import { api } from './api.ts';
 import { devLogin, insideDiscord, loginWithDiscord } from './discord.ts';
-import { fmt } from './Card.tsx';
+import { GameDayContext, fmt } from './Card.tsx';
 import { Packs } from './pages/Packs.tsx';
 import { Inventory } from './pages/Inventory.tsx';
 import { Collection } from './pages/Collection.tsx';
@@ -51,6 +51,7 @@ export function App() {
   const patchMe = (p: Partial<MeResponse>) => setState({ kind: 'ready', me: { ...me, ...p } });
 
   return (
+    <GameDayContext.Provider value={me.gameDay}>
     <div className="app">
       <header className="topbar">
         <Avatar url={me.user.avatar} />
@@ -70,6 +71,7 @@ export function App() {
         ))}
       </nav>
     </div>
+    </GameDayContext.Provider>
   );
 }
 

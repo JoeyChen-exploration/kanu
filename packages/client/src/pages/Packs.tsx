@@ -1,13 +1,14 @@
 // 进货页（DESIGN 4）：上面是库存里没拆的卡包，点了拆开、逐张翻牌；下面是电脑订货（5 种卡包，按包买，正常价、保证正品）。
 import { useEffect, useState } from 'react';
 import { PITY } from '@kanu/shared/balance';
-import type { BuyPacksResponse, MeResponse, OpenPackResponse, SealedPacksResponse, StoreResponse } from '@kanu/shared/types';
+import type { BindersResponse, BuyBinderResponse, BuyPacksResponse, MeResponse, OpenPackResponse, SealedPacksResponse, StoreResponse } from '@kanu/shared/types';
 import { api, newIdempotencyKey } from '../api.ts';
 import { Card, CardBack, fmt } from '../Card.tsx';
 
 export function Packs({ me, onChange }: { me: MeResponse; onChange: (patch: Partial<MeResponse>) => void }) {
   const [store, setStore] = useState<StoreResponse | null>(null);
   const [sealed, setSealed] = useState<SealedPacksResponse | null>(null);
+  const [binders, setBinders] = useState<BindersResponse | null>(null);
   const [opened, setOpened] = useState<OpenPackResponse | null>(null);
   const [flipped, setFlipped] = useState<boolean[]>([]);
   const [busy, setBusy] = useState(false);
@@ -17,9 +18,10 @@ export function Packs({ me, onChange }: { me: MeResponse; onChange: (patch: Part
   const [err, setErr] = useState('');
 
   const load = async () => {
-    const [s, p] = await Promise.all([api<StoreResponse>('/store'), api<SealedPacksResponse>('/packs')]);
+    const [s, p, b] = await Promise.all([api<StoreResponse>('/store'), api<SealedPacksResponse>('/packs'), api<BindersResponse>('/binders')]);
     setStore(s);
     setSealed(p);
+    setBinders(b);
   };
   useEffect(() => { load().catch((e: Error) => setErr(e.message)); }, []);
 
@@ -34,6 +36,12 @@ export function Packs({ me, onChange }: { me: MeResponse; onChange: (patch: Part
     const r = await api<BuyPacksResponse>('/store/buy', { method: 'POST', body: { items }, idempotencyKey: newIdempotencyKey() });
     onChange({ credits: r.credits, ...(r.packsLeftToday !== null ? { packsLeftToday: r.packsLeftToday } : {}) });
     setCart({});
+    await load();
+  });
+
+  const buyBinder = (kind: string) => run(async () => {
+    const r = await api<BuyBinderResponse>('/binders/buy', { method: 'POST', body: { kind }, idempotencyKey: newIdempotencyKey() });
+    onChange({ credits: r.credits });
     await load();
   });
 
@@ -119,6 +127,22 @@ export function Packs({ me, onChange }: { me: MeResponse; onChange: (patch: Part
           </div>
         ))}
       </div>
+      <h2>用品 <small>卡册</small></h2>
+      <p className="hint">卡要放进卡册才不会磨损；所有卡册的格数加起来就是你的库存上限。买了新卡册，桌面上的散卡会自动收进去。</p>
+      <div className="store-list">
+        {binders?.catalog.map((b) => (
+          <div key={b.kind} className="store-pack">
+            <div className={`binder-cover binder-${b.kind}`} aria-hidden>{b.name.slice(0, 2)}</div>
+            <div className="store-body">
+              <b>{b.name}</b>
+              <span className="badge">{b.slots} 张</span>
+              <span className="odds">{b.effect}</span>
+            </div>
+            <button className="buy" disabled={busy || (!free && me.credits < b.price)} onClick={() => buyBinder(b.kind)}>{free ? '免费' : fmt(b.price)}</button>
+          </div>
+        ))}
+      </div>
+
       {cartCount > 0 && (
         <div className="cart-bar">
           <span>购物车 {cartCount} 包 · {free ? '免费' : `${fmt(cartCost)} 信用点`}</span>

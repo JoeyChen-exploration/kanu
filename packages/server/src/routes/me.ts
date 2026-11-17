@@ -10,6 +10,8 @@ export function registerMeRoutes(app: FastifyInstance, deps: Deps, now: () => nu
     if (!req.user) return fail(reply, 401, 'unauthorized', '请重新打开卡奴登录');
     const player = deps.repo.getPlayer(req.user.id);
     if (!player) return fail(reply, 401, 'unauthorized', '请重新打开卡奴登录');
+    // 老玩家（卡册上线前建的档）第一次进来补一本开局卡册
+    deps.repo.db.transaction(() => deps.binders!.ensureStarter(player.discord_id, now(), player.game_day))();
     const wallet = await deps.wallet.balance(req.user.id);
     const used = deps.repo.packsOpenedToday(req.user.id, dayKey(player.game_day));
     const body: MeResponse = {

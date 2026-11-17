@@ -96,8 +96,10 @@ export function rollCustomer(rng: Rng, input: {
   templates: TemplateInfo[];
   series: SeriesInfo[];
   typicalPrice: (rarities: Rarity[]) => number;
+  /** 指定类型（比如卡册效果带来的额外收藏家）；不传就按出现率抽 */
+  forceType?: CustomerType;
 }): RolledCustomer {
-  const type = pickPpm(rng, MVP_TYPES, (t) => CUSTOMER[t].ppm);
+  const type = input.forceType ?? pickPpm(rng, MVP_TYPES, (t) => CUSTOMER[t].ppm);
   const wants = CUSTOMER[type].wants;
   const hit = chance(rng, COUNTER.demandHitPpm);
   let demand: Demand;

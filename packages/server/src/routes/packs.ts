@@ -124,6 +124,12 @@ export function registerPackRoutes(app: FastifyInstance, deps: Deps, now: () => 
       const sealed = repo.getSealed(userId, packId);
       if (!sealed) throw new ApiError(404, 'not_found', '找不到这包卡（可能已经拆了）');
       const kind = repo.seriesKind(sealed.series_id) as PackType;
+      // 卡册和桌面都放不下这一包了就不让拆（DESIGN 4.5）
+      deps.binders!.ensureStarter(userId, t, player.game_day);
+      const space = deps.binders!.space(userId);
+      if (space.total < PACKS[kind].cards) {
+        throw new ApiError(400, 'no_space', `卡册和桌面都快满了（还能放 ${space.total} 张，一包 ${PACKS[kind].cards} 张）。先卖点卡、或者买本新卡册`);
+      }
 
       const byRarity = Object.fromEntries(RARITIES.map((r) => [r, repo.templatesFor(sealed.series_id, r)])) as Record<Rarity, ReturnType<typeof repo.templatesFor>>;
       const counts = Object.fromEntries(RARITIES.map((r) => [r, byRarity[r].length])) as Record<Rarity, number>;
@@ -146,6 +152,7 @@ export function registerPackRoutes(app: FastifyInstance, deps: Deps, now: () => 
         return repo.insertCard({ templateId: tpl.id, ownerId: userId, authenticity: c.authenticity, grade: String(c.grade), origin: c.origin, style, serialNo, now: t });
       });
 
+      deps.binders!.placeNew(userId, ids, player.game_day);
       repo.deleteSealed(packId);
       repo.setCreditsPity(userId, player.credits, rolled.pityCount);
       repo.logEvent(userId, t, 'pack_open', { pack: packId, seriesId: sealed.series_id, source: sealed.source, cards: ids, pityTriggered: rolled.pityTriggered });

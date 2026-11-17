@@ -124,6 +124,18 @@ const MIGRATIONS: string[] = [
   // 6：顾客一位一位进门（2026-11-17）。day_customer_count 是本营业日一共来几位（第一次开柜台时定，打烊清零），
   // 不发给玩家：玩家不知道今天还剩几位
   `ALTER TABLE players ADD COLUMN day_customer_count INTEGER NOT NULL DEFAULT 0;`,
+
+  // 7：卡册（2026-11-17）。卡在库存里时要么在某本卡册里（binder_id），要么散放在桌面上（binder_id 为空）。
+  // loose_since_day 是开始散放的营业日（画磨损用，公开信息）；真正的品相变化只改 grade（隐藏）
+  `CREATE TABLE binders (
+     id         INTEGER PRIMARY KEY AUTOINCREMENT,
+     owner_id   TEXT NOT NULL REFERENCES players(discord_id),
+     kind       TEXT NOT NULL,
+     created_at INTEGER NOT NULL
+   );
+   CREATE INDEX binders_owner ON binders (owner_id);
+   ALTER TABLE card_instances ADD COLUMN binder_id INTEGER REFERENCES binders(id);
+   ALTER TABLE card_instances ADD COLUMN loose_since_day INTEGER;`,
 ];
 
 /** 营业日在 customers、daily_usage 里的键 */
@@ -181,6 +193,8 @@ export interface InstanceRow {
   style: Style;
   serial_no: number | null;
   location: CardLocation;
+  binder_id: number | null;
+  loose_since_day: number | null;
   created_at: number;
 }
 
@@ -256,7 +270,7 @@ function createRepo(db: Database.Database) {
     putIdem: db.prepare('INSERT INTO idempotency (key, discord_id, response, created_at) VALUES (?, ?, ?, ?)'),
     pruneIdem: db.prepare('DELETE FROM idempotency WHERE created_at < ?'),
 
-    cardsWithTemplate: `SELECT i.id, i.template_id, i.style, i.serial_no, i.location, i.created_at,
+    cardsWithTemplate: `SELECT i.id, i.template_id, i.style, i.serial_no, i.location, i.binder_id, i.loose_since_day, i.created_at,
                                t.name, t.rarity, t.tags, t.flavor, t.series_id, s.name AS series_name
                         FROM card_instances i JOIN card_templates t ON t.id = i.template_id JOIN series s ON s.id = t.series_id`,
   };
@@ -391,6 +405,30 @@ function createRepo(db: Database.Database) {
     updateCustomer: (id: number, c: { patience: number; status: string; line: string; counter_price: number | null }) =>
       db.prepare('UPDATE customers SET patience = ?, status = ?, line = ?, counter_price = ? WHERE id = ?').run(c.patience, c.status, c.line, c.counter_price, id),
 
+    // ---- 卡册（DESIGN 4.5） ----
+    bindersOf: (ownerId: string) =>
+      db.prepare('SELECT b.id, b.kind, b.created_at, (SELECT COUNT(*) FROM card_instances i WHERE i.binder_id = b.id) AS used FROM binders b WHERE b.owner_id = ? ORDER BY b.id').all(ownerId) as Array<{ id: number; kind: string; created_at: number; used: number }>,
+    insertBinder: (ownerId: string, kind: string, now: number) =>
+      Number(db.prepare('INSERT INTO binders (owner_id, kind, created_at) VALUES (?, ?, ?)').run(ownerId, kind, now).lastInsertRowid),
+    getBinder: (ownerId: string, id: number) =>
+      (db.prepare('SELECT * FROM binders WHERE id = ? AND owner_id = ?').get(id, ownerId) as { id: number; owner_id: string; kind: string; created_at: number } | undefined) ?? null,
+    /** 放进某本卡册（binderId）或散放到桌面（null，记下从第几个营业日开始散放） */
+    placeCard: (cardId: number, binderId: number | null, looseSinceDay: number | null) =>
+      db.prepare('UPDATE card_instances SET binder_id = ?, loose_since_day = ? WHERE id = ?').run(binderId, binderId === null ? looseSinceDay : null, cardId),
+    /** 散放在桌面上的卡（在库存里、不在任何卡册里），最值钱的排前面由调用方排 */
+    looseCards(ownerId: string): CardView[] {
+      const rows = db.prepare(`${q.cardsWithTemplate} WHERE i.owner_id = ? AND i.location = 'inventory' AND i.binder_id IS NULL ORDER BY i.id`).all(ownerId) as CardViewRow[];
+      return rows.map(toCardView);
+    },
+    binderCards(binderId: number, page: number, pageSize: number): CardView[] {
+      const rows = db.prepare(`${q.cardsWithTemplate} WHERE i.binder_id = ? ORDER BY i.id LIMIT ? OFFSET ?`).all(binderId, pageSize, (page - 1) * pageSize) as CardViewRow[];
+      return rows.map(toCardView);
+    },
+    /** 磨损：只改隐藏的品相，不发给玩家 */
+    setGrade: (cardId: number, grade: string) => db.prepare('UPDATE card_instances SET grade = ? WHERE id = ?').run(grade, cardId),
+    looseInstances: (ownerId: string) =>
+      db.prepare("SELECT * FROM card_instances WHERE owner_id = ? AND location = 'inventory' AND binder_id IS NULL").all(ownerId) as InstanceRow[],
+
     collection(ownerId: string) {
       const owned = new Set((db.prepare('SELECT template_id FROM collection WHERE discord_id = ?').all(ownerId) as Array<{ template_id: string }>).map((r) => r.template_id));
       const counts = new Map((db.prepare('SELECT template_id, COUNT(*) AS n FROM card_instances WHERE owner_id = ? GROUP BY template_id').all(ownerId) as Array<{ template_id: string; n: number }>).map((r) => [r.template_id, r.n]));
@@ -408,6 +446,8 @@ interface CardViewRow {
   style: Style;
   serial_no: number | null;
   location: CardLocation;
+  binder_id: number | null;
+  loose_since_day: number | null;
   created_at: number;
   name: string;
   rarity: Rarity;
@@ -431,6 +471,8 @@ function toCardView(r: CardViewRow): CardView {
     style: r.style,
     serialNo: r.serial_no,
     location: r.location,
+    binderId: r.binder_id,
+    looseSinceDay: r.location === 'inventory' && r.binder_id === null ? r.loose_since_day : null,
     price: publicPrice({ rarity: r.rarity, style: r.style, publicGrade: null }),
     createdAt: r.created_at,
   };

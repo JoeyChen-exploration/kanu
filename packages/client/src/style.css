@@ -204,3 +204,28 @@ h2 small { color: var(--muted); font-weight: normal; font-size: 13px; margin-lef
 .price-input input { text-align: center; }
 .step-choices { display: flex; align-items: center; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
 .step-choices .hint { margin-right: 2px; }
+
+/* ---- 散放磨损（按散放天数画，不代表真实品相） ---- */
+.card[class*='wear-'] .card-face::before { content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 2; }
+.wear-1 .card-face { filter: saturate(0.85); }
+.wear-1 .card-face::before { background: radial-gradient(1px 1px at 12% 20%, #ffffff40, transparent), radial-gradient(1px 1px at 70% 35%, #ffffff30, transparent), radial-gradient(1px 1px at 40% 75%, #ffffff35, transparent), radial-gradient(1px 1px at 85% 80%, #ffffff30, transparent), linear-gradient(#80808018, #80808018); }
+.wear-2 .card-face { filter: saturate(0.7) brightness(0.92); }
+.wear-2 .card-face::before { background: linear-gradient(115deg, transparent 30%, #ffffff40 31%, transparent 32%), linear-gradient(70deg, transparent 60%, #ffffff35 61%, transparent 62%), linear-gradient(160deg, transparent 45%, #ffffff30 46%, transparent 47%), linear-gradient(#80808025, #80808025); }
+.wear-3 .card-face { filter: saturate(0.55) brightness(0.85) sepia(0.15); }
+.wear-3 .card-face::before { background: linear-gradient(115deg, transparent 30%, #ffffff50 31%, transparent 32%), linear-gradient(70deg, transparent 60%, #ffffff45 61%, transparent 62%), linear-gradient(20deg, transparent 20%, #ffffff40 21%, transparent 22%), linear-gradient(225deg, #d8d2c4 0 9%, #00000055 9% 11%, transparent 11%), linear-gradient(#80808030, #80808030); }
+.wear-3 { clip-path: polygon(0 0, 88% 0, 100% 9%, 100% 100%, 0 100%); }
+.loose-note { color: #ffb86b; font-size: 13px; }
+
+/* ---- 卡册 ---- */
+.binder-list { display: grid; gap: 8px; }
+.binder-item { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
+.binder-cover { width: 44px; height: 56px; border-radius: 6px; flex: none; display: grid; place-items: center; font-size: 12px; font-weight: 800; color: #fff; }
+.binder-basic { background: linear-gradient(160deg, #6b7280, #374151); }
+.binder-grid { background: linear-gradient(160deg, #2f6b9a, #1c3550); }
+.binder-humidor { background: linear-gradient(160deg, #1fb5a4, #0b4d47); }
+.binder-leather { background: linear-gradient(160deg, #8a5a12, #3a2306); color: #f7dc7a; }
+.binder-body { flex: 1; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.fill { height: 5px; background: var(--panel-2); border-radius: 3px; overflow: hidden; }
+.fill div { height: 100%; background: var(--accent); }
+.binder-page { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; background: #1a1d26; border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+.binder-slot { aspect-ratio: 63 / 88; border: 1px dashed #2f3442; border-radius: 9px; }

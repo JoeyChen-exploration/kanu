@@ -70,8 +70,10 @@ export function registerCounterRoutes(app: FastifyInstance, deps: Deps, now: () 
    */
   const counterState = (ownerId: string, t: number) => {
     let player = repo.getPlayer(ownerId)!;
+    // 卡册效果（典藏皮面册）带来的额外收藏家：排在当天最后几位
+    const extra = deps.binders!.extraCollectors(ownerId);
     if (player.day_customer_count === 0) {
-      repo.setDayCustomerCount(ownerId, rollCustomerCount(rng));
+      repo.setDayCustomerCount(ownerId, rollCustomerCount(rng, extra));
       player = repo.getPlayer(ownerId)!;
     }
     const day = dayKey(player.game_day);
@@ -79,7 +81,8 @@ export function registerCounterRoutes(app: FastifyInstance, deps: Deps, now: () 
     if (!rows.some((c) => c.status === 'waiting') && rows.length < player.day_customer_count) {
       const series = repo.allSeries().map((s) => ({ id: s.id, name: s.name, price: PACKS[s.kind].price }));
       const templates = repo.allTemplates().map((x) => ({ id: x.id, name: x.name, rarity: x.rarity, tags: JSON.parse(x.tags) as string[] }));
-      const c = rollCustomer(rng, { inventory: repo.sellableCards(ownerId).map(toSellable), packs: sellablePacks(ownerId), templates, series, typicalPrice });
+      const forceType = rows.length >= player.day_customer_count - extra ? 'collector' as const : undefined;
+      const c = rollCustomer(rng, { inventory: repo.sellableCards(ownerId).map(toSellable), packs: sellablePacks(ownerId), templates, series, typicalPrice, forceType });
       repo.insertCustomer({
         owner_id: ownerId, day_key: day, slot: 0, seat: rows.length, type: c.type, demand: JSON.stringify(c.demand), float: c.float,
         patience: c.patience, line: say(c.type, 'greet', { demand: demandText(c.type, c.demand) }), budget_low: c.budgetLow, budget_high: c.budgetHigh, created_at: t,
@@ -116,8 +119,10 @@ export function registerCounterRoutes(app: FastifyInstance, deps: Deps, now: () 
       if (today.some((c) => c.status === 'waiting') || today.length < player.day_customer_count) {
         throw new ApiError(400, 'customers_waiting', '还有顾客没接待完，接待完（或请走）再打烊');
       }
+      // 打烊结算：桌面上的散卡磨损（只改隐藏的品相，日志里只记张数）
+      const worn = deps.binders!.wear(userId);
       repo.advanceDay(userId);
-      repo.logEvent(userId, now(), 'day_end', { day: player.game_day, customers: today.length });
+      repo.logEvent(userId, now(), 'day_end', { day: player.game_day, customers: today.length, worn });
       const response: EndDayResponse = { ok: true, day: player.game_day + 1 };
       repo.putIdempotent(userId, key, response, now());
       return response;
@@ -140,7 +145,7 @@ export function registerCounterRoutes(app: FastifyInstance, deps: Deps, now: () 
     const cards = repo.sellableCards(req.user.id)
       .filter((x) => matchesCard(toSellable(x), demand))
       .sort((a, b) => b.price - a.price)
-      .map((card) => ({ card, quickPrice: quickPrice(type, toSellable(card)) }));
+      .map((card) => ({ card, quickPrice: Math.round(quickPrice(type, toSellable(card)) * deps.binders!.priceMultiplier(req.user!.id, card.binderId, type)) }));
     const packs = repo.sealedByOwner(req.user.id)
       .map((p) => ({ view: { id: p.id, seriesId: p.series_id, name: p.name, kind: p.kind }, sell: { id: p.id, seriesId: p.series_id, price: PACKS[p.kind].price } }))
       .filter((p) => matchesPack(p.sell, demand))
@@ -179,8 +184,10 @@ export function registerCounterRoutes(app: FastifyInstance, deps: Deps, now: () 
         const view = repo.cardView(instanceId)!;
         const card = toSellable(view);
         if (!matchesCard(card, demand)) throw new ApiError(400, 'not_wanted', '这位顾客不要这张卡');
-        mind = mindPrice(type, c.float, card);
-        ask = price === 'quick' ? quickPrice(type, card) : price;
+        // 卡册效果：放在好卡册里的卡卖得贵一点（心理价位和快速出售价一起乘）
+        const mult = deps.binders!.priceMultiplier(ownerId, view.binderId, type);
+        mind = Math.round(mindPrice(type, c.float, card) * mult);
+        ask = price === 'quick' ? Math.round(quickPrice(type, card) * mult) : price;
         authenticity = inst.authenticity;
         finish = () => { repo.deleteCard(instanceId); return { card: instanceId, template: view.templateId, style: view.style }; };
       }

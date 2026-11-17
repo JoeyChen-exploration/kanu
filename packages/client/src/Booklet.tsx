@@ -7,6 +7,7 @@ import {
 } from '@kanu/shared/balance';
 import { Card, GameDayContext, fmt } from './Card.tsx';
 import { AVATAR } from './pages/Counter.tsx';
+import { FloatWindow } from './drag.tsx';
 
 const SEEN_KEY = 'kanu.booklet.seen';
 /** 第一次进游戏要不要自动打开（本机记住看过没有） */
@@ -164,7 +165,7 @@ const PAGES: Array<{ title: string; body: ReactNode }> = [
           <li>{BINDERS.humidor.name}：{BINDERS.humidor.effect.replace('防磨损；', '')}。</li>
           <li>{BINDERS.leather.name}：{BINDERS.leather.effect.replace('防磨损；', '')}。</li>
         </ul>
-        <p className="hint">卡册在进货页的"用品"里买，不限购。没拆的卡包和珍藏柜里的卡不占格子。</p>
+        <p className="hint">点开卡册是一个小浮窗，拖住标题栏能挪到屏幕任何位置，一边翻卡册一边整理珍藏柜。卡册在进货页的"用品"里买，不限购。没拆的卡包和珍藏柜里的卡不占格子。</p>
       </>
     ),
   },
@@ -204,6 +205,7 @@ const PAGES: Array<{ title: string; body: ReactNode }> = [
           <li>柜里的卡越稀有，<b>展示分</b>越高（{RARITIES.filter((r) => SHOWCASE.rarityScore[r] > 0).map((r) => `${r} ${SHOWCASE.rarityScore[r]}`).join('、')}，特殊风格再乘倍数）。</li>
           <li>每 {SHOWCASE.pointsPerPct} 分，客人的预算和出价 <b>+1%</b>，最多 +{SHOWCASE.maxPriceBonus * 100}%；到 {SHOWCASE.patienceAt} 分，每位客人耐心 <b>+{SHOWCASE.patienceBonus}</b>。</li>
           <li>展示分到 {GRAND_COLLECTOR.minScore} 分以上，有几率引来 🎩 <b>大藏家</b>，分越高越常来。</li>
+          <li>在库存页<b>按住一张卡</b>（手机上长按）拖到珍藏柜就放进去了；拖回卡册或桌面就是取出来。</li>
           <li>柜里的卡有客人要也能直接卖，但卖掉展示分就掉了。</li>
           <li>店倒闭从头开始时，柜里的卡会<b>留下来</b>；不能拿去抵押；不占卡册格子。</li>
         </ul>
@@ -248,13 +250,11 @@ export function Booklet({ onClose }: { onClose: () => void }) {
   const last = page === PAGES.length - 1;
   const cur = PAGES[page]!;
 
+  // 道具浮窗：一本可以拖到任意位置的小书，不挡住后面的页面操作
   return (
-    <div className="sheet booklet-backdrop" onClick={close}>
+    <FloatWindow id="booklet" className="booklet" title={<>📖 新手手册 <small>{page + 1} / {PAGES.length}</small></>} onClose={close}>
       <div
-        className="booklet"
-        role="dialog"
-        aria-label="新手手册"
-        onClick={(e) => e.stopPropagation()}
+        className="booklet-inner"
         onTouchStart={(e) => { touchX.current = e.touches[0]?.clientX ?? null; }}
         onTouchEnd={(e) => {
           const start = touchX.current;
@@ -264,10 +264,6 @@ export function Booklet({ onClose }: { onClose: () => void }) {
           go(page + (end < start ? 1 : -1));
         }}
       >
-        <div className="booklet-head">
-          <span className="hint">新手手册 · {page + 1} / {PAGES.length}</span>
-          <button className="chip" onClick={close} aria-label="关闭手册">✕</button>
-        </div>
         <article key={page} className="booklet-page">
           <h2>{cur.title}</h2>
           {cur.body}
@@ -282,6 +278,6 @@ export function Booklet({ onClose }: { onClose: () => void }) {
             : <button className="chip on" onClick={() => go(page + 1)}>下一页</button>}
         </div>
       </div>
-    </div>
+    </FloatWindow>
   );
 }

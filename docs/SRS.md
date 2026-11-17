@@ -174,6 +174,7 @@ kanu/
 | FR-INV-7 | 卡册（DESIGN 4.5）：开局送一本；用品店买卡册；新卡自动放进有空位的卡册，满了散放在桌面（最多 20 张），卡册和桌面都放不下一包时不让拆；买卡册后自动收起散卡；`GET /api/binders`、`GET /api/binders/:id?page=`、`POST /api/binders/buy`、`POST /api/binders/organize` | MVP |
 | FR-INV-8 | 散放磨损：打烊时每张散卡按 LOOSE.wearPpm 概率品相掉 1 分（只改隐藏的 grade，日志只记张数）；卡牌响应只带公开的 looseSinceDay，前端按天数画磨损 | MVP |
 | FR-INV-9 | 卡册效果：防潮收藏册里的卡卖给收藏家心理价位 +5%；典藏皮面册里的卡卖给任何顾客 +5%，拥有时每个营业日多来 1 位收藏家 | MVP |
+| FR-UI-2 | 道具浮窗：卡册、新手手册等道具打开后是浮窗，拖标题栏移到屏幕任意位置（每种浮窗的位置记在本机），不挡后面的页面操作。库存页可以把卡从卡册浮窗 / 桌面拖进珍藏柜，或从珍藏柜拖回去（鼠标直接拖，手指长按后拖） | MVP |
 | FR-UI-1 | 新手手册：顶栏 📖 打开，第一次进游戏自动打开（本机记住看过）；左右翻页 / 手指滑动；数字全部读 balance.ts，只讲公开规则 | MVP |
 | FR-INV-10 | 柜台翻卡册：`GET /api/counter/:id/cards` 附每本卡册和桌面的符合张数；`GET /api/counter/:id/binder/:binderId?page=&matchFirst=`（0 = 桌面散放）一页 9 张，标出 match 和快卖价（不符合的为 null），matchFirst 默认开 | MVP |
 

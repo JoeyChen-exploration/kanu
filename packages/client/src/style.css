@@ -247,18 +247,49 @@ h2 small { color: var(--muted); font-weight: normal; font-size: 13px; margin-lef
 
 /* 新手手册：像一本小册子，左右翻页 */
 .topbar-book { flex: none; width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); font-size: 18px; }
-.booklet-backdrop { align-items: center; padding: 16px; }
-.booklet {
-  /* 固定大小，不随每页字数变化；字多的页在册子里面滚动 */
-  width: min(460px, 100%); height: min(600px, calc(100dvh - 32px - var(--island-top, 0px) - var(--island-bottom, 0px)));
-  display: flex; flex-direction: column; background: #f4ecd8; color: #2a2418;
-  border-radius: 6px 14px 14px 6px; border-left: 8px solid #8a5a12; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+/* 道具浮窗（卡册、新手手册）：拖标题栏移动，不挡后面的页面 */
+.float-window {
+  position: fixed; z-index: 20; width: min(360px, calc(100vw - 16px));
+  max-height: calc(100dvh - 16px - var(--island-bottom, 0px));
+  display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--line);
+  border-radius: 14px; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
 }
+.float-title { display: flex; align-items: center; gap: 8px; padding: 8px 8px 8px 12px; cursor: grab; touch-action: none; user-select: none; border-bottom: 1px solid var(--line); }
+.float-title:active { cursor: grabbing; }
+.float-grip { color: var(--muted); font-size: 16px; }
+.float-name { flex: 1; min-width: 0; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.float-name small { color: var(--muted); font-weight: 400; margin-left: 4px; }
+.float-title .chip { min-height: 30px; padding: 0 10px; }
+.float-body { flex: 1; min-height: 0; overflow-y: auto; padding: 10px 12px 12px; display: flex; flex-direction: column; }
+.float-sub { margin: 0 0 8px; font-size: 12px; }
+.float-binder .binder-page { gap: 8px; padding: 8px; }
+.float-drop { border-radius: 12px; }
+
+/* 拖卡 */
+.draggable { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+.cell.dragging { opacity: 0.3; }
+.drag-ghost { position: fixed; z-index: 50; width: 76px; pointer-events: none; transform: translate(-50%, -60%) rotate(-4deg); filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.6)); }
+.ghost-hint { display: block; margin-top: 4px; text-align: center; white-space: nowrap; font-size: 11px; font-weight: 700; color: #111; background: var(--accent); border-radius: 999px; padding: 2px 8px; width: max-content; margin-left: 50%; transform: translateX(-50%); }
+.drop-target { outline: 2px dashed color-mix(in srgb, var(--accent) 60%, transparent); outline-offset: 4px; border-radius: 12px; transition: outline-color 0.1s, background 0.1s; }
+.drop-over { outline: 2px solid var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.stash-zone { border-radius: 12px; }
+.binder-item.on { border-color: var(--accent); }
+.drag-tip { font-size: 12px; margin: 6px 0 0; }
+
+/* 新手手册：一本可以拖动的小书，固定大小，字多的页在书里滚动 */
+.float-window.booklet {
+  width: min(420px, calc(100vw - 16px)); height: min(560px, calc(100dvh - 24px - var(--island-bottom, 0px)));
+  background: #f4ecd8; color: #2a2418; border: none;
+  border-radius: 6px 14px 14px 6px; border-left: 8px solid #8a5a12;
+}
+.booklet .float-title { border-bottom-color: #e2d6b8; }
+.booklet .float-grip, .booklet .float-name small { color: #7a6c52; }
+.booklet .float-body { padding: 0; overflow: hidden; }
+.booklet-inner { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .booklet .hint { color: #7a6c52; }
 .booklet .chip { background: #fffaf0; color: #2a2418; border-color: #d6c7a6; }
 .booklet .chip.on { background: #8a5a12; color: #fff; border-color: #8a5a12; }
 .booklet .badge { background: #e7dcc0; color: #4a3d26; }
-.booklet-head { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px 0; }
 .booklet-page { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 18px 8px; font-size: 15px; line-height: 1.6; animation: booklet-in 0.2s ease-out; }
 .booklet-page h2 { color: #8a5a12; margin: 6px 0 10px; }
 .booklet-page ul, .booklet-page ol { padding-left: 20px; margin: 8px 0; }

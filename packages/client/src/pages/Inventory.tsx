@@ -7,6 +7,9 @@ import type {
 } from '@kanu/shared/types';
 import { api, newIdempotencyKey } from '../api.ts';
 import { Card, GameDayContext, fmt } from '../Card.tsx';
+import { DragGhost, FloatWindow, useDrag } from '../drag.tsx';
+
+type Bind = ReturnType<typeof useDrag<CardView>>['bind'];
 
 export function Inventory({ onChange }: { onChange: (p: Partial<MeResponse>) => void }) {
   const [data, setData] = useState<BindersResponse | null>(null);
@@ -16,6 +19,8 @@ export function Inventory({ onChange }: { onChange: (p: Partial<MeResponse>) => 
   const [selected, setSelected] = useState<CardView | null>(null);
   const [msg, setMsg] = useState('');
   const [err, setErr] = useState('');
+  /** 拖卡改了位置后让浮窗里的卡册页重新拉一遍 */
+  const [version, setVersion] = useState(0);
   const day = useContext(GameDayContext);
 
   const load = async () => {
@@ -43,28 +48,38 @@ export function Inventory({ onChange }: { onChange: (p: Partial<MeResponse>) => 
     await load();
   };
 
-  const toggleShowcase = async (card: CardView) => {
+  const setShowcaseOn = async (card: CardView, on: boolean) => {
     setErr('');
+    setMsg('');
     try {
-      await api(`/inventory/${card.id}/showcase`, { method: 'POST', body: { on: card.location !== 'showcase' } });
+      await api(`/inventory/${card.id}/showcase`, { method: 'POST', body: { on } });
       setSelected(null);
+      setMsg(on ? `「${card.name}」放进了珍藏柜` : `「${card.name}」从珍藏柜取出来了`);
       await load();
+      setVersion((v) => v + 1);
     } catch (e) {
       setErr((e as Error).message);
     }
   };
+  const toggleShowcase = (card: CardView) => setShowcaseOn(card, card.location !== 'showcase');
 
-  if (openBinder) return <BinderViewer binder={openBinder} onBack={() => { setOpenBinder(null); void load(); }} onPick={setSelected} selected={selected} onToggle={toggleShowcase} />;
+  // 拖卡：卡册 / 桌面 → 珍藏柜 = 放进去；珍藏柜 → 卡册浮窗 / 桌面 = 取出来
+  const { drag, bind } = useDrag<CardView>((card, zone) => {
+    if (zone === 'showcase' && card.location !== 'showcase') void setShowcaseOn(card, true);
+    else if (zone === 'stash' && card.location === 'showcase') void setShowcaseOn(card, false);
+  });
+  const dropping = (zone: string) => (drag ? (drag.zone === zone ? ' drop-target drop-over' : ' drop-target') : '');
 
   const loose = data?.loose.cards ?? [];
   return (
     <section className="page">
-      <ShowcasePanel status={sc} cards={showcase} onPick={setSelected} onUpgrade={upgradeShowcase} />
+      <ShowcasePanel status={sc} cards={showcase} onPick={setSelected} onUpgrade={upgradeShowcase} bind={bind} dropClass={drag && drag.item.location !== 'showcase' ? dropping('showcase') : ''} />
+      {!drag && <p className="hint drag-tip">按住卡牌（手机上长按）拖到珍藏柜就能放进去，拖回卡册或桌面就是取出来。</p>}
 
       <h2>我的卡册</h2>
       <div className="binder-list">
         {data?.binders.map((b) => (
-          <button key={b.id} className="binder-item" onClick={() => setOpenBinder(b)}>
+          <button key={b.id} className={openBinder?.id === b.id ? 'binder-item on' : 'binder-item'} onClick={() => setOpenBinder(b)}>
             <div className={`binder-cover binder-${b.kind}`} aria-hidden>{b.name.slice(0, 2)}</div>
             <div className="binder-body">
               <b>{b.name}</b>
@@ -75,45 +90,68 @@ export function Inventory({ onChange }: { onChange: (p: Partial<MeResponse>) => 
         ))}
       </div>
 
-      <h2>桌面散放 <small>{loose.length} / {LOOSE.slots}</small></h2>
-      {loose.length === 0
-        ? <p className="hint">桌面上没有散卡。卡册满了的时候，新开的卡会先放在这里。</p>
-        : (
-          <>
-            <p className="loose-note">散放的卡每过一天都可能磨损，品相会变差。买新卡册或者卖掉一些，把它们收起来。</p>
-            <div className="grid">
-              {loose.map((c) => (
-                <button key={c.id} className="cell" onClick={() => setSelected(c)}>
-                  <Card card={c} small />
-                  <span className="cell-price">散放 {day - (c.looseSinceDay ?? day)} 天</span>
-                </button>
-              ))}
-            </div>
-            <button className="secondary" onClick={organize}>收进卡册</button>
-          </>
-        )}
+      <div className={`stash-zone${drag && drag.item.location === 'showcase' ? dropping('stash') : ''}`} data-drop="stash">
+        <h2>桌面散放 <small>{loose.length} / {LOOSE.slots}</small></h2>
+        {loose.length === 0
+          ? <p className="hint">桌面上没有散卡。卡册满了的时候，新开的卡会先放在这里。</p>
+          : (
+            <>
+              <p className="loose-note">散放的卡每过一天都可能磨损，品相会变差。买新卡册或者卖掉一些，把它们收起来。</p>
+              <div className="grid">
+                {loose.map((c) => (
+                  <button key={c.id} className={drag?.item.id === c.id ? 'cell draggable dragging' : 'cell draggable'} onClick={() => setSelected(c)} {...bind(c)}>
+                    <Card card={c} small />
+                    <span className="cell-price">散放 {day - (c.looseSinceDay ?? day)} 天</span>
+                  </button>
+                ))}
+              </div>
+              <button className="secondary" onClick={organize}>收进卡册</button>
+            </>
+          )}
+      </div>
       {msg && <p className="hint">{msg}</p>}
 
       <AllCards onPick={setSelected} />
       {err && <p className="error">{err}</p>}
+
+      {openBinder && (
+        <FloatWindow id="binder" className="float-binder" title={openBinder.name} onClose={() => { setOpenBinder(null); void load(); }} dropZone="stash">
+          <div className={drag && drag.item.location === 'showcase' ? `float-drop${dropping('stash')}` : 'float-drop'}>
+            <BinderPages binder={openBinder} version={version} onPick={setSelected} bind={bind} draggingId={drag?.item.id ?? null} />
+          </div>
+        </FloatWindow>
+      )}
+      {drag && (
+        <DragGhost x={drag.x} y={drag.y}>
+          <Card card={drag.item} small />
+          <span className="ghost-hint">
+            {drag.item.location === 'showcase'
+              ? (drag.zone === 'stash' ? '松手取出' : '拖到卡册或桌面')
+              : (drag.zone === 'showcase' ? '松手放进珍藏柜' : '拖到珍藏柜')}
+          </span>
+        </DragGhost>
+      )}
       {selected && <CardSheet card={selected} onClose={() => setSelected(null)} onToggle={toggleShowcase} />}
     </section>
   );
 }
 
 /** 珍藏柜：没解锁时显示解锁按钮；解锁后显示格子、展示分和它带来的效果、升级按钮 */
-function ShowcasePanel({ status, cards, onPick, onUpgrade }: {
+function ShowcasePanel({ status, cards, onPick, onUpgrade, bind, dropClass }: {
   status: ShowcaseStatus | null;
   cards: CardView[];
   onPick: (c: CardView) => void;
   onUpgrade: () => Promise<void>;
+  bind: Bind;
+  /** 正在拖卡时的高亮样式 */
+  dropClass: string;
 }) {
   const [busy, setBusy] = useState(false);
   if (!status) return <h2>珍藏柜</h2>;
   const up = async () => { setBusy(true); try { await onUpgrade(); } finally { setBusy(false); } };
   if (status.level === 0) {
     return (
-      <div className="showcase-locked">
+      <div className={`showcase-locked${dropClass}`} data-drop="showcase">
         <h2>珍藏柜 <small>未解锁</small></h2>
         <p className="hint">珍藏柜是店的门面：客人和别的玩家都看得到。柜里的卡越稀有，客人越舍得花钱、越有耐心。店倒闭重来时柜里的卡也会留下。</p>
         {status.next && <button className="primary" disabled={busy} onClick={up}>解锁珍藏柜（{status.next.slots} 格）· {fmt(status.next.price)} 信用点</button>}
@@ -123,8 +161,8 @@ function ShowcasePanel({ status, cards, onPick, onUpgrade }: {
   return (
     <>
       <h2>珍藏柜 <small>{status.used} / {status.slots} · {status.level} 级</small></h2>
-      <div className="grid showcase">
-        {cards.map((c) => <button key={c.id} className="cell" onClick={() => onPick(c)}><Card card={c} small /></button>)}
+      <div className={`grid showcase${dropClass}`} data-drop="showcase">
+        {cards.map((c) => <button key={c.id} className="cell draggable" onClick={() => onPick(c)} {...bind(c)}><Card card={c} small /></button>)}
         {Array.from({ length: Math.max(0, status.slots - cards.length) }, (_, i) => <div key={i} className="cell empty-slot">空</div>)}
       </div>
       <div className="showcase-score">
@@ -137,24 +175,29 @@ function ShowcasePanel({ status, cards, onPick, onUpgrade }: {
   );
 }
 
-/** 一本卡册：3 × 3 一页，左右翻 */
-function BinderViewer({ binder, onBack, onPick, selected, onToggle }: {
+/** 浮窗里的一本卡册：3 × 3 一页，左右翻；卡可以拖去珍藏柜 */
+function BinderPages({ binder, version, onPick, bind, draggingId }: {
   binder: BinderView;
-  onBack: () => void;
-  onPick: (c: CardView | null) => void;
-  selected: CardView | null;
-  onToggle: (c: CardView) => Promise<void>;
+  /** 变了就重新拉这一页（拖卡改了位置以后） */
+  version: number;
+  onPick: (c: CardView) => void;
+  bind: Bind;
+  draggingId: number | null;
 }) {
   const [page, setPage] = useState(1);
   const [data, setData] = useState<BinderPageResponse | null>(null);
-  useEffect(() => { api<BinderPageResponse>(`/binders/${binder.id}?page=${page}`).then(setData).catch(() => {}); }, [binder.id, page]);
+  useEffect(() => { setPage(1); }, [binder.id]);
+  useEffect(() => { api<BinderPageResponse>(`/binders/${binder.id}?page=${page}`).then(setData).catch(() => {}); }, [binder.id, page, version]);
   const cards = data?.cards ?? [];
   return (
-    <section className="page">
-      <button className="chip" onClick={onBack}>← 返回库存</button>
-      <h2>{binder.name} <small>{binder.used} / {binder.slots} 张</small></h2>
+    <>
+      <p className="hint float-sub">{data?.binder.used ?? binder.used} / {binder.slots} 张 · {binder.effect}</p>
       <div className="binder-page">
-        {cards.map((c) => <button key={c.id} className="cell" onClick={() => onPick(c)}><Card card={c} small /></button>)}
+        {cards.map((c) => (
+          <button key={c.id} className={draggingId === c.id ? 'cell draggable dragging' : 'cell draggable'} onClick={() => onPick(c)} {...bind(c)}>
+            <Card card={c} small />
+          </button>
+        ))}
         {Array.from({ length: Math.max(0, 9 - cards.length) }, (_, i) => <div key={`e${i}`} className="binder-slot" />)}
       </div>
       <div className="pager">
@@ -162,8 +205,7 @@ function BinderViewer({ binder, onBack, onPick, selected, onToggle }: {
         <span>第 {page} / {data?.pages ?? 1} 页</span>
         <button className="chip" disabled={!data || page >= data.pages} onClick={() => setPage(page + 1)}>下一页</button>
       </div>
-      {selected && <CardSheet card={selected} onClose={() => onPick(null)} onToggle={onToggle} />}
-    </section>
+    </>
   );
 }
 

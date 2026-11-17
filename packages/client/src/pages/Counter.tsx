@@ -8,7 +8,7 @@ import { Card, fmt } from '../Card.tsx';
 
 export const AVATAR: Record<string, string> = {
   resident: '🧑‍🔧', student: '🧒', tourist: '🧳', collector: '🧐', nostalgic: '👴',
-  rich: '🤵', speculator: '📈', streamer: '🎥', middleman: '🕶️',
+  rich: '🤵', speculator: '📈', streamer: '🎥', middleman: '🕶️', grand: '🎩',
 };
 const STATUS: Record<string, string> = { sold: '成交', left: '走了', dismissed: '请走' };
 /** 开价时每次加减多少，玩家自己选 */

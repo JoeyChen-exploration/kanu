@@ -136,7 +136,7 @@ export const APPRAISAL = {
 };
 
 // ---------- 柜台顾客（DESIGN 6，SRS 8.5） ----------
-export const CUSTOMER_TYPES = ['resident', 'student', 'tourist', 'collector', 'nostalgic', 'rich', 'speculator', 'streamer', 'middleman', 'dealer', 'undercover'] as const;
+export const CUSTOMER_TYPES = ['resident', 'student', 'tourist', 'collector', 'nostalgic', 'rich', 'speculator', 'streamer', 'middleman', 'grand', 'dealer', 'undercover'] as const;
 export type CustomerType = (typeof CUSTOMER_TYPES)[number];
 
 /**
@@ -179,6 +179,9 @@ export const CUSTOMER: Record<CustomerType, {
   // 2026-11-17 加：开箱主播买没拆的卡包回去直播开箱，按卡包价加价收
   streamer: { name: '开箱主播', ppm: 80_000, mvp: true, wants: { kind: 'pack' }, priceCoef: 1.3, patience: 3, detect: { low_fake: 0, high_fake: 0 } },
   middleman: { name: '黑市中间人', ppm: 100_000, mvp: true, wants: { kind: 'card', rarities: ALL, tagChance: 0 }, priceCoef: 0.4, patience: 3, detect: { low_fake: 0, high_fake: 0 } },
+  // 2026-11-17 加：大藏家，高级顾客。不按出现率抽（ppm 0），只在珍藏柜展示分够高时按 GRAND_COLLECTOR 的几率来（见下）。
+  // 只要 UR 以上，出价约是富人的 2 倍，耐心少、识假很强
+  grand: { name: '大藏家', ppm: 0, mvp: false, wants: { kind: 'card', rarities: ['UR', 'LR', 'MR'], tagChance: 0 }, priceCoef: 2.8, patience: 2, detect: { low_fake: 950_000, high_fake: 700_000 } },
   dealer: { name: '卡贩', ppm: 30_000, mvp: false, wants: { kind: 'card', rarities: ALL, tagChance: 0 }, priceCoef: 1, patience: 3, detect: { low_fake: 0, high_fake: 0 } },
   undercover: { name: '便衣治安员', ppm: 20_000, mvp: false, wants: { kind: 'card', rarities: ALL, tagChance: 0 }, priceCoef: 1, patience: 3, detect: { low_fake: 0, high_fake: 0 } },
 };
@@ -210,6 +213,13 @@ export const COUNTER = {
  * 没封壳的卡要 rawMinRarity 及以上；封壳卡不限稀有度，但评分要 ≥ gradedMinGrade。
  */
 export const COLLECTOR = { rawMinRarity: 'SR' as Rarity, gradedMinGrade: 9 };
+
+/**
+ * 大藏家（2026-11-17 用户定）：珍藏柜展示分 ≥ minScore 时，每位进门的顾客有 min(maxPpm, 展示分 × ppmPerPoint) 的几率换成大藏家。
+ * 没解锁珍藏柜（展示分 0）就碰不到。
+ */
+// 2026-11-17 模拟调参：初值 300 / 60,000 时每天 5 包的玩家每季来 15 次、周净赚翻倍，降到 100 / 15,000
+export const GRAND_COLLECTOR = { minScore: 20, ppmPerPoint: 100, maxPpm: 15_000 };
 
 export const REPUTATION = { start: 50, min: 0, max: 100 };
 

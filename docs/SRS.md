@@ -198,6 +198,7 @@ kanu/
 | FR-CTR-5 | 成交后对假卡做识破判定，识破则退款、卡退回、扣信誉 | MVP |
 | FR-CTR-6 | 便衣、举报、卖赃卡被抓 | 第二阶段 |
 | FR-CTR-7 | 顾客台词从台词表随机抽取，台词表是可编辑的 JSON 文件 | MVP |
+| FR-CTR-8 | 大藏家（DESIGN 8.1）：珍藏柜展示分 ≥ GRAND_COLLECTOR.minScore 时，每位进门的顾客有 min(maxPpm, 展示分 × ppmPerPoint) 的几率换成大藏家；只要 UR 以上，价格系数 2.8（富人 2 倍），耐心 2，识假很强 | MVP |
 
 ### 4.6 房租、破产、买店（RENT）
 

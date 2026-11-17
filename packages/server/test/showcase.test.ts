@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { CUSTOMER, PLAYER, SHOWCASE } from '@kanu/shared/balance';
+import { CUSTOMER, GRAND_COLLECTOR, PLAYER, SHOWCASE } from '@kanu/shared/balance';
 import type { CounterResponse, ShowcaseResponse, ShowcaseUpgradeResponse } from '@kanu/shared/types';
-import { showcaseEffects, showcaseScore, showcaseSlots } from '../src/game/showcase.ts';
+import { grandChancePpm, showcaseEffects, showcaseScore, showcaseSlots } from '../src/game/showcase.ts';
 import { rollCustomer } from '../src/game/customers.ts';
-import { seeded } from '../src/game/rng.ts';
+import { seeded, type Rng } from '../src/game/rng.ts';
 import { HIDDEN_KEYS, NOW, findKeys, idem, login, setup } from './helpers.ts';
 
 const UID = '123456789012345678';
@@ -41,6 +41,40 @@ describe('珍藏柜展示分（FR-INV-11，纯函数）', () => {
     expect(boosted.float).toBeCloseTo(base.float * 1.1);
     expect(boosted.budgetHigh).toBeGreaterThan(base.budgetHigh);
     expect(boosted.patience).toBe(CUSTOMER.rich.patience + 1);
+  });
+});
+
+describe('大藏家（FR-CTR-8）', () => {
+  it('展示分不到门槛碰不到；之后按分数涨，封顶', () => {
+    expect(grandChancePpm(0)).toBe(0);
+    expect(grandChancePpm(GRAND_COLLECTOR.minScore - 1)).toBe(0);
+    expect(grandChancePpm(GRAND_COLLECTOR.minScore)).toBe(GRAND_COLLECTOR.minScore * GRAND_COLLECTOR.ppmPerPoint);
+    expect(grandChancePpm(1_000_000)).toBe(GRAND_COLLECTOR.maxPpm);
+  });
+
+  it('珍藏柜展示分够高时，大藏家会上门，只要 UR 以上', async () => {
+    const always: Rng = { int: () => 0 };
+    const { app, repo } = setup({ rng: always });
+    cleanup = () => app.close();
+    const h = await login(app);
+    repo.setShowcaseLevel(UID, 1);
+    for (const t of ['NEO-19', 'NEO-19', 'NEO-19']) {
+      const id = repo.insertCard({ templateId: t, ownerId: UID, authenticity: 'real', grade: '7', origin: 'legit', style: 'standard', serialNo: null, now: NOW });
+      repo.setLocation(id, 'showcase');
+    }
+    const c = ((await app.inject({ method: 'GET', url: '/api/counter', headers: h })).json() as CounterResponse).current!;
+    expect(c.type).toBe('grand');
+    expect(c.typeName).toBe(CUSTOMER.grand.name);
+    expect(c.demand.text).toContain('UR');
+  });
+
+  it('没有珍藏柜就碰不到大藏家', async () => {
+    const always: Rng = { int: () => 0 };
+    const { app } = setup({ rng: always });
+    cleanup = () => app.close();
+    const h = await login(app);
+    const c = ((await app.inject({ method: 'GET', url: '/api/counter', headers: h })).json() as CounterResponse).current!;
+    expect(c.type).not.toBe('grand');
   });
 });
 

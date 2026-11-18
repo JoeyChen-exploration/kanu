@@ -326,6 +326,48 @@ h2 small { color: var(--muted); font-weight: normal; font-size: 13px; margin-lef
 .table-item.loupe-over, .cell.loupe-over { box-shadow: 0 0 0 3px #f5c542, 0 0 16px #f5c542aa; }
 .look-chip { display: block; margin-top: 2px; font-size: 10px; line-height: 1.3; color: #fde68a; text-align: center; }
 
+.guide-tool { position: absolute; z-index: 2; right: 62px; top: 8px; width: 36px; height: 36px; border-radius: 8px; border: 1px solid #c9b08a; background: #2a1d12; font-size: 18px; }
+
+/* 放大镜镜片：跟着放大镜走，画在指尖上方；里面是被看那张卡的放大卡面 + 细节层 */
+.loupe-lens {
+  position: fixed; z-index: 999990; pointer-events: none; border-radius: 50%; overflow: hidden; transform: translate(-50%, -50%);
+  border: 5px solid #c9b08a; background: #0d0f14; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6), inset 0 0 0 2px #0008;
+}
+.loupe-lens.static { position: relative; transform: none; z-index: auto; flex: none; }
+.loupe-lens-inner { position: absolute; transform-origin: 0 0; }
+.loupe-lens-glare { position: absolute; inset: 0; border-radius: 50%; background: radial-gradient(circle at 30% 25%, #ffffff40, transparent 35%); }
+.loupe-lens-hint { position: absolute; left: 0; right: 0; bottom: 14px; text-align: center; font-size: 11px; color: #fde68a; text-shadow: 0 1px 2px #000; }
+.zoom-card { position: relative; }
+/* 错版重影：同一张卡面错开一点再叠一次（代码做，不用美术） */
+.zoom-ghost { position: absolute; inset: 0; transform: translate(4%, 2.5%); opacity: 0.35; mix-blend-mode: screen; }
+.detail-layer { position: absolute; inset: 0; pointer-events: none; overflow: hidden; border-radius: 10px; }
+
+/* ===== 放大镜细节：美术接入点 =====
+   全部是通用贴图，所有卡共用（位置由卡的编号算）。美术到了以后，每一类换成一张透明 PNG：
+   background: url(/art/loupe/<名字>.png) center / contain no-repeat;  其余代码不用改。
+   halftone 正品网点（可平铺）· ink 油墨晕开 · misregister 套色错位 · holo 防伪闪光不对 · border 边框歪
+   scratch 划痕 · dust 灰尘 · corner 边角磨损（可和散放磨损共用）· gap 漏印（错版） */
+.detail-halftone { position: absolute; inset: 0; opacity: 0.45; background-image: radial-gradient(rgba(0, 0, 0, 0.35) 0.5px, transparent 0.6px); background-size: 2px 2px; }
+.detail { position: absolute; aspect-ratio: 1; }
+.detail-ink { background: radial-gradient(circle, rgba(25, 10, 35, 0.8) 0 30%, rgba(25, 10, 35, 0.4) 50%, transparent 70%); filter: blur(0.5px); }
+.detail-misregister { aspect-ratio: 2 / 1; background: linear-gradient(90deg, transparent 0 18%, rgba(0, 230, 255, 0.75) 18% 24%, transparent 24% 58%, rgba(255, 0, 170, 0.75) 58% 64%, transparent 64%); }
+.detail-holo { aspect-ratio: 3 / 2; border-radius: 3px; opacity: 0.8; background: linear-gradient(90deg, #ff004c, #ffb700, #3dff6b, #00b7ff, #b100ff); }
+.detail-border { aspect-ratio: 5 / 1; background: linear-gradient(transparent 38%, rgba(255, 255, 255, 0.9) 38% 62%, transparent 62%); }
+.detail-scratch { aspect-ratio: 12 / 1; background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.8) 30% 70%, transparent); }
+.detail-dust { background: radial-gradient(circle at 30% 30%, #fff8 0 8%, transparent 9%), radial-gradient(circle at 70% 60%, #fff6 0 6%, transparent 7%), radial-gradient(circle at 45% 80%, #fff7 0 7%, transparent 8%); }
+.detail-corner { background: radial-gradient(circle, rgba(240, 235, 220, 0.85) 0 30%, transparent 60%); }
+.detail-gap { aspect-ratio: 3 / 2; border-radius: 30% 10% 40% 20%; background: rgba(245, 240, 228, 0.9); }
+
+/* 假卡识别手册（道具浮窗） */
+.float-guide { width: min(440px, calc(100vw - 16px)); }
+.guide-section { border-top: 1px solid var(--line); padding-top: 6px; }
+.guide-section h3 { margin: 4px 0 6px; font-size: 14px; }
+.guide-section .hint { font-size: 12px; margin: 6px 0 4px; }
+.guide-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.guide-lens { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.guide-lens .loupe-lens { border-width: 4px; }
+.guide-lens figcaption { font-size: 11px; color: var(--muted); }
+
 /* 电话（道具浮窗）：星港评级社送评、批发商 */
 .float-phone { width: min(380px, calc(100vw - 16px)); }
 .phone-buy p { margin-top: 0; }

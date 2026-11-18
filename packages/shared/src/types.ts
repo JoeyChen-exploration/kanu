@@ -122,15 +122,26 @@ export interface PhoneResponse {
     leftToday: number;
     /** 每种卡包一盒多少钱（一盒 boxPacks 包） */
     offers: Array<{ seriesId: string; name: string; kind: string; packs: number; boxPrice: number; normalPrice: number }>;
+    /** 已经订了、送货员还没来（或还没处理）的那一盒 */
+    /** 等送货的订单；arriveDay = 送货员哪天来（隔日送达） */
+    pending: { orderId: number; seriesName: string; packs: number; price: number; arriveDay: number } | null;
   };
 }
 
-/** POST /api/phone/wholesale { seriesId }：订一盒，马上到货（没拆的卡包） */
+/** POST /api/phone/wholesale { seriesId }：下单（不扣钱）。送货员会作为下一位顾客来柜台，货到付款 */
 export interface WholesaleResponse {
+  ok: true;
+  order: { orderId: number; seriesId: string; seriesName: string; packs: number; price: number };
+}
+
+/** POST /api/counter/:id/receive：在柜台收下送货员的货、付钱 */
+export interface ReceiveResponse {
   ok: true;
   credits: number;
   cost: number;
   packIds: number[];
+  next: CustomerView | null;
+  done: boolean;
 }
 
 /** POST /api/phone/buy */
@@ -239,7 +250,8 @@ export interface CollectionResponse {
 // ---------- 柜台（M4） ----------
 // 心理价位、个人浮动是隐藏的，不出现在这里（NFR-SEC-2）。
 
-export type CustomerStatus = 'waiting' | 'sold' | 'left' | 'dismissed';
+/** received：送货员的货收下了（2026-11-18） */
+export type CustomerStatus = 'waiting' | 'sold' | 'left' | 'dismissed' | 'received';
 
 export interface CustomerView {
   id: number;
@@ -247,8 +259,9 @@ export interface CustomerView {
   typeName: string;
   /** 最近一句台词 */
   line: string;
-  /** 想要什么：card 要卡（text 是"火属性的 SR 以上的卡"或"「霓虹龙·影」"），pack 要没拆的卡包 */
-  demand: { kind: 'card' | 'pack'; text: string };
+  /** 想要什么：card 要卡（text 是"火属性的 SR 以上的卡"或"「霓虹龙·影」"），pack 要没拆的卡包；
+   *  delivery 是送货员（送电话批发的货，货到付款），delivery 字段给出这盒货 */
+  demand: { kind: 'card' | 'pack' | 'delivery'; text: string; delivery?: { orderId: number; seriesId: string; seriesName: string; packs: number; price: number } };
   budgetLow: number;
   budgetHigh: number;
   patience: number;

@@ -140,11 +140,12 @@ export const APPRAISAL = {
 };
 
 /**
- * 电话批发（DESIGN 4）：打电话给批发商整盒订，马上到货。一盒 boxPacks 包、每包按电脑订货价 × discount；
- * 批发商不保证正品：每张卡 fakePpm 的概率是假卡（低仿高仿各半）。每个营业日只能订 perDay 次、一次一盒。
- * 批发来的卡带公开的"批发"标记；图鉴要送评封壳后才点亮。保底照常算。
+ * 电话批发（DESIGN 4）：打电话给批发商整盒订。2026-11-18 用户定：隔日送达（deliveryDays 天后）——送货员（courier）
+ * 作为那天的第一位顾客来柜台，占一个顾客名额，在柜台货到付款（收货 / 拒收）；那天名额已满就再往后一天。
+ * 一盒 boxPacks 包、每包按电脑订货价 × discount；批发商不保证正品：每张卡 fakePpm 的概率是假卡（低仿高仿各半）。
+ * 每个营业日只能订 perDay 次、一次一盒，上一盒没送到不能再订。批发来的卡带公开的"批发"标记；图鉴要送评封壳后才点亮。保底照常算。
  */
-export const WHOLESALE = { boxPacks: 10, discount: 0.8, fakePpm: 50_000, perDay: 1 };
+export const WHOLESALE = { boxPacks: 10, discount: 0.8, fakePpm: 50_000, perDay: 1, deliveryDays: 1 };
 
 /** 错版卡（2026-11-17 用户定）：开包时每张卡有 ppm 的概率是错版（印错字、印错色，隐藏属性）。
  *  放大镜能认出来；送评封壳后标签写"错版"，公开价再 × mult。没封壳的照旧按普通卡定价，不泄露 */
@@ -158,7 +159,7 @@ export const PHONE = {
 };
 
 // ---------- 柜台顾客（DESIGN 6，SRS 8.5） ----------
-export const CUSTOMER_TYPES = ['resident', 'student', 'tourist', 'collector', 'nostalgic', 'rich', 'speculator', 'streamer', 'middleman', 'grand', 'dealer', 'undercover'] as const;
+export const CUSTOMER_TYPES = ['resident', 'student', 'tourist', 'collector', 'nostalgic', 'rich', 'speculator', 'streamer', 'middleman', 'grand', 'courier', 'dealer', 'undercover'] as const;
 export type CustomerType = (typeof CUSTOMER_TYPES)[number];
 
 /**
@@ -208,6 +209,9 @@ export const CUSTOMER: Record<CustomerType, {
   // 2026-11-17 加：大藏家，高级顾客。不按出现率抽（ppm 0），只在珍藏柜展示分够高时按 GRAND_COLLECTOR 的几率来（见下）。
   // 只要 UR 以上，出价是市场价的 1.9–2.6 倍，耐心少、识假很强
   grand: { name: '大藏家', ppm: 0, mvp: false, wants: { kind: 'card', rarities: ['UR', 'LR', 'MR'], tagChance: 0 }, premium: [0.9, 1.6], patience: 2, detect: { low_fake: 950_000, high_fake: 700_000 } },
+  // 2026-11-18 用户定：电话批发的货由送货员送到柜台，占当天一个顾客名额，在柜台货到付款（收货 / 拒收）。
+  // 不按出现率抽，只在有待送的订单时来；不买东西，wants 只是占位
+  courier: { name: '货郎七号（送货）', ppm: 0, mvp: false, wants: { kind: 'pack' }, premium: [0, 0], patience: 3, detect: { low_fake: 0, high_fake: 0 } },
   dealer: { name: '卡贩', ppm: 30_000, mvp: false, wants: { kind: 'card', rarities: ALL, tagChance: 0 }, premium: [0, 0.1], patience: 3, detect: { low_fake: 0, high_fake: 0 } },
   undercover: { name: '便衣治安员', ppm: 20_000, mvp: false, wants: { kind: 'card', rarities: ALL, tagChance: 0 }, premium: [0, 0.1], patience: 3, detect: { low_fake: 0, high_fake: 0 } },
 };

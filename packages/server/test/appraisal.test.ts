@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { APPRAISAL, ERRATA, PACKS, PHONE, REPUTATION, WHOLESALE } from '@kanu/shared/balance';
-import type { BuyPhoneResponse, CardAppraisalResponse, EndDayResponse, GradeBatchResponse, GradeResponse, InventoryResponse, PhoneResponse, WholesaleResponse } from '@kanu/shared/types';
+import type {
+  BuyPhoneResponse, CardAppraisalResponse, CounterResponse, CustomerView, EndDayResponse, GradeBatchResponse, GradeResponse, InventoryResponse, PhoneResponse,
+  ReceiveResponse, WholesaleResponse,
+} from '@kanu/shared/types';
 import { gradeCard, inspect, loupeGrade, rollErrata } from '../src/game/appraisal.ts';
 import { seeded } from '../src/game/rng.ts';
 import { HIDDEN_KEYS, NOW, findKeys, idem, login, setup } from './helpers.ts';
@@ -164,7 +167,7 @@ describe('电话 + 送评（星港评级社）', () => {
     expect(findKeys(r, HIDDEN)).toEqual([]);
   });
 
-  it('电话批发：一盒 10 包打折、马上到货、一天一次；拆出来带"批发"标记，图鉴不点亮；按批发假卡率出假卡', async () => {
+  it('电话批发：下单不扣钱；隔日送达，送货员作为第二天第一位顾客来柜台、占一个名额；收货付款进库存；一天一次', async () => {
     const { app, repo } = setup();
     cleanup = () => app.close();
     const h = await login(app);
@@ -179,20 +182,79 @@ describe('电话 + 送评（星港评级社）', () => {
     expect(neo.boxPrice).toBeLessThan(neo.normalPrice);
     expect(phone.wholesale.leftToday).toBe(WHOLESALE.perDay);
 
+    // 先开门，第一位顾客进来；再打电话下单
+    const first = ((await app.inject({ method: 'GET', url: '/api/counter', headers: h })).json() as CounterResponse).current!;
     const key = idem();
     const r = (await wholesale(key)).json() as WholesaleResponse;
     expect((await wholesale(key)).json()).toEqual(r);
-    expect(r.packIds).toHaveLength(WHOLESALE.boxPacks);
-    expect(r.cost).toBe(neo.boxPrice);
+    expect(r.order).toMatchObject({ seriesId: 'NEO', packs: WHOLESALE.boxPacks, price: neo.boxPrice });
+    expect(repo.getPlayer(UID)!.credits).toBe(1_000_000);
     expect((await wholesale()).json().code).toBe('wholesale_limit');
-    expect(((await app.inject({ method: 'GET', url: '/api/phone', headers: h })).json() as PhoneResponse).wholesale.leftToday).toBe(0);
+    const after = (await app.inject({ method: 'GET', url: '/api/phone', headers: h })).json() as PhoneResponse;
+    expect(after.wholesale).toMatchObject({ leftToday: 0, pending: { orderId: r.order.orderId, arriveDay: 1 + WHOLESALE.deliveryDays } });
+
+    // 当天不送：请走今天所有顾客，没有一位是送货员
+    let cur: CustomerView | null = first;
+    while (cur) {
+      expect(cur.type).not.toBe('courier');
+      cur = (await app.inject({ method: 'POST', url: `/api/counter/${cur.id}/dismiss`, headers: h })).json().next as CustomerView | null;
+    }
+    await app.inject({ method: 'POST', url: '/api/day/end', headers: { ...h, ...idem() } });
+    // 第二天第一位就是送货员
+    const next = ((await app.inject({ method: 'GET', url: '/api/counter', headers: h })).json() as CounterResponse).current!;
+    expect(next.type).toBe('courier');
+    expect(next.demand.delivery).toMatchObject({ orderId: r.order.orderId, packs: WHOLESALE.boxPacks, price: neo.boxPrice });
+    // 送货员不买卡
+    expect((await app.inject({ method: 'GET', url: `/api/counter/${next.id}/cards`, headers: h })).json().cards).toEqual([]);
+
+    const rk = idem();
+    const recv = (await app.inject({ method: 'POST', url: `/api/counter/${next.id}/receive`, headers: { ...h, ...rk } })).json() as ReceiveResponse;
+    expect((await app.inject({ method: 'POST', url: `/api/counter/${next.id}/receive`, headers: { ...h, ...rk } })).json()).toEqual(recv);
+    expect(recv.packIds).toHaveLength(WHOLESALE.boxPacks);
+    expect(recv.cost).toBe(neo.boxPrice);
+    expect(recv.credits).toBe(1_000_000 - neo.boxPrice);
+    expect(((await app.inject({ method: 'GET', url: '/api/phone', headers: h })).json() as PhoneResponse).wholesale.pending).toBeNull();
+    const served = ((await app.inject({ method: 'GET', url: '/api/counter', headers: h })).json() as CounterResponse).served;
+    expect(served.find((c) => c.id === next.id)!.status).toBe('received');
 
     // 拆一包：带批发标记、图鉴不点亮（来路不明，要送评封壳才点亮）
-    const opened = (await app.inject({ method: 'POST', url: `/api/packs/${r.packIds[0]}/open`, headers: { ...h, ...idem() } })).json();
+    const opened = (await app.inject({ method: 'POST', url: `/api/packs/${recv.packIds[0]}/open`, headers: { ...h, ...idem() } })).json();
     expect(opened.cards.every((c: { acquired: string }) => c.acquired === 'wholesale')).toBe(true);
     const coll = (await app.inject({ method: 'GET', url: '/api/collection', headers: h })).json();
     expect(coll.series.find((s: { id: string }) => s.id === 'NEO').owned).toBe(0);
     expect(findKeys(opened, HIDDEN)).toEqual([]);
+  });
+
+  it('拒收：请走送货员，订单取消、不扣钱；钱不够收不了货', async () => {
+    const { app, repo } = setup();
+    cleanup = () => app.close();
+    const h = await login(app);
+    repo.db.prepare('UPDATE players SET credits = 100, phone = 1').run();
+    const r = (await app.inject({ method: 'POST', url: '/api/phone/wholesale', headers: { ...h, ...idem() }, payload: { seriesId: 'MEC' } })).json() as WholesaleResponse;
+    await closeDay(app, h);
+    const courier = ((await app.inject({ method: 'GET', url: '/api/counter', headers: h })).json() as CounterResponse).current!;
+    expect(courier.type).toBe('courier');
+    expect((await app.inject({ method: 'POST', url: `/api/counter/${courier.id}/receive`, headers: { ...h, ...idem() } })).json().code).toBe('insufficient_credits');
+    await app.inject({ method: 'POST', url: `/api/counter/${courier.id}/dismiss`, headers: h });
+    expect(repo.getOrder(UID, r.order.orderId)!.status).toBe('refused');
+    expect(repo.getPlayer(UID)!.credits).toBe(100);
+    expect(repo.sealedByOwner(UID)).toHaveLength(0);
+  });
+
+  it('打烊前名额用完才下单：第二天照样送到', async () => {
+    const { app, repo } = setup();
+    cleanup = () => app.close();
+    const h = await login(app);
+    repo.db.prepare('UPDATE players SET credits = 100000, phone = 1').run();
+    let state = (await app.inject({ method: 'GET', url: '/api/counter', headers: h })).json() as CounterResponse;
+    while (state.current) {
+      await app.inject({ method: 'POST', url: `/api/counter/${state.current.id}/dismiss`, headers: h });
+      state = (await app.inject({ method: 'GET', url: '/api/counter', headers: h })).json() as CounterResponse;
+    }
+    await app.inject({ method: 'POST', url: '/api/phone/wholesale', headers: { ...h, ...idem() }, payload: { seriesId: 'SEA' } });
+    expect(((await app.inject({ method: 'GET', url: '/api/counter', headers: h })).json() as CounterResponse).done).toBe(true);
+    await app.inject({ method: 'POST', url: '/api/day/end', headers: { ...h, ...idem() } });
+    expect(((await app.inject({ method: 'GET', url: '/api/counter', headers: h })).json() as CounterResponse).current!.type).toBe('courier');
   });
 
   it('批发包的假卡率按 WHOLESALE.fakePpm（大约），电脑订货的一张假卡都没有', async () => {

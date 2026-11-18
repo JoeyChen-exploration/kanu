@@ -88,7 +88,7 @@ const PAGES: Array<{ title: string; body: ReactNode }> = [
           <li>每种卡包就是一个系列，进货页能看到各稀有度的出货率。</li>
           <li><b>保底</b>：连续 {PITY.packs - 1} 包都没开出 {PITY.rarity} 或以上，第 {PITY.packs} 包必出一张 {PITY.rarity}。</li>
           <li>没拆的卡包可以先放着，开箱主播会来收。</li>
-          <li><b>电话批发</b>（买了电话 📞 才有）：一盒 {WHOLESALE.boxPacks} 包，每包打 {Math.round(WHOLESALE.discount * 10)} 折，每天只能订一盒。便宜但<b>批发商不保证正品</b>，每张约 {WHOLESALE.fakePpm / 10_000}% 是假卡；拆出来的卡带"批"字，卖之前用放大镜看看。</li>
+          <li><b>电话批发</b>（买了电话 📞 才有）：一盒 {WHOLESALE.boxPacks} 包，每包打 {Math.round(WHOLESALE.discount * 10)} 折，每天只能订一盒。<b>隔日送达</b>：第二天送货员作为第一位客人来柜台，占一个客人名额，在柜台<b>收货付款</b>（不想要可以拒收，不扣钱）。便宜但<b>批发商不保证正品</b>，每张约 {WHOLESALE.fakePpm / 10_000}% 是假卡；拆出来的卡带"批"字，卖之前用放大镜看看。</li>
         </ul>
       </>
     ),

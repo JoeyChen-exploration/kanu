@@ -96,9 +96,18 @@ export function registerAppraisalRoutes(app: FastifyInstance, deps: Deps, now: (
     if (!player) return fail(reply, 401, 'unauthorized', '请重新打开卡奴登录');
     return {
       ok: true, owned: player.phone === 1, price: PHONE.price, day: player.game_day, grading: repo.gradingCards(req.user.id),
-      wholesale: { leftToday: Math.max(0, WHOLESALE.perDay - repo.wholesaleToday(req.user.id, player.game_day)), offers: wholesaleOffers() },
+      wholesale: {
+        leftToday: deps.config.devUnlimitedIds.has(req.user.id) ? WHOLESALE.perDay : Math.max(0, WHOLESALE.perDay - repo.wholesaleToday(req.user.id, player.game_day)),
+        offers: wholesaleOffers(),
+        pending: pendingView(req.user.id),
+      },
     } satisfies PhoneResponse;
   });
+
+  const pendingView = (ownerId: string) => {
+    const o = repo.pendingOrder(ownerId);
+    return o ? { orderId: o.id, seriesName: o.series_name, packs: o.packs, price: o.price, arriveDay: o.ordered_day + WHOLESALE.deliveryDays } : null;
+  };
 
   /** 批发商的报价：每种卡包一盒（DESIGN 4） */
   const wholesaleOffers = () => repo.allSeries().map((s) => {
@@ -106,8 +115,8 @@ export function registerAppraisalRoutes(app: FastifyInstance, deps: Deps, now: (
     return { seriesId: s.id, name: s.name, kind: s.kind, packs: WHOLESALE.boxPacks, normalPrice: normal * WHOLESALE.boxPacks, boxPrice: Math.round(normal * WHOLESALE.discount) * WHOLESALE.boxPacks };
   });
 
-  // 电话批发（DESIGN 4）：打给批发商订一盒，马上到货（没拆的卡包，source = phone，同一盒一个 box_id）。
-  // 每个营业日 WHOLESALE.perDay 次；拆的时候按 WHOLESALE.fakePpm 出假卡（packs.ts）
+  // 电话批发（DESIGN 4）：打给批发商订一盒。2026-11-18 用户定：只下单不扣钱，送货员作为下一位顾客来柜台，
+  // 货到付款（counter.ts 的 /receive），拒收就取消。每个营业日 WHOLESALE.perDay 次；同时只能有一张没送到的订单
   app.post<{ Body: { seriesId?: unknown } }>('/api/phone/wholesale', async (req, reply) => {
     if (!req.user) return fail(reply, 401, 'unauthorized', '请重新打开卡奴登录');
     const key = idempotencyKey(req);
@@ -127,15 +136,10 @@ export function registerAppraisalRoutes(app: FastifyInstance, deps: Deps, now: (
       if (!free && repo.wholesaleToday(userId, player.game_day) >= WHOLESALE.perDay) {
         throw new ApiError(400, 'wholesale_limit', '今天已经订过一盒了，打烊后明天再打');
       }
-      const cost = free ? 0 : offer.boxPrice;
-      if (player.credits < cost) throw new ApiError(400, 'insufficient_credits', `信用点不够：一盒要 ${cost}，你有 ${player.credits}`);
-      const credits = player.credits - cost;
-      repo.setCreditsPity(userId, credits, player.pity_count);
-      const box = repo.nextBoxId();
-      const packIds = Array.from({ length: WHOLESALE.boxPacks }, () => repo.insertSealed(userId, seriesId, 'phone', t, box));
-      repo.logCredits(userId, t, -cost, free ? 'wholesale_test_free' : 'wholesale', credits, { seriesId, box });
-      repo.logEvent(userId, t, 'wholesale', { day: player.game_day, seriesId, box, packs: packIds.length });
-      const response: WholesaleResponse = { ok: true, credits, cost, packIds };
+      if (repo.pendingOrder(userId)) throw new ApiError(400, 'order_pending', '上一盒还没送到，等送货员来了再订');
+      const orderId = repo.insertOrder({ ownerId: userId, seriesId, packs: offer.packs, price: offer.boxPrice, day: player.game_day, now: t });
+      repo.logEvent(userId, t, 'wholesale_order', { day: player.game_day, order: orderId, seriesId, price: offer.boxPrice });
+      const response: WholesaleResponse = { ok: true, order: { orderId, seriesId, seriesName: offer.name, packs: offer.packs, price: offer.boxPrice } };
       repo.putIdempotent(userId, key, response, t);
       return response;
     })();

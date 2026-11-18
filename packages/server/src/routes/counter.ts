@@ -9,8 +9,8 @@
 // 上一位走了才生成下一位，需求参照玩家当时的库存。写操作都在一个事务里，要求幂等 key（dismiss 除外，它是设成目标状态）。
 // 心理价位、个人浮动、今天还剩几位都不出现在响应里。
 import type { FastifyInstance } from 'fastify';
-import { BINDER_PAGE_SIZE, BINDERS, CUSTOMER, PACKS, RARITIES, RARITY, REPUTATION, COUNTER, type BinderKind, type CustomerType, type Rarity } from '@kanu/shared/balance';
-import type { CardView, CounterBinderPageResponse, CounterResponse, CustomerView, EligibleCardsResponse, EndDayResponse, OfferResponse } from '@kanu/shared/types';
+import { BINDER_PAGE_SIZE, BINDERS, CUSTOMER, PACKS, RARITIES, RARITY, REPUTATION, COUNTER, WHOLESALE, type BinderKind, type CustomerType, type Rarity } from '@kanu/shared/balance';
+import type { CardView, CounterBinderPageResponse, CounterResponse, CustomerView, EligibleCardsResponse, EndDayResponse, OfferResponse, ReceiveResponse } from '@kanu/shared/types';
 import { ApiError, fail, idempotencyKey, type Deps } from '../app.ts';
 import { dayKey, type CustomerRow } from '../db/index.ts';
 import {
@@ -32,6 +32,7 @@ function typicalPrice(rarities: Rarity[]): number {
 }
 
 function demandText(type: string, d: Demand): string {
+  if (d.kind === 'delivery') return `送来「${d.seriesName}」一盒 ${d.packs} 包，货到付款 ${d.price.toLocaleString('zh-CN')} 信用点`;
   if (d.kind === 'pack') return d.seriesName ? `没拆的「${d.seriesName}」卡包` : '没拆的卡包，哪种都行';
   if (d.templateName) return `「${d.templateName}」这张卡`;
   if (type === 'middleman') return '没验过的卡';
@@ -49,7 +50,10 @@ export function toCustomerView(row: CustomerRow): CustomerView {
     type,
     typeName: CUSTOMER[type].name,
     line: row.line,
-    demand: { kind: demand.kind, text: demandText(type, demand) },
+    demand: {
+      kind: demand.kind, text: demandText(type, demand),
+      ...(demand.kind === 'delivery' ? { delivery: { orderId: demand.orderId, seriesId: demand.seriesId, seriesName: demand.seriesName, packs: demand.packs, price: demand.price } } : {}),
+    },
     budgetLow: row.budget_low,
     budgetHigh: row.budget_high,
     patience: row.patience,
@@ -82,6 +86,19 @@ export function registerCounterRoutes(app: FastifyInstance, deps: Deps, now: () 
     }
     const day = dayKey(player.game_day);
     let rows = repo.customersFor(ownerId, day);
+    // 电话批发的货：隔日送达，到日子了、今天还有名额，下一位就是送货员（占一个名额，2026-11-18 用户定）
+    const order = repo.pendingOrder(ownerId);
+    const due = order && player.game_day >= order.ordered_day + WHOLESALE.deliveryDays;
+    const courierHere = order && rows.some((c) => c.type === 'courier' && (JSON.parse(c.demand) as Demand & { orderId?: number }).orderId === order.id);
+    if (order && due && !courierHere && !rows.some((c) => c.status === 'waiting') && rows.length < player.day_customer_count) {
+      const demand: Demand = { kind: 'delivery', orderId: order.id, seriesId: order.series_id, seriesName: order.series_name, packs: order.packs, price: order.price };
+      repo.insertCustomer({
+        owner_id: ownerId, day_key: day, slot: 0, seat: rows.length, type: 'courier', demand: JSON.stringify(demand), float: 1,
+        patience: CUSTOMER.courier.patience, max_patience: CUSTOMER.courier.patience, line: say('courier', 'greet', { demand: demandText('courier', demand) }),
+        budget_low: order.price, budget_high: order.price, created_at: t,
+      });
+      rows = repo.customersFor(ownerId, day);
+    }
     if (!rows.some((c) => c.status === 'waiting') && rows.length < player.day_customer_count) {
       const series = repo.allSeries().map((s) => ({ id: s.id, name: s.name, price: PACKS[s.kind].price }));
       const templates = repo.allTemplates().map((x) => ({ id: x.id, name: x.name, rarity: x.rarity, tags: JSON.parse(x.tags) as string[] }));
@@ -308,11 +325,53 @@ export function registerCounterRoutes(app: FastifyInstance, deps: Deps, now: () 
     return sell(req.user.id, Number.parseInt(req.params.id, 10), parseItem(req.body), 'quick', key);
   });
 
+  // 送货员：收货、付钱（货到付款）。钱不够就拒绝，可以请走（= 拒收，订单取消）
+  app.post<{ Params: { id: string } }>('/api/counter/:id/receive', async (req, reply) => {
+    if (!req.user) return fail(reply, 401, 'unauthorized', '请重新打开卡奴登录');
+    const key = idempotencyKey(req);
+    if (!key) return fail(reply, 400, 'missing_idempotency_key', '请求缺少幂等 key，请刷新后再试');
+    const userId = req.user.id;
+    const customerId = Number.parseInt(req.params.id, 10);
+    return repo.db.transaction((): ReceiveResponse => {
+      const replay = repo.getIdempotent<ReceiveResponse>(userId, key);
+      if (replay) return replay;
+      const t = now();
+      const c = waitingCustomer(userId, customerId);
+      const demand = JSON.parse(c.demand) as Demand;
+      if (demand.kind !== 'delivery') throw new ApiError(400, 'not_courier', '这位不是送货员');
+      const order = repo.getOrder(userId, demand.orderId);
+      if (!order || order.status !== 'pending') throw new ApiError(400, 'order_gone', '这张订单已经处理过了');
+      const player = repo.getPlayer(userId)!;
+      const free = deps.config.devUnlimitedIds.has(userId);
+      const cost = free ? 0 : order.price;
+      if (player.credits < cost) throw new ApiError(400, 'insufficient_credits', `信用点不够：货款 ${cost}，你有 ${player.credits}。付不起可以请他走（拒收）`);
+      const credits = player.credits - cost;
+      repo.setCreditsPity(userId, credits, player.pity_count);
+      const box = repo.nextBoxId();
+      const packIds = Array.from({ length: order.packs }, () => repo.insertSealed(userId, order.series_id, 'phone', t, box));
+      repo.setOrderStatus(order.id, 'delivered');
+      repo.updateCustomer(c.id, { patience: c.patience, status: 'received', line: say('courier', 'deal'), counter_price: null });
+      repo.logCredits(userId, t, -cost, free ? 'wholesale_test_free' : 'wholesale', credits, { order: order.id, seriesId: order.series_id, box });
+      repo.logEvent(userId, t, 'wholesale', { day: player.game_day, order: order.id, seriesId: order.series_id, box, packs: packIds.length });
+      const state = counterState(userId, t);
+      const response: ReceiveResponse = { ok: true, credits, cost, packIds, next: state.current, done: state.done };
+      repo.putIdempotent(userId, key, response, t);
+      return response;
+    })();
+  });
+
   app.post<{ Params: { id: string } }>('/api/counter/:id/dismiss', async (req, reply) => {
     if (!req.user) return fail(reply, 401, 'unauthorized', '请重新打开卡奴登录');
     const userId = req.user.id;
     return repo.db.transaction(() => {
       const c = waitingCustomer(userId, Number.parseInt(req.params.id, 10));
+      // 请走送货员 = 拒收：订单取消，不扣钱（今天也不能再订）
+      const demand = JSON.parse(c.demand) as Demand;
+      if (demand.kind === 'delivery') {
+        const order = repo.getOrder(userId, demand.orderId);
+        if (order?.status === 'pending') repo.setOrderStatus(order.id, 'refused');
+        repo.logEvent(userId, now(), 'wholesale_refused', { order: demand.orderId });
+      }
       repo.updateCustomer(c.id, { patience: c.patience, status: 'dismissed', line: c.line, counter_price: c.counter_price });
       const state = counterState(userId, now());
       return { ok: true, customer: toCustomerView(repo.getCustomer(userId, c.id)!), next: state.current, done: state.done };

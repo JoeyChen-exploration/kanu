@@ -13,7 +13,9 @@ export const MVP_TYPES = CUSTOMER_TYPES.filter((t) => CUSTOMER[t].mvp);
 /** 顾客想要什么（存库时序列化成 JSON） */
 export type Demand =
   | { kind: 'card'; rarities: Rarity[]; tag: string | null; templateId: string | null; templateName: string | null }
-  | { kind: 'pack'; seriesId: string | null; seriesName: string | null };
+  | { kind: 'pack'; seriesId: string | null; seriesName: string | null }
+  /** 送货员：电话批发的订单送到柜台，货到付款（2026-11-18） */
+  | { kind: 'delivery'; orderId: number; seriesId: string; seriesName: string; packs: number; price: number };
 
 /** 玩家手上一张能拿来卖的卡（只需要公开信息 + 公开价） */
 export interface SellableCard {

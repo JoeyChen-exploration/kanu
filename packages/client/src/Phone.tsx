@@ -62,13 +62,12 @@ export function Phone({ onClose, onChange }: { onClose: () => void; onChange: (p
   };
   const total = slot.reduce((s, x) => s + x.gradingFee, 0);
 
-  /** 打给批发商订一盒：马上到货，去进货页拆 */
+  /** 打给批发商订一盒：隔日送达，送货员来柜台货到付款 */
   const order = async (seriesId: string, name: string) => {
     setBusy(true); setErr(''); setMsg('');
     try {
       const r = await api<WholesaleResponse>('/phone/wholesale', { method: 'POST', body: { seriesId }, idempotencyKey: newIdempotencyKey() });
-      onChange({ credits: r.credits });
-      setMsg(`「${name}」一盒 ${r.packIds.length} 包到货了（${fmt(r.cost)} 信用点），去进货页的"我的卡包"拆`);
+      setMsg(`订好了「${name}」一盒。明天开门送货员货郎七号会作为第一位客人来柜台，货到付款 ${fmt(r.order.price)}`);
       await load();
     } catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
   };
@@ -113,6 +112,9 @@ export function Phone({ onClose, onChange }: { onClose: () => void; onChange: (p
             </div>
             <div className="phone-contact">
               <div className="phone-contact-head"><b>批发商</b><span className="hint">整盒订货 · 今天还能订 {data.wholesale.leftToday} 盒</span></div>
+              {data.wholesale.pending && (
+                <p className="wholesale-pending">📦 等送货：「{data.wholesale.pending.seriesName}」一盒 {data.wholesale.pending.packs} 包，第 {data.wholesale.pending.arriveDay} 天送货员来柜台，货到付款 {fmt(data.wholesale.pending.price)}</p>
+              )}
               <div className="wholesale-offers">
                 {data.wholesale.offers.map((o) => (
                   <div key={o.seriesId} className={`wholesale-offer kind-${o.kind}`}>
@@ -121,11 +123,11 @@ export function Phone({ onClose, onChange }: { onClose: () => void; onChange: (p
                       <b>{o.name}</b>
                       <span>一盒 {o.packs} 包 · <b>{fmt(o.boxPrice)}</b> <s>{fmt(o.normalPrice)}</s></span>
                     </div>
-                    <button className="chip on" disabled={busy || data.wholesale.leftToday <= 0} onClick={() => order(o.seriesId, o.name)}>订一盒</button>
+                    <button className="chip on" disabled={busy || data.wholesale.leftToday <= 0 || !!data.wholesale.pending} onClick={() => order(o.seriesId, o.name)}>订一盒</button>
                   </div>
                 ))}
               </div>
-              <p className="hint station-hint">比电脑订货便宜，马上到货，但批发商不保证正品：每张卡约 {WHOLESALE.fakePpm / 10_000}% 是假卡。拆出来的卡带"批"字，用柜台上的放大镜看看再卖。每天只能订一盒。</p>
+              <p className="hint station-hint">比电脑订货便宜，隔日送达：第二天送货员来柜台货到付款（占一个客人名额，可以拒收），但批发商不保证正品：每张卡约 {WHOLESALE.fakePpm / 10_000}% 是假卡。拆出来的卡带"批"字，用柜台上的放大镜看看再卖。每天只能订一盒，上一盒没送到不能再订。</p>
             </div>
           </>
         )}

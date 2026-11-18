@@ -185,6 +185,9 @@ function season(rng: Rng, packsPerDay: number, reserveFromDay: number, mode: Sho
     inv = pool.filter((c) => !kept.has(c));
   };
 
+  /** 电话批发：订单哪天下的（没有就 null）；今天送货员占了几个顾客名额 */
+  let orderedDay: number | null = null;
+  let courierToday = 0;
   for (let w = 1; w <= SEASON.weeks; w += 1) {
     let income = 0, spent = 0;
     for (let day = 0; day < 7; day += 1) {
@@ -205,14 +208,19 @@ function season(rng: Rng, packsPerDay: number, reserveFromDay: number, mode: Sho
         const keep = reserve + 1000;
         if (!phone && credits - PHONE.price >= keep) { credits -= PHONE.price; spent += PHONE.price; phone = true; }
         const box = Math.round(PACKS.themed.price * WHOLESALE.discount) * WHOLESALE.boxPacks;
-        if (phone && credits - box >= keep) {
-          credits -= box; spent += box; boxes += 1;
-          for (let p = 0; p < WHOLESALE.boxPacks; p += 1) {
-            const r = openPack(rng, { packType: 'themed', pityCount: pity, serialAvailable: () => true, fakePpm: WHOLESALE.fakePpm });
-            pity = r.pityCount;
-            for (const c of r.cards) addCard(c, keep);
+        // 隔日送达：昨天订的今天送货员来柜台（占一个顾客名额），钱够就收货付款，不够就拒收
+        if (orderedDay !== null && dayIndex >= orderedDay + WHOLESALE.deliveryDays) {
+          orderedDay = null; courierToday = 1;
+          if (credits - box >= keep) {
+            credits -= box; spent += box; boxes += 1;
+            for (let p = 0; p < WHOLESALE.boxPacks; p += 1) {
+              const r = openPack(rng, { packType: 'themed', pityCount: pity, serialAvailable: () => true, fakePpm: WHOLESALE.fakePpm });
+              pity = r.pityCount;
+              for (const c of r.cards) addCard(c, keep);
+            }
           }
         }
+        if (phone && orderedDay === null && credits - box >= keep) orderedDay = dayIndex;
       }
       const n = Math.max(0, Math.min(packsPerDay, Math.floor((credits - reserve) / PACKS.themed.price)));
       for (let p = 0; p < n; p += 1) {
@@ -239,7 +247,8 @@ function season(rng: Rng, packsPerDay: number, reserveFromDay: number, mode: Sho
       const mult = showcaseEffects(score).priceMult;
       // 照卖：柜里的卡放回可卖的池子，今天卖掉的明天再补
       if (mode === 'sell') { inv.push(...shelf); shelf = []; }
-      const todayCustomers = rollCustomerCount(rng, PER_DAY_SHIFT);
+      const todayCustomers = Math.max(0, rollCustomerCount(rng, PER_DAY_SHIFT) - courierToday);
+      courierToday = 0;
       for (let k = 0; k < todayCustomers; k += 1) {
         // 珍藏柜展示分够高时，有几率换成大藏家（和服务器同一个函数）
         const grand = grandChancePpm(score);

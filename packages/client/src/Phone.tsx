@@ -3,7 +3,7 @@
 // 各页面的拖拽在松手到电话上时广播 PHONE_DROP，电话自己接住。
 import { useEffect, useState } from 'react';
 import { APPRAISAL, ERRATA, PHONE } from '@kanu/shared/balance';
-import type { BuyPhoneResponse, CardAppraisalResponse, CardView, GradeResponse, MeResponse, PhoneResponse } from '@kanu/shared/types';
+import type { BuyPhoneResponse, CardAppraisalResponse, CardView, GradeBatchResponse, MeResponse, PhoneResponse } from '@kanu/shared/types';
 import { WRITE_EVENT, api, newIdempotencyKey } from './api.ts';
 import { Card, fmt } from './Card.tsx';
 import { FloatWindow } from './drag.tsx';
@@ -16,7 +16,8 @@ export const dropOnPhone = (card: CardView) => window.dispatchEvent(new CustomEv
 
 export function Phone({ onClose, onChange }: { onClose: () => void; onChange: (p: Partial<MeResponse>) => void }) {
   const [data, setData] = useState<PhoneResponse | null>(null);
-  const [slot, setSlot] = useState<CardAppraisalResponse | null>(null);
+  /** 放进电话、等着一起寄去送评的卡（可以好几张） */
+  const [slot, setSlot] = useState<CardAppraisalResponse[]>([]);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
   const [err, setErr] = useState('');
@@ -27,7 +28,12 @@ export function Phone({ onClose, onChange }: { onClose: () => void; onChange: (p
     const onDrop = (e: Event) => {
       const card = (e as CustomEvent<CardView>).detail;
       setErr(''); setMsg('');
-      api<CardAppraisalResponse>(`/cards/${card.id}/appraisal`).then(setSlot).catch((x: Error) => setErr(x.message));
+      api<CardAppraisalResponse>(`/cards/${card.id}/appraisal`)
+        .then((r) => {
+          if (!r.canGrade) { setErr(`「${r.card.name}」${r.card.slab ? '已经封壳了' : r.card.gradeRejected ? '被评级社拒评过' : '已经在评级社了'}`); return; }
+          setSlot((xs) => (xs.some((x) => x.card.id === r.card.id) ? xs : xs.length >= PHONE.gradingBatch ? (setErr(`一次最多寄 ${PHONE.gradingBatch} 张`), xs) : [...xs, r]));
+        })
+        .catch((x: Error) => setErr(x.message));
     };
     window.addEventListener(PHONE_DROP, onDrop);
     window.addEventListener(WRITE_EVENT, load);
@@ -44,16 +50,17 @@ export function Phone({ onClose, onChange }: { onClose: () => void; onChange: (p
   };
 
   const send = async () => {
-    if (!slot) return;
+    if (!slot.length) return;
     setBusy(true); setErr('');
     try {
-      const r = await api<GradeResponse>(`/cards/${slot.card.id}/grade`, { method: 'POST', body: {}, idempotencyKey: newIdempotencyKey() });
+      const r = await api<GradeBatchResponse>('/phone/grade', { method: 'POST', body: { cardIds: slot.map((x) => x.card.id) }, idempotencyKey: newIdempotencyKey() });
       onChange({ credits: r.credits });
-      setMsg(`「${r.card.name}」寄去星港评级社了，下次打烊出结果`);
-      setSlot(null);
+      setMsg(`${r.cards.length} 张卡寄去星港评级社了（${fmt(r.cost)} 信用点），下次打烊出结果`);
+      setSlot([]);
       await load();
     } catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
   };
+  const total = slot.reduce((s, x) => s + x.gradingFee, 0);
 
   return (
     <FloatWindow id="phone" className="float-phone" title="📞 电话" onClose={onClose}>
@@ -68,20 +75,23 @@ export function Phone({ onClose, onChange }: { onClose: () => void; onChange: (p
           <>
             <div className="phone-contact" data-drop={PHONE_ZONE}>
               <div className="phone-contact-head"><b>星港评级社</b><span className="hint">送评</span></div>
-              {slot
+              {slot.length > 0
                 ? (
-                  <div className="station-card">
-                    <div className="station-art"><Card card={slot.card} small /></div>
-                    <div className="station-info">
-                      <b>{slot.card.name}</b>
-                      {slot.canGrade
-                        ? <button className="primary" disabled={busy} onClick={send}>送评 · {fmt(slot.gradingFee)}</button>
-                        : <p className="hint">{slot.card.slab ? '已经封壳了' : slot.card.gradeRejected ? '评级社拒评过这张卡' : '这张卡已经在评级社了'}</p>}
-                      <button className="link" onClick={() => setSlot(null)}>拿走</button>
+                  <>
+                    <div className="phone-slot">
+                      {slot.map((x) => (
+                        <div key={x.card.id} className="phone-slot-card">
+                          <Card card={x.card} small />
+                          <span className="cell-price">{fmt(x.gradingFee)}</span>
+                          <button className="link" onClick={() => setSlot((xs) => xs.filter((y) => y.card.id !== x.card.id))}>拿走</button>
+                        </div>
+                      ))}
                     </div>
-                  </div>
+                    <button className="primary" disabled={busy} onClick={send}>送评 {slot.length} 张 · 合计 {fmt(total)}</button>
+                    <p className="hint">还可以接着往里拖（最多 {PHONE.gradingBatch} 张）</p>
+                  </>
                 )
-                : <p className="station-empty">把卡拖到这里送评</p>}
+                : <p className="station-empty">把卡拖到这里送评，可以放好几张</p>}
               <p className="hint station-hint">真卡封壳出分（1–10、四个分项、黑标），错版会公开认定、价格再 ×{ERRATA.mult}；送了假卡被拒评，信誉 −{APPRAISAL.gradeRejectRepLoss}。先用柜台上的放大镜看看再送。</p>
               {data.grading.length > 0 && (
                 <div className="station-away">

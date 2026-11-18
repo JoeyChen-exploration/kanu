@@ -9,7 +9,7 @@
 import type { FastifyInstance } from 'fastify';
 import { APPRAISAL, PHONE, type Rarity, type Style } from '@kanu/shared/balance';
 import type {
-  AppraisalOutcome, BuyPhoneResponse, CardAppraisalResponse, CardView, GradeResponse, InspectionView, PhoneResponse,
+  AppraisalOutcome, BuyPhoneResponse, CardAppraisalResponse, CardView, GradeBatchResponse, GradeResponse, InspectionView, PhoneResponse,
 } from '@kanu/shared/types';
 import { ApiError, fail, idempotencyKey, type Deps } from '../app.ts';
 import { gradeCard, inspect } from '../game/appraisal.ts';
@@ -116,6 +116,45 @@ export function registerAppraisalRoutes(app: FastifyInstance, deps: Deps, now: (
       repo.setPhone(userId);
       repo.logCredits(userId, t, -cost, free ? 'phone_test_free' : 'phone', credits);
       const response: BuyPhoneResponse = { ok: true, credits };
+      repo.putIdempotent(userId, key, response, t);
+      return response;
+    })();
+  });
+
+  // 一次寄好几张（2026-11-18 用户要求）：每张都能送才扣钱，一个事务里一起送走；有一张不行就整批不动，告诉玩家是哪张
+  app.post<{ Body: { cardIds?: unknown } }>('/api/phone/grade', async (req, reply) => {
+    if (!req.user) return fail(reply, 401, 'unauthorized', '请重新打开卡奴登录');
+    const key = idempotencyKey(req);
+    if (!key) return fail(reply, 400, 'missing_idempotency_key', '请求缺少幂等 key，请刷新后再试');
+    const raw = Array.isArray(req.body?.cardIds) ? req.body.cardIds : [];
+    const ids = [...new Set(raw.map((x) => Number(x)).filter((x) => Number.isInteger(x) && x > 0))];
+    if (ids.length === 0) return fail(reply, 400, 'no_cards', '先把要送评的卡放进电话');
+    if (ids.length > PHONE.gradingBatch) return fail(reply, 400, 'too_many', `一次最多寄 ${PHONE.gradingBatch} 张`);
+    const userId = req.user.id;
+    return repo.db.transaction((): GradeBatchResponse => {
+      const replay = repo.getIdempotent<GradeBatchResponse>(userId, key);
+      if (replay) return replay;
+      const t = now();
+      const player = repo.getPlayer(userId);
+      if (!player) throw new ApiError(401, 'unauthorized', '请重新打开卡奴登录');
+      if (player.phone !== 1) throw new ApiError(400, 'no_phone', '还没有电话，先买一部电话才能打给评级社');
+      const free = deps.config.devUnlimitedIds.has(userId);
+      const checked = ids.map((id) => {
+        const { card } = ownCard(userId, id);
+        const st = appraisalOf(repo, card);
+        if (!st.canGrade) throw new ApiError(400, 'cannot_grade', `「${card.name}」${card.slab ? '已经封壳了' : card.gradeRejected ? '被评级社拒评过' : '已经在评级社了'}，先拿出来再寄`);
+        return { card, fee: free ? 0 : st.gradingFee };
+      });
+      const cost = checked.reduce((s, c) => s + c.fee, 0);
+      if (player.credits < cost) throw new ApiError(400, 'insufficient_credits', `信用点不够：这批要 ${cost}，你有 ${player.credits}`);
+      const credits = player.credits - cost;
+      repo.setCreditsPity(userId, credits, player.pity_count);
+      repo.logCredits(userId, t, -cost, free ? 'grading_test_free' : 'grading', credits, { cards: ids });
+      for (const { card } of checked) {
+        repo.putAppraisal(card.id, 'grading', 'pending', t);
+        repo.sendToGrading(card.id, player.game_day + APPRAISAL.grading.days);
+      }
+      const response: GradeBatchResponse = { ok: true, credits, cost, cards: ids.map((id) => repo.cardView(id)!) };
       repo.putIdempotent(userId, key, response, t);
       return response;
     })();

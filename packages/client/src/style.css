@@ -374,6 +374,9 @@ h2 small { color: var(--muted); font-weight: normal; font-size: 13px; margin-lef
 .phone-contact { background: var(--panel-2); border: 1px solid var(--line); border-radius: 12px; padding: 10px; display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
 .phone-contact.disabled { opacity: 0.55; }
 .phone-contact-head { display: flex; justify-content: space-between; align-items: baseline; }
+.phone-slot { display: grid; grid-template-columns: repeat(auto-fill, minmax(62px, 1fr)); gap: 8px; max-height: 260px; overflow-y: auto; }
+.phone-slot-card { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.phone-slot-card .link { font-size: 11px; }
 
 /* 送评位置里的卡（电话里复用） */
 .station-head b { font-size: 15px; }

@@ -41,12 +41,15 @@ export function checkCondition(c: TechCondition, ctx: { stats: Record<QuestMetri
   return { text: `${METRIC_NAMES[c.metric]} ${c.target} 次`, current: Math.min(current, c.target), target: c.target, met: current >= c.target };
 }
 
-export type BuyBlock = 'owned' | 'requires' | 'conditions' | null;
+export type BuyBlock = 'owned' | 'soon' | 'exclusive' | 'requires' | 'conditions' | null;
 
-/** 不看钱：节点本身能不能点（已点过 / 前置没点 / 额外条件没满足） */
+/** 不看钱：节点本身能不能点（已点过 / 还没开放 / 二选一点了另一个 / 前置没点 / 额外条件没满足） */
 export function techBlock(node: TechNode, owned: Set<string>, ctx: { stats: Record<QuestMetric, number>; reputation: number }): BuyBlock {
   if (owned.has(node.id)) return 'owned';
+  if (node.soon) return 'soon';
+  if (node.exclusive && owned.has(node.exclusive)) return 'exclusive';
   if (!node.requires.every((r) => owned.has(r))) return 'requires';
+  if (node.anyOf && !node.anyOf.some((r) => owned.has(r))) return 'requires';
   if (!node.conditions.every((c) => checkCondition(c, ctx).met)) return 'conditions';
   return null;
 }

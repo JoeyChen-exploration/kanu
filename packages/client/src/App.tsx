@@ -1,4 +1,4 @@
-// 卡奴前端：登录 → 五个标签页（店铺、进货、柜台、库存、图鉴）。
+// 卡奴前端：登录 → 六个标签页（店铺、科技、进货、柜台、库存、图鉴）。
 // 横屏游戏（2026-11-17 用户定，版式学旺财牌局）：横屏时标签在左侧栏竖排，方屏 / 竖屏退回顶栏 + 底部标签，见 style.css 末尾。
 import { useEffect, useRef, useState } from 'react';
 import type { ConfigResponse, MeResponse } from '@kanu/shared/types';
@@ -12,7 +12,7 @@ import { Counter } from './pages/Counter.tsx';
 import { Phone } from './Phone.tsx';
 import { Booklet, bookletUnseen } from './Booklet.tsx';
 import { QuestBar } from './QuestBar.tsx';
-import { TechTree } from './TechTree.tsx';
+import { TechPage } from './TechTree.tsx';
 
 type State =
   | { kind: 'loading'; text: string }
@@ -20,8 +20,8 @@ type State =
   | { kind: 'ready'; me: MeResponse }
   | { kind: 'error'; text: string };
 
-type Tab = 'shop' | 'packs' | 'counter' | 'inventory' | 'collection';
-const TABS: Array<[Tab, string]> = [['shop', '店铺'], ['packs', '进货'], ['counter', '柜台'], ['inventory', '库存'], ['collection', '图鉴']];
+type Tab = 'shop' | 'tech' | 'packs' | 'counter' | 'inventory' | 'collection';
+const TABS: Array<[Tab, string]> = [['shop', '店铺'], ['tech', '科技'], ['packs', '进货'], ['counter', '柜台'], ['inventory', '库存'], ['collection', '图鉴']];
 
 export function App() {
   const [state, setState] = useState<State>({ kind: 'loading', text: '正在开店…' });
@@ -76,7 +76,8 @@ export function App() {
       {phone && <Phone onClose={() => setPhone(false)} onChange={patchMe} />}
       <QuestBar onGo={(t) => setTab(t as Tab)} onChange={patchMe} />
       <main className="content">
-        {tab === 'shop' && <Shop me={me} onChange={patchMe} />}
+        {tab === 'shop' && <Shop me={me} onChange={patchMe} onGo={(t) => setTab(t as Tab)} />}
+        {tab === 'tech' && <TechPage onChange={patchMe} />}
         {tab === 'packs' && <Packs me={me} onChange={patchMe} />}
         {tab === 'counter' && <Counter onChange={patchMe} />}
         {tab === 'inventory' && <Inventory onChange={patchMe} />}
@@ -118,7 +119,7 @@ function DevTools({ onChange }: { onChange: (p: Partial<MeResponse>) => void }) 
   );
 }
 
-function Shop({ me, onChange }: { me: MeResponse; onChange: (p: Partial<MeResponse>) => void }) {
+function Shop({ me, onChange, onGo }: { me: MeResponse; onChange: (p: Partial<MeResponse>) => void; onGo: (tab: string) => void }) {
   return (
     <section className="page">
       <h1>你好，{me.user.name}</h1>
@@ -132,7 +133,7 @@ function Shop({ me, onChange }: { me: MeResponse; onChange: (p: Partial<MeRespon
         <div className="stat"><span className="label">营业</span><span className="value">第 {me.gameDay} 天</span></div>
       </section>
       <p className="hint">去"进货"开包，再到"柜台"把卡卖给顾客。不清楚规则就点 📖 看新手手册。</p>
-      <TechTree onChange={onChange} />
+      <button className="secondary shop-tech" onClick={() => onGo('tech')}>🔧 打开科技树：升级你的店</button>
       {me.devTools && <DevTools onChange={onChange} />}
     </section>
   );

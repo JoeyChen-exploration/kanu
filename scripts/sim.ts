@@ -130,8 +130,8 @@ const cardScore = (c: Card) => showcaseScore([c]);
 type ShowcaseMode = 'off' | 'hoard' | 'sell';
 
 /**
- * 科技树策略：只点对这种打法有用的节点（柜台 C1 → C2 人人有用；珍藏柜打法加 S1；批发送评打法加 A1、P1；
- * 每天开不到限购的人不点 G1），先留出这周租金 + 1,000 再点，每天最多点一个。
+ * 科技树策略：只点对这种打法有用的节点，先留出这周和下周的租金 + 1,000 再点（柜台 C1 → C2 人人有用；珍藏柜打法加 S1；批发送评打法加 A1、P1；
+ * 每天开不到限购的人不点 G1），每天最多点一个。
  */
 const techOrder = (mode: ShowcaseMode, trade: boolean, packsPerDay: number) =>
   ['C1', 'C2', ...(mode !== 'off' ? ['S1'] : []), ...(trade ? ['A1', 'P1'] : []), ...(packsPerDay >= STORE.packsPerDay ? ['G1'] : [])];
@@ -210,7 +210,7 @@ function season(rng: Rng, packsPerDay: number, reserveFromDay: number, mode: Sho
       if (tech) {
         const next = techOrder(mode, trade, packsPerDay).map((id) => TECH_NODES.find((n) => n.id === id)!).find((n) => !techOwned.has(n.id)
           && n.requires.every((r) => techOwned.has(r)) && n.conditions.every((c) => c.kind !== 'metric' || qstats[c.metric] >= c.target));
-        if (next && credits - next.price >= (shopWeek ? 0 : rentForWeek(week)) + 1000) {
+        if (next && credits - next.price >= (shopWeek ? 0 : rentForWeek(week) + rentForWeek(week + 1)) + 1000) {
           credits -= next.price; techSpent += next.price; techOwned.add(next.id); fx = techEffects(techOwned);
           if (techOwned.size === techOrder(mode, trade, packsPerDay).length) techDoneWeek ??= w;
         }

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { APPRAISAL, PACKS, PLAYER, SHOWCASE, STORE, TECH_NODES, WHOLESALE } from '@kanu/shared/balance';
 import type { MeResponse, PhoneResponse, QuestsResponse, ShowcaseResponse, TechBuyResponse, TechResponse } from '@kanu/shared/types';
-import { techEffects } from '../src/game/tech.ts';
+import { techBlock, techEffects } from '../src/game/tech.ts';
 import { inspect } from '../src/game/appraisal.ts';
 import { seeded } from '../src/game/rng.ts';
 import { HIDDEN_KEYS, findKeys, idem, login, setup } from './helpers.ts';
@@ -31,15 +31,33 @@ describe('科技树效果（纯函数）', () => {
   });
 });
 
+describe('科技树规则（纯函数）', () => {
+  it('二选一、任一前置', () => {
+    const ctx = { stats: { packsBought: 0, packsOpened: 0, sales: 0, daysEnded: 0, collected: 0, showcaseLevel: 0, showcaseCards: 0, binders: 0 }, reputation: 50 };
+    const a = { ...TECH_NODES.find((n) => n.id === 'C4a')!, soon: undefined, requires: [] };
+    expect(techBlock(a, new Set(), ctx)).toBeNull();
+    expect(techBlock(a, new Set(['C4b']), ctx)).toBe('exclusive');
+    const c5 = { ...TECH_NODES.find((n) => n.id === 'C5')!, soon: undefined };
+    expect(techBlock(c5, new Set(['P1']), ctx)).toBe('requires');
+    expect(techBlock(c5, new Set(['P1', 'C4b']), ctx)).toBeNull();
+  });
+});
+
 describe('科技树接口（docs/TECH-TREE.md MVP）', () => {
-  it('列出 5 条分支 6 个节点；第 2 层要前置和里程碑', async () => {
+  it('列出 5 条分支整棵树（32 个节点），开放的是 MVP 6 个；第 2 层要前置和里程碑', async () => {
     const { app } = setup();
     cleanup = () => app.close();
     const h = await login(app);
     const t = await tree(app, h);
     expect(t.branches.map((b) => b.id)).toEqual(['counter', 'appraisal', 'goods', 'phone', 'store']);
     const nodes = t.branches.flatMap((b) => b.nodes);
-    expect(nodes.map((n) => n.id).sort()).toEqual(['A1', 'C1', 'C2', 'G1', 'P1', 'S1']);
+    expect(nodes).toHaveLength(32);
+    expect(nodes.filter((n) => !n.soon).map((n) => n.id).sort()).toEqual(['A1', 'C1', 'C2', 'G1', 'P1', 'S1']);
+    expect(nodes.find((n) => n.id === 'C4a')).toMatchObject({ soon: 2, exclusive: { id: 'C4b' }, unlockable: false });
+    expect(nodes.find((n) => n.id === 'C5')!.anyOf.map((r) => r.id)).toEqual(['C4a', 'C4b']);
+    // 每个前置都指向树上真有的节点
+    const ids = new Set(nodes.map((n) => n.id));
+    for (const n of nodes) for (const r of [...n.requires, ...n.anyOf]) expect(ids.has(r.id)).toBe(true);
     expect(t.blueprints).toBe(0);
     const c2 = nodes.find((n) => n.id === 'C2')!;
     expect(c2).toMatchObject({ unlockable: false, owned: false, requires: [{ id: 'C1', owned: false }], conditions: [{ current: 0, target: 10, met: false }] });
@@ -64,6 +82,8 @@ describe('科技树接口（docs/TECH-TREE.md MVP）', () => {
     repo.db.prepare('UPDATE players SET credits = 100').run();
     expect((await buy(app, h, 'A1')).json().code).toBe('insufficient_credits');
     expect((await buy(app, h, 'Z9')).json().code).toBe('not_found');
+    repo.db.prepare('UPDATE players SET credits = 100000').run();
+    expect((await buy(app, h, 'C3')).json().code).toBe('soon');
   });
 
   it('蓝图先用，不够的部分用信用点 1:1 换', async () => {

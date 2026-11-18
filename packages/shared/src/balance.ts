@@ -397,26 +397,94 @@ export type TechEffect =
   | { kind: 'wholesaleDiscount'; value: number };
 export type TechCondition = { kind: 'metric'; metric: QuestMetric; target: number } | { kind: 'reputation'; min: number };
 export interface TechNode {
-  id: string; branch: TechBranch; tier: number; name: string; requires: string[]; price: number;
+  id: string; branch: TechBranch; tier: number; name: string;
+  /** 前置：全部要点过 */
+  requires: string[];
+  /** 前置：这几个里点过任意一个就行（"C4 任一"） */
+  anyOf?: string[];
+  /** 二选一：和这个节点互斥，同一个玩家只能点一个 */
+  exclusive?: string;
+  price: number;
   conditions: TechCondition[]; effects: TechEffect[];
   /** 效果说明（"当前 → 点了之后"） */
   effect: string;
   /** 联系人的一句话 */
   flavor: string;
+  /** 还没开放（第二、三阶段）：树上显示，不能点；conditionText 是之后的解锁条件说明 */
+  soon?: 2 | 3;
+  conditionText?: string;
 }
+/** 整棵树（docs/TECH-TREE.md 第 3 节）。MVP 只开放第一阶段 6 个，其他节点在树上显示"第 N 阶段开放" */
 export const TECH_NODES: TechNode[] = [
+  // ---- 柜台（招牌匠阿灯） ----
   { id: 'C1', branch: 'counter', tier: 1, name: '霓虹招牌', requires: [], price: 1500, conditions: [], effects: [{ kind: 'patience', delta: 1 }],
     effect: '所有顾客耐心 +1', flavor: '灯一亮，人就不急着走。' },
   { id: 'C2', branch: 'counter', tier: 2, name: '二号柜台', requires: ['C1'], price: 6000, conditions: [{ kind: 'metric', metric: 'sales', target: 10 }], effects: [{ kind: 'customersPerDay', delta: 1 }],
-    effect: '每天多来 1 位顾客', flavor: '多一张台面，多一个冤大头。' },
+    effect: '每天多来 1 位顾客（货够卖才划算）', flavor: '多一张台面，多一个冤大头。' },
+  { id: 'C3', branch: 'counter', tier: 3, name: '橱窗', requires: ['C2'], price: 8000, conditions: [], effects: [], soon: 2, conditionText: '成交 30 笔',
+    effect: '2 个橱窗格：放进去的卡每天有 30% 概率按公开价 70% 自动卖出', flavor: '玻璃后面的卡，看着就比手里的值钱。' },
+  { id: 'C4a', branch: 'counter', tier: 4, name: '流水摊', requires: ['C3'], exclusive: 'C4b', price: 12000, conditions: [], effects: [], soon: 2, conditionText: '成交 80 笔',
+    effect: '每天顾客 +2，居民多来', flavor: '薄利多销，下层区讲的是量。' },
+  { id: 'C4b', branch: 'counter', tier: 4, name: '会员制', requires: ['C3'], exclusive: 'C4a', price: 12000, conditions: [], effects: [], soon: 2, conditionText: '信誉 ≥ 60，卖出封壳卡 3 张',
+    effect: '收藏家、富人多来，居民少来；顾客数不变', flavor: '没卡的别进来。' },
+  { id: 'C5', branch: 'counter', tier: 5, name: '回头客', requires: ['P1'], anyOf: ['C4a', 'C4b'], price: 18000, conditions: [], effects: [], soon: 2, conditionText: '接待顾客 150 位',
+    effect: '谈崩走掉的顾客 30% 第二天再来，耐心回满', flavor: '他还是想要那张卡。' },
+  { id: 'C6', branch: 'counter', tier: 6, name: '下层区地标', requires: ['C5', 'S5'], price: 45000, conditions: [], effects: [], soon: 3, conditionText: '已买下店铺，信誉 ≥ 70，高分封壳 3 张',
+    effect: '大藏家上门几率翻倍，成交开播报', flavor: '整条街都知道，好卡要往你这儿送。' },
+  // ---- 鉴定（退休鉴定师眼镜婆） ----
   { id: 'A1', branch: 'appraisal', tier: 1, name: '好放大镜', requires: [], price: 1500, conditions: [], effects: [{ kind: 'errataDetectPpm', value: 900_000 }],
     effect: '放大镜认出错版 80% → 90%', flavor: '镜片是从报废的轨道望远镜上拆的。' },
+  { id: 'A2', branch: 'appraisal', tier: 2, name: '冷光灯', requires: ['A1'], price: 4000, conditions: [], effects: [], soon: 2, conditionText: '放大镜 10 次',
+    effect: '放大镜认出高仿 60% → 75%', flavor: '冷光下，高仿的油墨会发灰。' },
+  { id: 'A3', branch: 'appraisal', tier: 3, name: '品相卡尺', requires: ['A2'], price: 7000, conditions: [], effects: [], soon: 2, conditionText: '放大镜 30 次，送评 3 张',
+    effect: '放大镜看品相从两档变成一个估计分', flavor: '眼镜婆说：尺子不会骗人，但会看错。' },
+  { id: 'A4a', branch: 'appraisal', tier: 4, name: '鉴定师执照', requires: ['A3', 'S3a'], exclusive: 'A4b', price: 12000, conditions: [], effects: [], soon: 3, conditionText: '信誉 ≥ 60，验真 10 张',
+    effect: '可以给别的玩家代鉴定收费', flavor: '盖了评级社钢印的证，下层区没几张。' },
+  { id: 'A4b', branch: 'appraisal', tier: 4, name: '黑眼', requires: ['A3', 'S3b'], exclusive: 'A4a', price: 12000, conditions: [], effects: [], soon: 2, conditionText: '中间人成交 10 次，放大镜 50 次',
+    effect: '放大镜认出高仿 → 90%，还给一句来源提示', flavor: '她不看证书，只看手。' },
+  { id: 'A5', branch: 'appraisal', tier: 5, name: '评级社关系', requires: [], anyOf: ['A4a', 'A4b'], price: 20000, conditions: [], effects: [], soon: 2, conditionText: '送评 15 张，高分封壳 1 张',
+    effect: '送评费 −40%，可以加急', flavor: '排队？那是给别人准备的。' },
+  // ---- 进货（货郎七号） ----
   { id: 'G1', branch: 'goods', tier: 1, name: '批发证', requires: [], price: 1500, conditions: [], effects: [{ kind: 'storePacksPerDay', delta: 1 }],
     effect: '电脑订货每天限购 5 → 6 包', flavor: '七号说：一张证，多一箱。' },
+  { id: 'G2', branch: 'goods', tier: 2, name: '卡贩门路', requires: ['G1'], price: 4000, conditions: [], effects: [], soon: 2, conditionText: '成交 15 笔',
+    effect: '解锁卡贩：有人来柜台卖卡给你（出现率 18%）', flavor: '有人急着出手，就有人收。' },
+  { id: 'G3', branch: 'goods', tier: 3, name: '会员价', requires: ['G2'], price: 7000, conditions: [], effects: [], soon: 2, conditionText: '开包 40 包',
+    effect: '正规卡包 9 折', flavor: '老客户，抹个零。' },
+  { id: 'G4a', branch: 'goods', tier: 4, name: '厂商代理', requires: ['G3', 'S3a'], exclusive: 'G4b', price: 12000, conditions: [], effects: [], soon: 2, conditionText: '信誉 ≥ 60，开包 70 包，按时交租 3 次',
+    effect: '每周一个预购箱（保证 SR 以上），新系列提前 1 天开卖', flavor: '出厂封条，一箱一码。' },
+  { id: 'G4b', branch: 'goods', tier: 4, name: '夜班货车', requires: ['G3', 'S3b'], exclusive: 'G4a', price: 12000, conditions: [], effects: [], soon: 2, conditionText: '卡贩收卡 5 次，中间人成交 10 次',
+    effect: '每周两次货车：便宜整箱买全未知的卡', flavor: '车牌是手写的。' },
+  { id: 'G5', branch: 'goods', tier: 5, name: '直供', requires: [], anyOf: ['G4a', 'G4b'], price: 22000, conditions: [], effects: [], soon: 2, conditionText: '开包 120 包',
+    effect: '限购再 +2，保底 10 包 → 8 包', flavor: '货从出厂直接到你柜台。' },
+  // ---- 电话（接线员零号台） ----
   { id: 'P1', branch: 'phone', tier: 1, name: '零号台熟人', requires: [], price: 2000, conditions: [], effects: [{ kind: 'wholesaleDiscount', value: 0.75 }],
     effect: '电话批发每包 8 折 → 7.5 折', flavor: '零号台：老熟人了，给你转便宜的批发商。' },
+  { id: 'P2', branch: 'phone', tier: 2, name: '熟客价', requires: ['P1'], price: 4000, conditions: [], effects: [], soon: 2, conditionText: '批发 5 盒',
+    effect: '电话批发 7.5 折 → 7 折', flavor: '订得多了，零号台给你转的都是好说话的批发商。' },
+  { id: 'P3a', branch: 'phone', tier: 3, name: '正规批发商', requires: ['P2', 'S3a'], exclusive: 'P3b', price: 8000, conditions: [], effects: [], soon: 2, conditionText: '信誉 ≥ 60，批发 15 盒',
+    effect: '批发假卡率 5% → 1%，解锁治安局事件', flavor: '有执照的批发商，贵是贵点，货干净。' },
+  { id: 'P3b', branch: 'phone', tier: 3, name: '黑市专线', requires: ['P2', 'S3b'], exclusive: 'P3a', price: 8000, conditions: [], effects: [], soon: 2, conditionText: '中间人成交 8 次，批发 15 盒',
+    effect: '批发再便宜 1 折，但假卡更多，解锁黑市事件', flavor: '这个号码不在任何电话簿上。' },
+  { id: 'P4', branch: 'phone', tier: 4, name: '线人', requires: [], anyOf: ['P3a', 'P3b'], price: 12000, conditions: [], effects: [], soon: 2, conditionText: '批发 30 盒',
+    effect: '提前收到明天的空间站日报（20% 是假消息）', flavor: '消息比日报早半天，真不真自己判断。' },
+  { id: 'P5', branch: 'phone', tier: 5, name: '大单热线', requires: ['P4', 'C3'], price: 20000, conditions: [], effects: [], soon: 3, conditionText: '批发 50 盒，完成委托 5 次',
+    effect: '有人点名要货，开价不看市价', flavor: '有人点名要货，开价不看市价。' },
+  // ---- 店面（房东塔姆先生） ----
   { id: 'S1', branch: 'store', tier: 1, name: '保险柜', requires: [], price: 1500, conditions: [], effects: [{ kind: 'showcaseSlots', delta: 2 }],
     effect: '珍藏柜额外 +2 格（要先解锁珍藏柜）', flavor: '塔姆先生对有保险柜的租客客气一点。' },
+  { id: 'S2', branch: 'store', tier: 2, name: '装修', requires: ['S1'], price: 5000, conditions: [], effects: [], soon: 2, conditionText: '按时交租 1 次',
+    effect: '信誉每周自动 +2（最高 80）', flavor: '墙刷白了，客人也敢多待一会儿。' },
+  { id: 'S3a', branch: 'store', tier: 3, name: '挂牌营业', requires: ['S2'], anyOf: ['C2', 'A2', 'G2', 'P2'], exclusive: 'S3b', price: 8000, conditions: [], effects: [], soon: 2, conditionText: '信誉 ≥ 55，成交 30 笔',
+    effect: '路线：正经店。巡查少，卖真卡涨信誉', flavor: '牌子挂出去，就得守规矩。' },
+  { id: 'S3b', branch: 'store', tier: 3, name: '后门生意', requires: ['S2'], anyOf: ['C2', 'A2', 'G2', 'P2'], exclusive: 'S3a', price: 8000, conditions: [], effects: [], soon: 2, conditionText: '中间人成交 5 次',
+    effect: '路线：销赃窝点。藏匿室 3 格，中间人出价更高', flavor: '后门不挂牌，熟人敲三下。' },
+  { id: 'S4a', branch: 'store', tier: 4, name: '治安备案', requires: ['S3a'], price: 14000, conditions: [], effects: [], soon: 2, conditionText: '信誉 ≥ 65，按时交租 3 次，验真 5 张',
+    effect: '每周第一次被查出赃卡只没收，不罚款', flavor: '备过案的店，治安局给一次面子。' },
+  { id: 'S4b', branch: 'store', tier: 4, name: '地下仓', requires: ['S3b'], price: 14000, conditions: [], effects: [], soon: 2, conditionText: '中间人成交 15 次',
+    effect: '藏匿室 3 → 6 格，查出率更低', flavor: '地板下面还有一层地板。' },
+  { id: 'S5', branch: 'store', tier: 5, name: '隔壁铺面', requires: [], anyOf: ['S4a', 'S4b'], price: 24000, conditions: [], effects: [], soon: 3, conditionText: '已买下店铺',
+    effect: '每天顾客 +3，橱窗格 +2', flavor: '塔姆先生把隔壁也租给你了。' },
 ];
 
 /** 开包播报（FR-PACK-6）：开出这个稀有度及以上、或编号限定时全服播报 */

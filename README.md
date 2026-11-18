@@ -11,6 +11,7 @@
 | [docs/DESIGN.md](docs/DESIGN.md) | 游戏设计：规则和全部数值，规则以它为准 |
 | [docs/SRS.md](docs/SRS.md) | 需求规格：架构、需求编号（FR-xxx）、接口、数据表、里程碑 M0–M7 |
 | [docs/OWNER-QUESTIONS.md](docs/OWNER-QUESTIONS.md) | 发给服主的说明和待确认问题（金币兑换、旺财接口、部署、Discord 应用） |
+| [docs/ART.md](docs/ART.md) | 美术需求表：要画什么、规格、先做哪些、图放在哪（美术我们自己做） |
 | [CLAUDE.md](CLAUDE.md) | 给协作者和 AI 助手的规矩（服务器权威、隐藏属性不出服务器、数值只放 balance.ts 等） |
 
 ## 系统组成

@@ -96,6 +96,18 @@ describe('卡册（DESIGN 4.5）', () => {
     expect(p1.pages).toBe(3);
   });
 
+  it('卡册按稀有度从高到低排，同一张卡挨在一起', async () => {
+    const { app, repo } = setup();
+    cleanup = () => app.close();
+    const h = await login(app);
+    const pick = (r: string) => (repo.db.prepare("SELECT id FROM card_templates WHERE series_id = 'NEO' AND rarity = ? ORDER BY id LIMIT 1").get(r) as { id: string }).id;
+    for (const r of ['N', 'SR', 'R', 'N', 'SSR', 'R', 'N']) addCards(repo, 1, pick(r));
+    await app.inject({ method: 'POST', url: '/api/binders/organize', headers: h });
+    const id = (await binders(app, h)).binders[0]!.id;
+    const p = (await app.inject({ method: 'GET', url: `/api/binders/${id}?page=1`, headers: h })).json() as BinderPageResponse;
+    expect(p.cards.map((c) => c.rarity)).toEqual(['SSR', 'SR', 'R', 'R', 'N', 'N', 'N']);
+  });
+
   it('打烊时只有桌面散卡会磨损（品相是隐藏的，响应里看不到）', async () => {
     const always: Rng = { int: () => 0 };
     const { app, repo } = setup({ rng: always });

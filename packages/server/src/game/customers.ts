@@ -3,7 +3,7 @@
 // 2026-11-17：顾客一位一位进门（上一位走了才生成下一位，需求参照当时的库存）；顾客种类扩到 9 类；
 // 怀旧老顾客点名要某一张卡，开箱主播要没拆的卡包。
 import {
-  COUNTER, CUSTOMER, CUSTOMER_TYPES, RARITY,
+  COUNTER, CUSTOMER, CUSTOMER_TYPES, MIDDLEMAN, RARITY,
   type CustomerType, type Rarity,
 } from '@kanu/shared/balance';
 import { between, chance, pickPpm, type Rng } from './rng.ts';
@@ -39,10 +39,10 @@ export interface SeriesInfo { id: string; name: string; price: number }
 export interface RolledCustomer {
   type: CustomerType;
   demand: Demand;
-  /** 个人浮动 0.85–1.25（隐藏） */
+  /** 个人浮动 = 1 + 这类顾客 premium 范围里随机的一个数，再乘珍藏柜加成（隐藏）；心理价位 = 市场价 × 风格加成 × float */
   float: number;
   patience: number;
-  /** 给玩家看的预算区间：故意模糊，不等于心理价位 */
+  /** 给玩家看的预算区间：按需求参考价 × 这类顾客的 premium 范围算（不读 float） */
   budgetLow: number;
   budgetHigh: number;
 }
@@ -68,23 +68,29 @@ const styleMult = (type: CustomerType, style: string) => {
   return w.kind === 'card' && w.styleBonus && style !== 'standard' ? w.styleBonus : 1;
 };
 
-/** 卡的心理价位（隐藏）：中间人按基准价的固定比例收；其他按 公开价 × 类型系数 × 风格加成 × 个人浮动 */
+/**
+ * 卡的心理价位（隐藏）。2026-11-18 用户定：开价不超过市场价，客人就不会不满意——
+ * 心理价位 = 市场价（公开价）× 风格加成 × float，float ≥ 1 + premium 下限 ≥ 1。
+ * 黑市中间人例外：不看市场价，只按基准价的 MIDDLEMAN.basePct 收。
+ */
 export function mindPrice(type: CustomerType, float: number, card: SellableCard): number {
-  if (type === 'middleman') return Math.round(RARITY[card.rarity].basePrice * CUSTOMER.middleman.priceCoef);
-  return Math.round(card.price * CUSTOMER[type].priceCoef * styleMult(type, card.style) * float);
+  if (type === 'middleman') return Math.round(RARITY[card.rarity].basePrice * MIDDLEMAN.basePct);
+  return Math.round(card.price * styleMult(type, card.style) * float);
 }
 
-/** 卡包的心理价位（隐藏）：电脑订货价 × 类型系数 × 个人浮动 */
-export function mindPricePack(type: CustomerType, float: number, pack: SellablePack): number {
-  return Math.round(pack.price * CUSTOMER[type].priceCoef * float);
+/** 卡包的心理价位（隐藏）：电脑订货价 × float */
+export function mindPricePack(_type: CustomerType, float: number, pack: SellablePack): number {
+  return Math.round(pack.price * float);
 }
 
-/** 快速出售价：按浮动下限算，所以心理价位一定够，必定成交；只用公开信息，不泄露心理价位 */
+/** 这类顾客的 float 最低是多少（1 + premium 下限）：快速出售按这个算，必定成交 */
+export const floorFloat = (type: CustomerType) => 1 + CUSTOMER[type].premium[0];
+
+/** 快速出售价：按这类顾客最低肯出的价算（不低于市场价），心理价位一定够，必定成交；只用公开信息 */
 export function quickPrice(type: CustomerType, card: SellableCard): number {
-  if (type === 'middleman') return mindPrice(type, 1, card);
-  return mindPrice(type, COUNTER.floatMin, card);
+  return mindPrice(type, floorFloat(type), card);
 }
-export const quickPricePack = (type: CustomerType, pack: SellablePack) => mindPricePack(type, COUNTER.floatMin, pack);
+export const quickPricePack = (type: CustomerType, pack: SellablePack) => mindPricePack(type, floorFloat(type), pack);
 
 /**
  * 生成一位顾客（FR-CTR-3）。需求有 demandHitPpm 的概率从玩家当时的库存里出（说成"标签 + 稀有度"、或点名某张卡、或某种卡包，
@@ -113,13 +119,13 @@ export function rollCustomer(rng: Rng, input: {
     const pickSeries = rng.int(2) === 0;
     const s = own ? input.series.find((x) => x.id === own.seriesId) ?? null : input.series[rng.int(input.series.length)] ?? null;
     demand = pickSeries && s ? { kind: 'pack', seriesId: s.id, seriesName: s.name } : { kind: 'pack', seriesId: null, seriesName: null };
-    refPrice = (s?.price ?? input.series[0]?.price ?? 300) * CUSTOMER[type].priceCoef;
+    refPrice = s?.price ?? input.series[0]?.price ?? 300;
   } else if (wants.template) {
     const pool = input.inventory.filter((c) => wants.rarities.includes(c.rarity));
     const own = hit && pool.length ? pool[rng.int(pool.length)]! : null;
     const tpl = own ? input.templates.find((x) => x.id === own.templateId)! : input.templates[rng.int(input.templates.length)]!;
     demand = { kind: 'card', rarities: [tpl.rarity], tag: null, templateId: tpl.id, templateName: tpl.name };
-    refPrice = (own?.price ?? input.typicalPrice([tpl.rarity])) * CUSTOMER[type].priceCoef;
+    refPrice = own?.price ?? input.typicalPrice([tpl.rarity]);
   } else {
     const pool = input.inventory.filter((c) => wants.rarities.includes(c.rarity));
     const own = type !== 'middleman' && hit && pool.length ? pool[rng.int(pool.length)]! : null;
@@ -130,16 +136,19 @@ export function rollCustomer(rng: Rng, input: {
     }
     demand = { kind: 'card', rarities: wants.rarities, tag, templateId: null, templateName: null };
     const ref = own?.price ?? input.typicalPrice(wants.rarities);
-    refPrice = type === 'middleman' ? ref * CUSTOMER.middleman.priceCoef : ref * CUSTOMER[type].priceCoef;
+    refPrice = ref;
   }
 
   const fx = input.showcase ?? { priceMult: 1, patienceBonus: 0 };
-  // 珍藏柜加成直接乘进个人浮动（隐藏），心理价位跟着涨；快速出售价仍按浮动下限算，不吃加成
-  const float = between(rng, COUNTER.floatMin, COUNTER.floatMax) * fx.priceMult;
-  refPrice *= fx.priceMult;
-  // 预算区间用参考价算、再取整，和心理价位不是同一个数
+  const [lo, hi] = CUSTOMER[type].premium;
+  // 珍藏柜加成直接乘进个人浮动（隐藏），心理价位跟着涨；快速出售价仍按 premium 下限算，不吃加成
+  const float = (1 + between(rng, lo, hi)) * fx.priceMult;
+  // 预算区间：参考价 × 这类顾客肯出的范围（中间人按基准价比例），取整；不读 float
   const round = (n: number) => Math.max(5, Math.round(n / 5) * 5);
-  return { type, demand, float, patience: CUSTOMER[type].patience + fx.patienceBonus, budgetLow: round(refPrice * 0.7), budgetHigh: round(refPrice * 1.1) };
+  const budget = type === 'middleman'
+    ? [refPrice * MIDDLEMAN.basePct / 0.85 * 0.8, refPrice * MIDDLEMAN.basePct / 0.85 * 1.2]
+    : [refPrice * (1 + lo), refPrice * (1 + hi) * fx.priceMult];
+  return { type, demand, float, patience: CUSTOMER[type].patience + fx.patienceBonus, budgetLow: round(budget[0]!), budgetHigh: round(budget[1]!) };
 }
 
 export type OfferOutcome =

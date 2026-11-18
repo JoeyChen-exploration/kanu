@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { COUNTER, CUSTOMER, MVP_TYPES_CHECK, PACKS, PLAYER, REPUTATION } from './counter-helpers.ts';
 import type { CounterBinderPageResponse, CounterResponse, EligibleCardsResponse, OfferResponse } from '@kanu/shared/types';
-import { evaluateOffer, mindPrice, mindPricePack, quickPrice, rollCustomer, rollCustomerCount, type SellableCard } from '../src/game/customers.ts';
+import { evaluateOffer, floorFloat, mindPrice, mindPricePack, quickPrice, rollCustomer, rollCustomerCount, type SellableCard } from '../src/game/customers.ts';
+import { CUSTOMER_TYPES } from '@kanu/shared/balance';
 import { seeded, type Rng } from '../src/game/rng.ts';
 import { dayKey } from '../src/db/index.ts';
 import { HIDDEN_KEYS, NOW, findKeys, idem, login, setup } from './helpers.ts';
@@ -22,7 +23,8 @@ function seedSale(repo: Repo, opts: { type?: string; float?: number; template?: 
   const customerId = repo.insertCustomer({
     owner_id: UID, day_key: dayKey(1), slot: 0, seat: opts.seat ?? 99, type,
     demand: JSON.stringify(opts.demand ?? { kind: 'card', rarities: ['SR', 'SSR', 'UR', 'LR', 'MR'], tag: null, templateId: null, templateName: null }),
-    float: opts.float ?? 1, patience: CUSTOMER[type as 'rich'].patience, line: '你好', budget_low: 1, budget_high: 2, created_at: NOW,
+    // float 最低是 1 + 这类顾客 premium 下限（2026-11-18：心理价位不低于市场价）
+    float: opts.float ?? 1 + CUSTOMER[type as 'rich'].premium[0], patience: CUSTOMER[type as 'rich'].patience, line: '你好', budget_low: 1, budget_high: 2, created_at: NOW,
   });
   // 让"今天一共几位"足够大，测试里卖完不会马上打烊
   repo.setDayCustomerCount(UID, 50);
@@ -148,8 +150,8 @@ describe('出价（FR-CTR-4）', () => {
     cleanup = () => app.close();
     const h = await login(app);
     const { cardId, customerId } = seedSale(repo);
-    const mind = mindPrice('rich', 1, sellable(repo, cardId));
-    const first = (await offer(app, h, customerId, { instanceId: cardId, price: Math.floor(mind * 1.1) })).json() as OfferResponse;
+    const mind = mindPrice('rich', floorFloat('rich'), sellable(repo, cardId));
+    const first =(await offer(app, h, customerId, { instanceId: cardId, price: Math.floor(mind * 1.1) })).json() as OfferResponse;
     expect(first.outcome).toBe('counter');
     expect(first.next).toBeNull();
     expect(first.customer.patience).toBe(CUSTOMER.rich.patience - 1);
@@ -168,11 +170,22 @@ describe('出价（FR-CTR-4）', () => {
     expect(repo.ownedInstance(UID, cardId)).not.toBeNull();
   });
 
-  it('快速出售按浮动下限算，必定成交', async () => {
+  it('开价不超过市场价，除了黑市中间人谁都接受（2026-11-18 用户定）', () => {
+    const card = { id: 1, templateId: 'NEO-17', rarity: 'SSR' as const, tags: [], style: 'standard', price: 1870 };
+    for (const t of CUSTOMER_TYPES) {
+      if (t === 'middleman' || CUSTOMER[t].wants.kind !== 'card') continue;
+      expect(CUSTOMER[t].premium[0]).toBeGreaterThanOrEqual(0);
+      // 最吝啬的那一位（float 取下限）也肯出市场价
+      expect(mindPrice(t, floorFloat(t), card)).toBeGreaterThanOrEqual(card.price);
+      expect(evaluateOffer(seeded(1), { price: card.price, mind: mindPrice(t, floorFloat(t), card), patience: 3 }).kind).toBe('deal');
+    }
+  });
+
+  it('快速出售按这类顾客最低肯出的价算，必定成交', async () => {
     const { app, repo } = setup();
     cleanup = () => app.close();
     const h = await login(app);
-    const { cardId, customerId } = seedSale(repo, { float: 0.85 });
+    const { cardId, customerId } = seedSale(repo, { float: floorFloat('rich') });
     const cards = (await app.inject({ method: 'GET', url: `/api/counter/${customerId}/cards`, headers: h })).json() as EligibleCardsResponse;
     const q = cards.cards.find((c) => c.card.id === cardId)!.quickPrice;
     expect(q).toBe(quickPrice('rich', sellable(repo, cardId)));
@@ -244,7 +257,7 @@ describe('出价（FR-CTR-4）', () => {
     const mind = mindPricePack('streamer', 1, { id: packId, seriesId: 'ELT', price: PACKS.premium.price });
     const res = (await offer(app, h, customerId, { packId, price: mind })).json() as OfferResponse;
     expect(res.outcome).toBe('deal');
-    expect(res.price).toBe(Math.round(PACKS.premium.price * CUSTOMER.streamer.priceCoef));
+    expect(res.price).toBe(PACKS.premium.price);
     expect(repo.getSealed(UID, packId)).toBeNull();
   });
 

@@ -2,7 +2,7 @@
 // 不知道下一位是谁、今天还剩几位。挑卡（或卡包）→ 开价 / 接受还价 / 快速出售 / 请走。都接待完就能打烊。
 import { useEffect, useRef, useState } from 'react';
 import { COUNTER, CUSTOMER, STORE, type CustomerType } from '@kanu/shared/balance';
-import type { CardAppraisalResponse, CardView, InspectionView, CounterBinderPageResponse, CounterResponse, CustomerView, EligibleCardsResponse, EndDayResponse, MeResponse, OfferResponse } from '@kanu/shared/types';
+import type { CardAppraisalResponse, CardView, InspectionView, CounterBinderPageResponse, CounterResponse, CustomerView, EligibleCardsResponse, EndDayResponse, MeResponse, OfferResponse, ReceiveResponse } from '@kanu/shared/types';
 import { api, newIdempotencyKey } from '../api.ts';
 import { Card, fmt } from '../Card.tsx';
 import { DragGhost, FloatWindow, useDrag } from '../drag.tsx';
@@ -12,9 +12,9 @@ import { PHONE_ZONE, dropOnPhone } from '../Phone.tsx';
 
 export const AVATAR: Record<string, string> = {
   resident: '🧑‍🔧', student: '🧒', tourist: '🧳', collector: '🧐', nostalgic: '👴',
-  rich: '🤵', speculator: '📈', streamer: '🎥', middleman: '🕶️', grand: '🎩',
+  rich: '🤵', speculator: '📈', streamer: '🎥', middleman: '🕶️', grand: '🎩', courier: '📦',
 };
-const STATUS: Record<string, string> = { sold: '成交', left: '走了', dismissed: '请走' };
+const STATUS: Record<string, string> = { sold: '成交', left: '走了', dismissed: '请走', received: '收货' };
 /** 开价时每次加减多少，玩家自己选 */
 const STEPS = [1, 10, 100, 1000];
 
@@ -66,7 +66,10 @@ export function Counter({ onChange }: { onChange: (patch: Partial<MeResponse>) =
       <h2>柜台 · 第 {data.day} 天 <small>已接待 {data.served.length} 位</small></h2>
       {msg && <p className="deal-msg">{msg}</p>}
 
-      {data.current && (
+      {data.current?.type === 'courier' && (
+        <Delivery key={data.current.id} customer={data.current} onChange={onChange} onDone={afterResult} />
+      )}
+      {data.current && data.current.type !== 'courier' && (
         <Deal key={data.current.id} customer={data.current} onChange={onChange} onDone={afterResult} onUpdate={(c) => setData({ ...data, current: c })}
           openBinders={openBinders} setOpenBinders={setOpenBinders} table={table} setTable={setTable} guide={guide} setGuide={setGuide} />
       )}
@@ -93,6 +96,62 @@ export function Counter({ onChange }: { onChange: (patch: Partial<MeResponse>) =
       {err && <p className="error">{err}</p>}
       {guide && <FakeGuide onClose={() => setGuide(false)} />}
     </section>
+  );
+}
+
+/**
+ * 送货员（2026-11-18 用户定）：电话批发的货送到柜台，整盒摆在台面客人那一侧，货到付款。
+ * 收货付款 → 10 包进"我的卡包"；拒收 → 订单取消、不扣钱。占当天一个客人名额。
+ */
+function Delivery({ customer, onChange, onDone }: { customer: CustomerView; onChange: (p: Partial<MeResponse>) => void; onDone: (text: string) => void }) {
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState('');
+  const d = customer.demand.delivery;
+  const receive = async () => {
+    setBusy(true); setNote('');
+    try {
+      const r = await api<ReceiveResponse>(`/counter/${customer.id}/receive`, { method: 'POST', body: {}, idempotencyKey: newIdempotencyKey() });
+      onChange({ credits: r.credits });
+      onDone(`收下「${d?.seriesName}」一盒 ${r.packIds.length} 包，付了 ${fmt(r.cost)} 信用点。去进货页的"我的卡包"拆`);
+    } catch (e) { setNote((e as Error).message); } finally { setBusy(false); }
+  };
+  const refuse = async () => {
+    setBusy(true);
+    try {
+      await api(`/counter/${customer.id}/dismiss`, { method: 'POST', body: {} });
+      onDone('拒收了，送货员把货拉回去了（不扣钱）');
+    } catch (e) { setNote((e as Error).message); } finally { setBusy(false); }
+  };
+  return (
+    <div className="visitor delivery">
+      <div className="deal-main">
+        <div className="visitor-head">
+          <span className="visitor-avatar" aria-hidden>{AVATAR.courier}</span>
+          <div>
+            <b>{customer.typeName}</b>
+            <p className="bubble">{customer.line}</p>
+            <p className="hint">电话批发的货，货到付款。批发商不保证正品，拆出来的卡带"批"字。</p>
+          </div>
+        </div>
+        <div className="counter-top">
+          <div className="counter-side customer-side delivery-side">
+            {d && (
+              <div className="delivery-box">
+                <div className="box-art" aria-hidden><span>{d.seriesName.slice(0, 2)}</span><small>× {d.packs}</small></div>
+                <div>
+                  <b>「{d.seriesName}」一盒 {d.packs} 包</b>
+                  <p className="hint">货款 <b className="price-strong">{fmt(d.price)}</b> 信用点</p>
+                </div>
+              </div>
+            )}
+          </div>
+          <div className="counter-side my-side"><p className="counter-empty">收下后整盒进"我的卡包"</p></div>
+        </div>
+        <button className="primary" disabled={busy || !d} onClick={receive}>收货付款 {d ? fmt(d.price) : ''}</button>
+        <button className="secondary" disabled={busy} onClick={refuse}>拒收（不扣钱，订单取消）</button>
+        {note && <p className="deal-msg">{note}</p>}
+      </div>
+    </div>
   );
 }
 

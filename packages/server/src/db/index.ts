@@ -192,6 +192,19 @@ const MIGRATIONS: string[] = [
   // 14：电话批发（2026-11-18）。acquired 是卡从哪来的（公开）：store 电脑订货、wholesale 电话批发。
   // 玩家知道哪些卡来路不保证，好拿放大镜看
   `ALTER TABLE card_instances ADD COLUMN acquired TEXT NOT NULL DEFAULT 'store';`,
+
+  // 15：批发订单（2026-11-18 用户定：货由送货员送到柜台，货到付款）。status：pending 等送货、delivered 收了、refused 拒收
+  `CREATE TABLE wholesale_orders (
+     id          INTEGER PRIMARY KEY AUTOINCREMENT,
+     owner_id    TEXT NOT NULL REFERENCES players(discord_id),
+     series_id   TEXT NOT NULL,
+     packs       INTEGER NOT NULL,
+     price       INTEGER NOT NULL,
+     ordered_day INTEGER NOT NULL,
+     status      TEXT NOT NULL DEFAULT 'pending',
+     created_at  INTEGER NOT NULL
+   );
+   CREATE INDEX wholesale_orders_owner ON wholesale_orders (owner_id, status);`,
 ];
 
 /** 营业日在 customers、daily_usage 里的键 */
@@ -410,9 +423,18 @@ function createRepo(db: Database.Database) {
       return id;
     },
     setPhone: (discordId: string) => db.prepare('UPDATE players SET phone = 1 WHERE discord_id = ?').run(discordId),
-    /** 这个营业日已经批发过几次（从流水里数） */
+    /** 这个营业日已经打电话订过几次批发（不管后来收没收） */
     wholesaleToday: (discordId: string, gameDay: number) =>
-      (db.prepare("SELECT COUNT(*) AS n FROM events_log WHERE discord_id = ? AND kind = 'wholesale' AND json_extract(data, '$.day') = ?").get(discordId, gameDay) as { n: number }).n,
+      (db.prepare('SELECT COUNT(*) AS n FROM wholesale_orders WHERE owner_id = ? AND ordered_day = ?').get(discordId, gameDay) as { n: number }).n,
+    insertOrder: (o: { ownerId: string; seriesId: string; packs: number; price: number; day: number; now: number }) =>
+      Number(db.prepare('INSERT INTO wholesale_orders (owner_id, series_id, packs, price, ordered_day, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(o.ownerId, o.seriesId, o.packs, o.price, o.day, o.now).lastInsertRowid),
+    /** 最早一张还没送到的订单 */
+    pendingOrder: (ownerId: string) =>
+      (db.prepare("SELECT o.*, s.name AS series_name FROM wholesale_orders o JOIN series s ON s.id = o.series_id WHERE o.owner_id = ? AND o.status = 'pending' ORDER BY o.id LIMIT 1").get(ownerId) as
+        { id: number; owner_id: string; series_id: string; series_name: string; packs: number; price: number; ordered_day: number; status: string } | undefined) ?? null,
+    getOrder: (ownerId: string, id: number) =>
+      (db.prepare('SELECT * FROM wholesale_orders WHERE owner_id = ? AND id = ?').get(ownerId, id) as { id: number; series_id: string; packs: number; price: number; status: string } | undefined) ?? null,
+    setOrderStatus: (id: number, status: 'delivered' | 'refused') => db.prepare('UPDATE wholesale_orders SET status = ? WHERE id = ?').run(status, id),
     /** 新的整盒编号 */
     nextBoxId: () => ((db.prepare('SELECT MAX(box_id) AS m FROM sealed_packs').get() as { m: number | null }).m ?? 0) + 1,
     markCollected(ownerId: string, templateId: string, style: string, now: number) {

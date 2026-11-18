@@ -187,8 +187,8 @@ kanu/
 | --- | --- | --- |
 | FR-APPR-1 | 鉴定（DESIGN 5，2026-11-17 用户重定）只有两样：放大镜（柜台道具）和送评（电话里的星港评级社），没有鉴定机构。放大镜查验每张卡**最多一次**，结论存库，之后一直显示同一个结论（防止反复查验刷出真相） | MVP |
 | FR-APPR-2 | 放大镜（`POST /api/cards/:id/inspect`，免费）：一次给出"看起来真不真"（高仿有 40% 概率漏看，漏看说"看起来是真的"）、品相相邻两档、是否认出错版（APPRAISAL.errataDetect）；结论只给主人看、不改卡价。前端：柜台上的 🔍 拖到台面上的卡或卡册浮窗里的卡 | MVP |
-| FR-APPR-3 | 电话（PHONE.price，`GET /api/phone`、`POST /api/phone/buy` 幂等）：买了才能送评；里面还有批发商（FR-PACK 电话批发，下一步开通）。前端：侧栏 📞 打开浮窗，卡从各页面拖到电话的评级社上 | MVP |
-| FR-PACK-8 | 电话批发（DESIGN 4，WHOLESALE）：`POST /api/phone/wholesale { seriesId }`（要电话、幂等、每个营业日 perDay 次）买一盒 boxPacks 包，每包电脑订货价 × discount，进库存为没拆的卡包（source = phone，同盒一个 box_id）；拆的时候每张按 fakePpm 出假卡，卡上记公开的 acquired = wholesale，图鉴不点亮；`GET /api/phone` 返回报价和今天还能订几盒 | MVP |
+| FR-APPR-3 | 电话（PHONE.price，`GET /api/phone`、`POST /api/phone/buy` 幂等）：买了才能送评；里面还有批发商（FR-PACK-8）。前端：侧栏 📞 打开浮窗，卡从各页面拖到电话的评级社上 | MVP |
+| FR-PACK-8 | 电话批发（DESIGN 4，WHOLESALE）：`POST /api/phone/wholesale { seriesId }`（要电话、幂等、每个营业日 perDay 次）下单（wholesale_orders，不扣钱，上一盒没送到不能再订）；deliveryDays 天后送货员（courier）作为当天第一位顾客来柜台、占一个名额，`POST /api/counter/:id/receive`（幂等）货到付款一盒 boxPacks 包、每包电脑订货价 × discount，进库存为没拆的卡包（source = phone，同盒一个 box_id），请走送货员 = 拒收（订单 refused、不扣钱）；拆的时候每张按 fakePpm 出假卡，卡上记公开的 acquired = wholesale，图鉴不点亮；`GET /api/phone` 返回报价和今天还能订几盒 | MVP |
 | FR-APPR-8 | 放大镜镜片和假卡识别手册（前端，2026-11-18）：拖着放大镜时镜片显示被看那张卡的放大卡面；停 0.3 秒触发查验；细节只按查验结论（looks / gradeRange / errataFound）和卡编号算位置，不读任何隐藏属性；细节贴图集中在 style.css"放大镜细节：美术接入点"。手册是柜台上的道具浮窗，用同一套贴图拼示例 | MVP |
 | FR-APPR-6 | 错版卡（ERRATA）：开包时按概率抽（隐藏属性 misprint，不出服务器）；放大镜能认出；送评封壳时公开认定（slab.errata），公开价再 × ERRATA.mult；没封壳的不读 | MVP |
 | FR-APPR-7 | 图鉴点亮只看公开信息：电脑订货保证正品，拆出来就点亮；来路不明的卡（电话批发、卡贩）送评封壳后才点亮，不能按隐藏的真伪决定 | MVP |

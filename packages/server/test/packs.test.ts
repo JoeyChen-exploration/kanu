@@ -56,7 +56,7 @@ describe('电脑订货（DESIGN 4）', () => {
     const last = repo.db.prepare("SELECT data FROM events_log WHERE kind = 'credits' ORDER BY id DESC LIMIT 1").get() as { data: string };
     expect(JSON.parse(last.data)).toMatchObject({ delta: -600, why: 'store', bal: r.credits });
     const sealed = (await app.inject({ method: 'GET', url: '/api/packs', headers: h })).json() as SealedPacksResponse;
-    expect(sealed.groups).toEqual([{ seriesId: 'MEC', name: '机械义体', kind: 'themed', ids: r.packIds }]);
+    expect(sealed.groups).toEqual([{ seriesId: 'MEC', name: '机械义体', kind: 'themed', ids: r.packIds, wholesale: false }]);
     expect((repo.db.prepare('SELECT COUNT(*) AS n FROM card_instances').get() as { n: number }).n).toBe(0);
   });
 
@@ -195,7 +195,7 @@ describe('拆包（FR-PACK-1～6）', () => {
   });
 
   it('开出 UR 以上或编号限定时播报（FR-PACK-6）', () => {
-    const base = { id: 1, templateId: 'NEO-19', name: '霓虹龙·影', seriesId: 'NEO', seriesName: '霓虹街头', tags: [], flavor: null, location: 'inventory' as const, binderId: null, looseSinceDay: null, price: 0, createdAt: 0, verified: false, slab: null, gradeRejected: false, readyDay: null };
+    const base = { id: 1, templateId: 'NEO-19', name: '霓虹龙·影', seriesId: 'NEO', seriesName: '霓虹街头', tags: [], flavor: null, location: 'inventory' as const, binderId: null, looseSinceDay: null, price: 0, createdAt: 0, slab: null, gradeRejected: false, readyDay: null, acquired: 'store' as const };
     expect(announcementFor('阿奴', { ...base, rarity: 'UR', style: 'standard', serialNo: null })).toContain('UR「霓虹龙·影」');
     expect(announcementFor('阿奴', { ...base, rarity: 'SSR', style: 'serial', serialNo: 7 })).toContain('07/50');
     expect(announcementFor('阿奴', { ...base, rarity: 'SR', style: 'gold', serialNo: null })).toBeNull();

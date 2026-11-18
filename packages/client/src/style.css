@@ -319,6 +319,15 @@ h2 small { color: var(--muted); font-weight: normal; font-size: 13px; margin-lef
 .card:not(.small).slabbed { padding-top: 22px; }
 .rejected-mark { position: absolute; z-index: 3; right: 3px; bottom: 3px; padding: 0 4px; border-radius: 4px; background: #7f1d1d; color: #fecaca; font-size: 9px; font-weight: 700; }
 
+/* 电话批发来的卡 / 卡包（公开：批发商不保证正品） */
+.wholesale-mark { position: absolute; z-index: 3; left: 3px; bottom: 3px; width: 15px; height: 15px; border-radius: 4px; background: #9a3412; color: #ffedd5; font-size: 9px; font-weight: 800; display: grid; place-items: center; }
+.wholesale-tag { margin-left: 6px; padding: 0 6px; border-radius: 4px; background: #9a3412; color: #ffedd5; font-size: 11px; font-weight: 700; vertical-align: middle; }
+.sealed.wholesale { border-color: #9a341288; }
+.wholesale-offers { display: grid; gap: 6px; }
+.wholesale-offer { display: flex; align-items: center; gap: 8px; }
+.wholesale-offer .pack-art { width: 34px; font-size: 11px; }
+.wholesale-offer-body { flex: 1; min-width: 0; display: flex; flex-direction: column; font-size: 12px; }
+.wholesale-offer-body s { color: var(--muted); }
 .slab-errata { margin-left: 4px; padding: 0 3px; border-radius: 2px; background: #f5c542; color: #111; font-weight: 800; letter-spacing: 0; }
 
 /* 柜台上的放大镜道具：按住拖到卡上查验（学深空当铺） */

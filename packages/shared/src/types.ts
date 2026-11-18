@@ -69,6 +69,8 @@ export interface CardView {
   gradeRejected: boolean;
   /** 送评中时，第几个营业日出结果 */
   readyDay: number | null;
+  /** 从哪来的（公开）：store 电脑订货（保证正品）、wholesale 电话批发（不保证，可能混着假卡） */
+  acquired: 'store' | 'wholesale';
 }
 
 // ---------- 鉴定（M3，DESIGN 5，2026-11-17 用户重定） ----------
@@ -108,13 +110,27 @@ export interface AppraisalOutcome {
   errata: boolean;
 }
 
-/** GET /api/phone：电话（买了没有、价格、在评级社的卡） */
+/** GET /api/phone：电话（买了没有、价格、在评级社的卡、批发商今天能不能订） */
 export interface PhoneResponse {
   ok: true;
   owned: boolean;
   price: number;
   day: number;
   grading: CardView[];
+  wholesale: {
+    /** 今天还能订几盒 */
+    leftToday: number;
+    /** 每种卡包一盒多少钱（一盒 boxPacks 包） */
+    offers: Array<{ seriesId: string; name: string; kind: string; packs: number; boxPrice: number; normalPrice: number }>;
+  };
+}
+
+/** POST /api/phone/wholesale { seriesId }：订一盒，马上到货（没拆的卡包） */
+export interface WholesaleResponse {
+  ok: true;
+  credits: number;
+  cost: number;
+  packIds: number[];
 }
 
 /** POST /api/phone/buy */
@@ -175,6 +191,8 @@ export interface SealedPackGroup {
   kind: string;
   /** 这一种还没拆的卡包 id */
   ids: number[];
+  /** 电话批发来的（批发商不保证正品） */
+  wholesale: boolean;
 }
 
 export interface SealedPacksResponse {

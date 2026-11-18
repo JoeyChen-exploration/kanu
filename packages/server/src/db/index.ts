@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import Database from 'better-sqlite3';
-import { PLAYER, RARITY, type QuestMetric, type Rarity, type Style } from '@kanu/shared/balance';
+import { PLAYER, RARITY, type Grade, type QuestMetric, type Rarity, type Style } from '@kanu/shared/balance';
 import type { CardLocation, CardView, SessionUser } from '@kanu/shared/types';
 import { publicPrice } from '../game/price.ts';
 
@@ -165,6 +165,29 @@ const MIGRATIONS: string[] = [
      claimed_at INTEGER NOT NULL,
      PRIMARY KEY (discord_id, quest_id)
    );`,
+
+  // 12：鉴定（M3，DESIGN 5）。卡上的公开结果：verified 已验真、slab_score / slab_subgrades 封壳评分、
+  // grade_rejected 评级社拒评标记；ready_day 是送去鉴定机构 / 评级社的卡哪个营业日出结果（location = lab / grading）。
+  // appraisals 存每张卡每种方式的结论（只给这张卡的主人看），每种方式最多一次（FR-APPR-1）
+  `ALTER TABLE card_instances ADD COLUMN verified INTEGER NOT NULL DEFAULT 0;
+   ALTER TABLE card_instances ADD COLUMN slab_score TEXT;
+   ALTER TABLE card_instances ADD COLUMN slab_subgrades TEXT;
+   ALTER TABLE card_instances ADD COLUMN grade_rejected INTEGER NOT NULL DEFAULT 0;
+   ALTER TABLE card_instances ADD COLUMN ready_day INTEGER;
+   CREATE TABLE appraisals (
+     card_id    INTEGER NOT NULL,
+     method     TEXT NOT NULL,
+     result     TEXT NOT NULL,
+     created_at INTEGER NOT NULL,
+     PRIMARY KEY (card_id, method)
+   );`,
+
+  // 13：鉴定重定（2026-11-17 用户定）：没有鉴定机构了（verified 列留着不用）；放大镜查验存在 appraisals（method = inspect）；
+  // 错版卡（misprint 隐藏，slab_errata 是封壳时公开认定的错版）；电话要买（players.phone）
+  `ALTER TABLE card_instances ADD COLUMN misprint INTEGER NOT NULL DEFAULT 0;
+   ALTER TABLE card_instances ADD COLUMN slab_errata INTEGER NOT NULL DEFAULT 0;
+   ALTER TABLE players ADD COLUMN phone INTEGER NOT NULL DEFAULT 0;
+   UPDATE card_instances SET location = 'inventory', ready_day = NULL WHERE location = 'lab';`,
 ];
 
 /** 营业日在 customers、daily_usage 里的键 */
@@ -201,6 +224,8 @@ export interface PlayerRow {
   game_day: number;
   day_customer_count: number;
   showcase_level: number;
+  /** 买了电话没有（1 = 有） */
+  phone: number;
   created_at: number;
 }
 
@@ -228,6 +253,13 @@ export interface InstanceRow {
   binder_id: number | null;
   loose_since_day: number | null;
   created_at: number;
+  slab_score: string | null;
+  slab_subgrades: string | null;
+  slab_errata: number;
+  grade_rejected: number;
+  ready_day: number | null;
+  /** 错版（隐藏） */
+  misprint: number;
 }
 
 export interface SeriesContent {
@@ -304,6 +336,7 @@ function createRepo(db: Database.Database) {
     pruneIdem: db.prepare('DELETE FROM idempotency WHERE created_at < ?'),
 
     cardsWithTemplate: `SELECT i.id, i.template_id, i.style, i.serial_no, i.location, i.binder_id, i.loose_since_day, i.created_at,
+                               i.slab_score, i.slab_subgrades, i.slab_errata, i.grade_rejected, i.ready_day,
                                t.name, t.rarity, t.tags, t.flavor, t.series_id, s.name AS series_name
                         FROM card_instances i JOIN card_templates t ON t.id = i.template_id JOIN series s ON s.id = t.series_id`,
   };
@@ -360,15 +393,48 @@ function createRepo(db: Database.Database) {
       return next;
     },
 
-    insertCard(c: { templateId: string; ownerId: string; authenticity: string; grade: string; origin: string; style: Style; serialNo: number | null; now: number }): number {
+    /**
+     * 新卡入库。collect：要不要马上点亮图鉴——只能按公开信息决定（M3 修）：电脑订货保证正品，拆出来就点亮；
+     * 以后电话批发、卡贩这些来路不明的卡传 false，等鉴定机构验真（或封壳）后再点亮。不能按隐藏的真伪决定，否则图鉴会泄露真伪
+     */
+    insertCard(c: { templateId: string; ownerId: string; authenticity: string; grade: string; origin: string; style: Style; serialNo: number | null; now: number; collect?: boolean; misprint?: boolean }): number {
       const r = q.insertInstance.run(c.templateId, c.ownerId, c.authenticity, c.grade, c.origin, c.style, c.serialNo, c.now);
-      // 图鉴只认真卡（DESIGN 3.6）。黑市包上线后，假卡和来路不明的卡要等验真后再点亮，否则图鉴会泄露真伪
-      if (c.authenticity === 'real') {
-        q.markCollected.run(c.ownerId, c.templateId, c.now);
-        q.markStyleCollected.run(c.ownerId, c.templateId, c.style, c.now);
-      }
-      return Number(r.lastInsertRowid);
+      const id = Number(r.lastInsertRowid);
+      if (c.misprint) db.prepare('UPDATE card_instances SET misprint = 1 WHERE id = ?').run(id);
+      if (c.collect ?? true) repo.markCollected(c.ownerId, c.templateId, c.style, c.now);
+      return id;
     },
+    setPhone: (discordId: string) => db.prepare('UPDATE players SET phone = 1 WHERE discord_id = ?').run(discordId),
+    markCollected(ownerId: string, templateId: string, style: string, now: number) {
+      q.markCollected.run(ownerId, templateId, now);
+      q.markStyleCollected.run(ownerId, templateId, style, now);
+    },
+
+    // ---- 鉴定（M3，DESIGN 5） ----
+    /** 这张卡做过的鉴定：方式 → 结论（JSON） */
+    appraisalsOf: (cardId: number) =>
+      new Map((db.prepare('SELECT method, result FROM appraisals WHERE card_id = ?').all(cardId) as Array<{ method: string; result: string }>).map((r) => [r.method, JSON.parse(r.result) as unknown])),
+    /** 记一次鉴定；同一张卡同一种方式只能有一次（主键），已经有了返回 false */
+    putAppraisal: (cardId: number, method: string, result: unknown, now: number) =>
+      db.prepare('INSERT INTO appraisals (card_id, method, result, created_at) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING').run(cardId, method, JSON.stringify(result), now).changes > 0,
+    setAppraisal: (cardId: number, method: string, result: unknown) =>
+      db.prepare('UPDATE appraisals SET result = ? WHERE card_id = ? AND method = ?').run(JSON.stringify(result), cardId, method),
+    /** 送评：拿出卡册、桌面、珍藏柜，记下哪天出结果 */
+    sendToGrading: (cardId: number, readyDay: number) =>
+      db.prepare("UPDATE card_instances SET location = 'grading', ready_day = ?, binder_id = NULL, loose_since_day = NULL WHERE id = ?").run(readyDay, cardId),
+    /** 到期该出结果的卡（含隐藏属性，只在服务器内部用） */
+    dueGrading: (ownerId: string, day: number) =>
+      db.prepare("SELECT * FROM card_instances WHERE owner_id = ? AND location = 'grading' AND ready_day <= ? ORDER BY id").all(ownerId, day) as InstanceRow[],
+    gradingCards(ownerId: string): CardView[] {
+      const rows = db.prepare(`${q.cardsWithTemplate} WHERE i.owner_id = ? AND i.location = 'grading' ORDER BY i.id`).all(ownerId) as CardViewRow[];
+      return rows.map(toCardView);
+    },
+    /** 评级社出结果后回到库存（调用方再放进卡册或桌面）：封壳（评分、分项、错版公开）或拒评标记 */
+    backFromGrading: (cardId: number, fields: { slab?: { score: string; subgrades: unknown; errata: boolean }; rejected?: boolean }) =>
+      db.prepare(`UPDATE card_instances SET location = 'inventory', ready_day = NULL,
+                    slab_score = COALESCE(?, slab_score), slab_subgrades = COALESCE(?, slab_subgrades), slab_errata = MAX(slab_errata, ?),
+                    grade_rejected = MAX(grade_rejected, ?) WHERE id = ?`)
+        .run(fields.slab?.score ?? null, fields.slab ? JSON.stringify(fields.slab.subgrades) : null, fields.slab?.errata ? 1 : 0, fields.rejected ? 1 : 0, cardId),
 
     // ---- 没拆的卡包（DESIGN 4） ----
     insertSealed: (ownerId: string, seriesId: string, source: string, now: number, boxId: number | null = null) =>
@@ -519,6 +585,11 @@ interface CardViewRow {
   binder_id: number | null;
   loose_since_day: number | null;
   created_at: number;
+  slab_score: string | null;
+  slab_subgrades: string | null;
+  slab_errata: number;
+  grade_rejected: number;
+  ready_day: number | null;
   name: string;
   rarity: Rarity;
   tags: string;
@@ -543,8 +614,12 @@ function toCardView(r: CardViewRow): CardView {
     location: r.location,
     binderId: r.binder_id,
     looseSinceDay: r.location === 'inventory' && r.binder_id === null ? r.loose_since_day : null,
-    price: publicPrice({ rarity: r.rarity, style: r.style, publicGrade: null }),
+    // 只有封壳后公开的评分参与定价（FR-APPR-5）
+    price: publicPrice({ rarity: r.rarity, style: r.style, publicGrade: r.slab_score ? (r.slab_score === 'BL' ? 'BL' : Number(r.slab_score) as Grade) : null, publicErrata: r.slab_errata === 1 }),
     createdAt: r.created_at,
+    slab: r.slab_score ? { score: r.slab_score, subgrades: JSON.parse(r.slab_subgrades ?? '{}') as Record<string, number>, errata: r.slab_errata === 1 } : null,
+    gradeRejected: r.grade_rejected === 1,
+    readyDay: r.ready_day,
   };
 }
 

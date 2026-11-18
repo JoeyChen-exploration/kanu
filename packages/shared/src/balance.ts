@@ -121,22 +121,30 @@ export const GRADE: Record<string, { ppm: number; mult: number }> = {
 export const UNGRADED_MULT = 0.85;
 
 // ---------- 鉴定费用和准确率（DESIGN 5.1、5.2） ----------
+/**
+ * 鉴定（2026-11-17 用户重定）：
+ * - 放大镜是柜台上的道具，拖到卡上查验（学深空当铺），免费，每张卡只能查一次：看真伪、估品相（相邻两档）、找错版。
+ * - 没有鉴定机构了。送评（星港评级社）在电话里，电话要花信用点买（PHONE）。
+ */
 export const APPRAISAL = {
-  /** 放大镜（看真伪或看品相各收一次）：fixed + 基准价 × pct */
-  loupe: { fixed: 15, pct: 0.05 },
-  /** 鉴定机构：max(min, 基准价 × 风格系数 × pct)，等 hours 小时 */
-  lab: { min: 10, pct: 0.1, hours: 24 },
-  /** 送评：max(min, 基准价 × 风格系数 × pct)，等 hours 小时 */
-  grading: { min: 20, pct: 0.15, hours: 24 },
-  /** 识破率（ppm）：肉眼看真伪 */
-  eyeDetect: { low_fake: 500_000, high_fake: 0 },
-  /** 识破率（ppm）：放大镜看真伪 */
+  /** 送评：max(min, 基准价 × 风格系数 × pct)；送去后过 days 个营业日（打烊时）出结果 */
+  grading: { min: 20, pct: 0.15, days: 1 },
+  /** 放大镜识破假卡的概率（ppm），漏看时说"看起来是真的" */
   loupeDetect: { low_fake: 950_000, high_fake: 600_000 },
+  /** 放大镜认出错版的概率（ppm） */
+  errataDetect: 800_000,
   /** 假卡送评被拒扣的信誉 */
   gradeRejectRepLoss: 5,
   /** 评级社查不查失窃登记表（DESIGN 5.2 待定项，先做成开关） */
   gradingChecksStolen: false,
 };
+
+/** 错版卡（2026-11-17 用户定）：开包时每张卡有 ppm 的概率是错版（印错字、印错色，隐藏属性）。
+ *  放大镜能认出来；送评封壳后标签写"错版"，公开价再 × mult。没封壳的照旧按普通卡定价，不泄露 */
+export const ERRATA = { ppm: 5_000, mult: 3 };
+
+/** 电话（2026-11-17 用户定）：花信用点买，买了才能打给星港评级社送评；批发商的号码下一步开通 */
+export const PHONE = { price: 2000 };
 
 // ---------- 柜台顾客（DESIGN 6，SRS 8.5） ----------
 export const CUSTOMER_TYPES = ['resident', 'student', 'tourist', 'collector', 'nostalgic', 'rich', 'speculator', 'streamer', 'middleman', 'grand', 'dealer', 'undercover'] as const;

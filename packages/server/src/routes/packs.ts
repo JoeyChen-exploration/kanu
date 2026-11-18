@@ -10,6 +10,7 @@ import type { BuyPacksResponse, CardView, OpenPackResponse, SealedPacksResponse,
 import { ApiError, fail, idempotencyKey, type Deps } from '../app.ts';
 import { dayKey } from '../db/index.ts';
 import { openPack } from '../game/cards.ts';
+import { rollErrata } from '../game/appraisal.ts';
 
 const escapeMd = (s: string) => s.replace(/[\\*_`~|>]/g, '\\$&');
 
@@ -149,7 +150,12 @@ export function registerPackRoutes(app: FastifyInstance, deps: Deps, now: () => 
           serialNo = repo.takeSerial(tpl.id, SERIAL_LIMIT);
           if (serialNo === null) style = 'standard';
         }
-        return repo.insertCard({ templateId: tpl.id, ownerId: userId, authenticity: c.authenticity, grade: String(c.grade), origin: c.origin, style, serialNo, now: t });
+        // 图鉴按公开的来源点亮：电脑订货的卡包保证正品，拆出来就点亮；其他来源（以后的电话批发）等送评封壳后点亮。
+        // 错版（隐藏）在这里另外抽，不动 openPack 的随机序列
+        return repo.insertCard({
+          templateId: tpl.id, ownerId: userId, authenticity: c.authenticity, grade: String(c.grade), origin: c.origin, style, serialNo, now: t,
+          collect: sealed.source === 'store', misprint: rollErrata(deps.rng),
+        });
       });
 
       deps.binders!.placeNew(userId, ids, player.game_day);

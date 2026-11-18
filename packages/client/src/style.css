@@ -303,6 +303,49 @@ h2 small { color: var(--muted); font-weight: normal; font-size: 13px; margin-lef
 .counter-sources { margin-top: 14px; }
 .picker-head { justify-content: space-between; }
 
+/* 鉴定的公开标记：封壳（卡外面套一层透明壳、顶上一条评分标签，错版加一个黄标）、拒评 */
+.card.slabbed { padding: 16px 5px 5px; background: linear-gradient(160deg, #d9dee8, #9aa3b5); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.6); }
+.slab-label { position: absolute; top: 2px; left: 4px; right: 4px; z-index: 3; height: 12px; border-radius: 3px; background: #b3202a; color: #fff; font-size: 8px; line-height: 12px; text-align: center; letter-spacing: 1px; }
+.slab-label b { font-size: 9px; }
+.slab-label.black { background: #111; color: #f5c542; }
+.card:not(.small) .slab-label { height: 16px; line-height: 16px; font-size: 11px; }
+.card:not(.small).slabbed { padding-top: 22px; }
+.rejected-mark { position: absolute; z-index: 3; right: 3px; bottom: 3px; padding: 0 4px; border-radius: 4px; background: #7f1d1d; color: #fecaca; font-size: 9px; font-weight: 700; }
+
+.slab-errata { margin-left: 4px; padding: 0 3px; border-radius: 2px; background: #f5c542; color: #111; font-weight: 800; letter-spacing: 0; }
+
+/* 柜台上的放大镜道具：按住拖到卡上查验（学深空当铺） */
+.counter-top { position: relative; }
+.loupe-tool {
+  position: absolute; z-index: 2; right: 10px; top: 4px; width: 44px; height: 44px; border-radius: 50%;
+  border: 2px solid #c9b08a; background: radial-gradient(circle at 35% 35%, #fff8, #fff1 60%), #2a1d12; font-size: 22px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5); touch-action: none; -webkit-touch-callout: none; user-select: none;
+}
+.loupe-tool.lifted { opacity: 0.25; }
+.loupe-ghost { display: grid; place-items: center; width: 56px; height: 56px; margin: 0 auto; border-radius: 50%; border: 3px solid #f5c542; background: rgba(255, 255, 255, 0.15); font-size: 28px; }
+.table-item.loupe-over, .cell.loupe-over { box-shadow: 0 0 0 3px #f5c542, 0 0 16px #f5c542aa; }
+.look-chip { display: block; margin-top: 2px; font-size: 10px; line-height: 1.3; color: #fde68a; text-align: center; }
+
+/* 电话（道具浮窗）：星港评级社送评、批发商 */
+.float-phone { width: min(380px, calc(100vw - 16px)); }
+.phone-buy p { margin-top: 0; }
+.phone-contact { background: var(--panel-2); border: 1px solid var(--line); border-radius: 12px; padding: 10px; display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
+.phone-contact.disabled { opacity: 0.55; }
+.phone-contact-head { display: flex; justify-content: space-between; align-items: baseline; }
+
+/* 送评位置里的卡（电话里复用） */
+.station-head b { font-size: 15px; }
+.station-empty { margin: auto 0; text-align: center; color: var(--muted); border: 1px dashed var(--line); border-radius: 10px; padding: 26px 8px; }
+.station-card { display: flex; gap: 10px; }
+.station-art { width: 72px; flex: none; }
+.station-info { display: flex; flex-direction: column; gap: 6px; min-width: 0; flex: 1; }
+.station-notes { margin: 0; padding-left: 16px; font-size: 12px; color: var(--muted); }
+.station-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.station-actions .chip { min-height: 32px; font-size: 12px; padding: 0 10px; }
+.station-actions .primary { margin-top: 0; min-height: 40px; font-size: 14px; }
+.station-hint { font-size: 11px; margin: 0; }
+.station-away { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; font-size: 12px; }
+
 /* 任务栏（FR-UI-4）：顶部三角收起 / 展开。不盖住内容：
    方屏 / 竖屏是顶栏下面的一条（把内容往下推）；横屏展开时占主画面右边一栏，收起时缩成右上角一个小标签 */
 .quest-bar {

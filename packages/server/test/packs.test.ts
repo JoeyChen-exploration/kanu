@@ -195,7 +195,7 @@ describe('拆包（FR-PACK-1～6）', () => {
   });
 
   it('开出 UR 以上或编号限定时播报（FR-PACK-6）', () => {
-    const base = { id: 1, templateId: 'NEO-19', name: '霓虹龙·影', seriesId: 'NEO', seriesName: '霓虹街头', tags: [], flavor: null, location: 'inventory' as const, binderId: null, looseSinceDay: null, price: 0, createdAt: 0 };
+    const base = { id: 1, templateId: 'NEO-19', name: '霓虹龙·影', seriesId: 'NEO', seriesName: '霓虹街头', tags: [], flavor: null, location: 'inventory' as const, binderId: null, looseSinceDay: null, price: 0, createdAt: 0, verified: false, slab: null, gradeRejected: false, readyDay: null };
     expect(announcementFor('阿奴', { ...base, rarity: 'UR', style: 'standard', serialNo: null })).toContain('UR「霓虹龙·影」');
     expect(announcementFor('阿奴', { ...base, rarity: 'SSR', style: 'serial', serialNo: 7 })).toContain('07/50');
     expect(announcementFor('阿奴', { ...base, rarity: 'SR', style: 'gold', serialNo: null })).toBeNull();

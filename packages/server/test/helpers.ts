@@ -58,4 +58,4 @@ export function findKeys(obj: unknown, keys: string[], path = '$'): string[] {
   }
   return [];
 }
-export const HIDDEN_KEYS = ['authenticity', 'grade', 'origin', 'condition', 'mindPrice', 'mind_price', 'undercover'];
+export const HIDDEN_KEYS = ['authenticity', 'grade', 'origin', 'condition', 'mindPrice', 'mind_price', 'undercover', 'misprint'];

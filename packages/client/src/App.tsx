@@ -9,6 +9,7 @@ import { Packs } from './pages/Packs.tsx';
 import { Inventory } from './pages/Inventory.tsx';
 import { Collection } from './pages/Collection.tsx';
 import { Counter } from './pages/Counter.tsx';
+import { Phone } from './Phone.tsx';
 import { Booklet, bookletUnseen } from './Booklet.tsx';
 import { QuestBar } from './QuestBar.tsx';
 
@@ -26,6 +27,8 @@ export function App() {
   const [tab, setTab] = useState<Tab>('shop');
   /** 新手手册：第一次进游戏自动打开，之后点顶栏 📖 */
   const [booklet, setBooklet] = useState(bookletUnseen);
+  /** 电话（道具浮窗）：送评、以后订货 */
+  const [phone, setPhone] = useState(false);
   const started = useRef(false);
 
   const loadMe = async () => setState({ kind: 'ready', me: await api<MeResponse>('/me') });
@@ -66,8 +69,10 @@ export function App() {
         <span className="topbar-credits">{fmt(me.credits)} 信用点</span>
         <span className="topbar-day">第 {me.gameDay} 天</span>
         <button className="topbar-book" onClick={() => setBooklet(true)} aria-label="新手手册">📖</button>
+        <button className="topbar-book topbar-phone" onClick={() => setPhone(!phone)} aria-label="电话">📞</button>
       </header>
       {booklet && <Booklet onClose={() => setBooklet(false)} />}
+      {phone && <Phone onClose={() => setPhone(false)} onChange={patchMe} />}
       <QuestBar onGo={(t) => setTab(t as Tab)} onChange={patchMe} />
       <main className="content">
         {tab === 'shop' && <Shop me={me} onChange={patchMe} />}

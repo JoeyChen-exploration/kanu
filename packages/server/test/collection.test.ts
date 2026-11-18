@@ -8,8 +8,8 @@ let cleanup: (() => Promise<void>) | null = null;
 afterEach(async () => { await cleanup?.(); cleanup = null; });
 
 type Repo = ReturnType<typeof setup>['repo'];
-const add = (repo: Repo, templateId: string, style: string, authenticity = 'real') =>
-  repo.insertCard({ templateId, ownerId: UID, authenticity, grade: '7', origin: 'legit', style: style as 'standard', serialNo: style === 'serial' ? 1 : null, now: NOW });
+const add = (repo: Repo, templateId: string, style: string, authenticity = 'real', collect = true) =>
+  repo.insertCard({ templateId, ownerId: UID, authenticity, grade: '7', origin: 'legit', style: style as 'standard', serialNo: style === 'serial' ? 1 : null, now: NOW, collect });
 
 describe('图鉴：五本册 + 大师图鉴（DESIGN 3.6，FR-INV-5、FR-INV-12）', () => {
   it('每个稀有度只列可能出的风格：N 没有暗物质和编号，SSR 六种都有', () => {
@@ -43,15 +43,18 @@ describe('图鉴：五本册 + 大师图鉴（DESIGN 3.6，FR-INV-5、FR-INV-12�
     expect(findKeys(body, HIDDEN_KEYS)).toEqual([]);
   });
 
-  it('只差一种风格就不算大师；假卡不点亮', async () => {
+  it('只差一种风格就不算大师；来路不明的卡（不论真假）验真前不点亮，图鉴不泄露真伪', async () => {
     const { app, repo } = setup();
     cleanup = () => app.close();
     const h = await login(app);
     add(repo, 'NEO-01', 'standard');
-    add(repo, 'NEO-01', 'holo', 'low_fake');
+    add(repo, 'NEO-01', 'holo', 'real', false);
+    add(repo, 'NEO-01', 'ice', 'low_fake', false);
     const body = (await app.inject({ method: 'GET', url: '/api/collection', headers: h })).json() as CollectionResponse;
     const card = body.series.find((s) => s.id === 'NEO')!.cards.find((c) => c.templateId === 'NEO-01')!;
-    expect(card.styles.find((s) => s.style === 'holo')!.owned).toBe(false);
+    // 真的和假的来路不明卡看起来一模一样：都没点亮、手上都算 1 张
+    expect(card.styles.find((s) => s.style === 'holo')).toMatchObject({ owned: false, count: 1 });
+    expect(card.styles.find((s) => s.style === 'ice')).toMatchObject({ owned: false, count: 1 });
     expect(card.master).toBe(false);
   });
 });

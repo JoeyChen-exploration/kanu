@@ -13,7 +13,7 @@ export function registerInventoryRoutes(app: FastifyInstance, deps: Deps) {
   app.get<{ Querystring: { rarity?: string; location?: string; page?: string } }>('/api/inventory', async (req, reply) => {
     if (!req.user) return fail(reply, 401, 'unauthorized', '请重新打开卡奴登录');
     const rarity = RARITIES.includes(req.query.rarity as never) ? req.query.rarity : undefined;
-    const location = (['inventory', 'showcase'] as const).includes(req.query.location as CardLocation) ? (req.query.location as CardLocation) : undefined;
+    const location = (['inventory', 'showcase', 'lab', 'grading'] as readonly string[]).includes(req.query.location ?? '') ? (req.query.location as CardLocation) : undefined;
     const page = Math.max(1, Math.min(10_000, Number.parseInt(req.query.page ?? '1', 10) || 1));
     const { total, cards } = repo.inventory(req.user.id, { rarity, location, page, pageSize: PAGE_SIZE });
     return { ok: true, cards, total, page, pageSize: PAGE_SIZE } satisfies InventoryResponse;

@@ -39,7 +39,8 @@ export interface WalletView {
 // ---------- 卡牌（M2） ----------
 // 只放玩家能知道的信息（FR-INV-2、NFR-SEC-2）：真伪、真实品相、来源永远不出现在这里。
 
-export type CardLocation = 'inventory' | 'showcase';
+/** inventory 库存（卡册或桌面）、showcase 珍藏柜、grading 送评中（在星港评级社） */
+export type CardLocation = 'inventory' | 'showcase' | 'grading';
 
 export interface CardView {
   id: number;
@@ -62,6 +63,71 @@ export interface CardView {
   /** 公开市场价（没封壳按未评级算） */
   price: number;
   createdAt: number;
+  /** 评级社封壳（公开）：总分 1–10 或 BL（黑标），四个分项 centering / corners / edges / surface；errata 是评级社认定的错版 */
+  slab: { score: string; subgrades: Record<string, number>; errata: boolean } | null;
+  /** 评级社拒评（疑似假卡，公开标记） */
+  gradeRejected: boolean;
+  /** 送评中时，第几个营业日出结果 */
+  readyDay: number | null;
+}
+
+// ---------- 鉴定（M3，DESIGN 5，2026-11-17 用户重定） ----------
+// 放大镜是柜台上的道具，拖到卡上查验；送评在电话里（电话要买）。没有鉴定机构。
+
+/** 放大镜查验的结论（只给卡的主人看，不改卡价）。looks：fake 看出是假的 / looks_real 看起来是真的（漏看也这么说） */
+export interface InspectionView {
+  looks: 'fake' | 'looks_real';
+  /** 品相大概在这相邻两档，如 ["8","9"]、["10","BL"] */
+  gradeRange: [string, string];
+  /** 认出是错版 */
+  errataFound: boolean;
+}
+
+/** GET /api/cards/:id/appraisal、POST /api/cards/:id/inspect */
+export interface CardAppraisalResponse {
+  ok: true;
+  card: CardView;
+  /** 放大镜查过就有（每张卡只查一次） */
+  inspection: InspectionView | null;
+  /** 送评状态：pending 评级中、slab 已封壳、rejected 被拒评 */
+  grading: 'pending' | 'slab' | 'rejected' | null;
+  /** 送评费 */
+  gradingFee: number;
+  canInspect: boolean;
+  canGrade: boolean;
+}
+
+/** 打烊时评级社出的结果（只给主人看） */
+export interface AppraisalOutcome {
+  cardId: number;
+  name: string;
+  outcome: 'slab' | 'rejected';
+  /** 封壳时的评分 */
+  score: string | null;
+  /** 评级社认定是错版 */
+  errata: boolean;
+}
+
+/** GET /api/phone：电话（买了没有、价格、在评级社的卡） */
+export interface PhoneResponse {
+  ok: true;
+  owned: boolean;
+  price: number;
+  day: number;
+  grading: CardView[];
+}
+
+/** POST /api/phone/buy */
+export interface BuyPhoneResponse {
+  ok: true;
+  credits: number;
+}
+
+/** POST /api/cards/:id/grade：送评（要电话） */
+export interface GradeResponse {
+  ok: true;
+  credits: number;
+  card: CardView;
 }
 
 // ---------- 进货和卡包（DESIGN 4，2026-11-17 卡包重做） ----------
@@ -181,6 +247,8 @@ export interface EndDayResponse {
   ok: true;
   /** 打烊后进入的新营业日 */
   day: number;
+  /** 这次打烊出结果的鉴定 / 送评 */
+  appraisals: AppraisalOutcome[];
 }
 
 export interface EligibleCardsResponse {

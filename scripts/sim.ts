@@ -15,7 +15,7 @@
 // 2026-11-17 定的目标（每天 2 包、周五起留租金）：破产率约 15%、买店率约 70%、每周交租前净赚中位约 10,000 信用点（约 1,000 金币）。
 // 没算进去的：送评、鉴定、科技树、顾客的具体标签、抵押赎回、新闻和供需。
 import {
-  COUNTER, CUSTOMER, CUSTOMER_TYPES, EXCHANGE, GRAND_COLLECTOR, PACKS, QUESTS, type QuestMetric, PLAYER, RARITY, RENT, SEASON, SHOP_PRICE, SHOWCASE,
+  COUNTER, CUSTOMER, CUSTOMER_TYPES, EXCHANGE, GRAND_COLLECTOR, MIDDLEMAN, PACKS, QUESTS, type QuestMetric, PLAYER, RARITY, RENT, SEASON, SHOP_PRICE, SHOWCASE,
   type CustomerType, type Rarity, type Style,
 } from '@kanu/shared/balance';
 import { openPack } from '../packages/server/src/game/cards.ts';
@@ -56,8 +56,7 @@ const scPrices = process.argv.indexOf('--sc-prices');
 if (scPrices >= 0) String(process.argv[scPrices + 1]).split(',').forEach((v, i) => { if (SHOWCASE.levels[i + 1]) SHOWCASE.levels[i + 1]!.price = Number(v); });
 SHOWCASE.pointsPerPct = arg('sc-pts', SHOWCASE.pointsPerPct);
 SHOWCASE.maxPriceBonus = arg('sc-cap', SHOWCASE.maxPriceBonus);
-// 大藏家调参：--grand-coef 价格系数、--grand-per 每分几 ppm、--grand-max 几率上限 ppm
-CUSTOMER.grand.priceCoef = arg('grand-coef', CUSTOMER.grand.priceCoef);
+// 大藏家调参：--grand-per 每分几 ppm、--grand-max 几率上限 ppm
 GRAND_COLLECTOR.ppmPerPoint = arg('grand-per', GRAND_COLLECTOR.ppmPerPoint);
 GRAND_COLLECTOR.maxPpm = arg('grand-max', GRAND_COLLECTOR.maxPpm);
 
@@ -70,9 +69,12 @@ const MIDDLEMAN_STOCK = 30;
 function sell(rng: Rng, card: Card, type: CustomerType, showcaseMult = 1): number {
   const w = CUSTOMER[type].wants;
   const bonus = w.kind === 'card' && w.styleBonus && card.style !== 'standard' ? w.styleBonus : 1;
-  // 珍藏柜加成：玩家知道自己的展示分，开价跟着抬
-  const ask = card.value * CUSTOMER[type].priceCoef * bonus * showcaseMult;
-  const mind = ask * between(rng, COUNTER.floatMin, COUNTER.floatMax);
+  // 2026-11-18 出价规则：心理价位 = 市场价 × 风格加成 × (1 + premium 范围里随机) × 珍藏柜加成，最低就是市场价。
+  // 玩家开价取 premium 范围的中间（玩家知道自己的展示分，开价跟着抬）；心理价位够就按开价成交，不够就按还价（心理价位的 90–100%）成交
+  const [lo, hi] = CUSTOMER[type].premium;
+  const base = card.value * bonus * showcaseMult;
+  const ask = base * (1 + (lo + hi) / 2);
+  const mind = base * (1 + between(rng, lo, hi));
   return Math.round(mind >= ask ? ask : mind * between(rng, 0.9, 1));
 }
 
@@ -191,7 +193,7 @@ function season(rng: Rng, packsPerDay: number, reserveFromDay: number, mode: Sho
           if (inv.length > MIDDLEMAN_STOCK) {
             inv.sort((a, b) => a.value - b.value);
             card = inv.shift()!;
-            price = Math.round(RARITY[card.rarity].basePrice * CUSTOMER.middleman.priceCoef);
+            price = Math.round(RARITY[card.rarity].basePrice * MIDDLEMAN.basePct);
           }
         } else if (wants.kind === 'card' && chance(rng, COUNTER.demandHitPpm)) {
           card = takeRandom(rng, inv, (c) => wants.rarities.includes(c.rarity));

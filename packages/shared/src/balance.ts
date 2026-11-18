@@ -173,32 +173,36 @@ export const CUSTOMER: Record<CustomerType, {
   /** MVP 里有没有这类顾客（DESIGN 12：MVP 不含卡贩和便衣） */
   mvp: boolean;
   wants: CustomerWants;
-  /** 心理价位的类型系数；中间人特殊，按基准价的固定比例收 */
-  priceCoef: number;
+  /**
+   * 愿意比市场价多出多少（2026-11-18 用户定：开价不超过市场价，客人就不会不满意）：
+   * 心理价位 = 市场价 × 风格加成 × (1 + 这个范围里随机的一个数)，所以最低就是市场价。快速出售按下限算，必定成交。
+   * 黑市中间人例外：不看市场价，只按基准价的 MIDDLEMAN.basePct 收。
+   */
+  premium: [number, number];
   patience: number;
   /** 成交后识破假卡的概率（ppm） */
   detect: { low_fake: number; high_fake: number };
 }> = {
-  resident: { name: '下层区居民', ppm: 190_000, mvp: true, wants: { kind: 'card', rarities: ['N', 'R'], tagChance: 500_000 }, priceCoef: 0.8, patience: 4, detect: { low_fake: 300_000, high_fake: 100_000 } },
-  // 2026-11-17 加：学生钱少、耐心好，看到闪卡这类特殊风格愿意多给
-  student: { name: '学生', ppm: 100_000, mvp: true, wants: { kind: 'card', rarities: ['N', 'R'], tagChance: 300_000, styleBonus: 1.6 }, priceCoef: 0.6, patience: 5, detect: { low_fake: 100_000, high_fake: 0 } },
+  resident: { name: '下层区居民', ppm: 190_000, mvp: true, wants: { kind: 'card', rarities: ['N', 'R'], tagChance: 500_000 }, premium: [0, 0.1], patience: 4, detect: { low_fake: 300_000, high_fake: 100_000 } },
+  // 2026-11-17 加：学生钱少（几乎只肯出市场价）、耐心好，看到闪卡这类特殊风格愿意多给
+  student: { name: '学生', ppm: 100_000, mvp: true, wants: { kind: 'card', rarities: ['N', 'R'], tagChance: 300_000, styleBonus: 1.6 }, premium: [0, 0.05], patience: 5, detect: { low_fake: 100_000, high_fake: 0 } },
   // 2026-11-17 加：上层区来的观光客，不太懂行，给钱爽快
-  tourist: { name: '观光客', ppm: 100_000, mvp: true, wants: { kind: 'card', rarities: ['N', 'R', 'SR'], tagChance: 400_000 }, priceCoef: 1.1, patience: 3, detect: { low_fake: 100_000, high_fake: 20_000 } },
+  tourist: { name: '观光客', ppm: 100_000, mvp: true, wants: { kind: 'card', rarities: ['N', 'R', 'SR'], tagChance: 400_000 }, premium: [0.05, 0.3], patience: 3, detect: { low_fake: 100_000, high_fake: 20_000 } },
   // 收藏家收 SR 以上的卡，封壳的不限稀有度但要评分够高（见 COLLECTOR）
-  collector: { name: '收藏家', ppm: 120_000, mvp: true, wants: { kind: 'card', rarities: SR_UP, tagChance: 500_000 }, priceCoef: 1.2, patience: 2, detect: { low_fake: 800_000, high_fake: 500_000 } },
+  collector: { name: '收藏家', ppm: 120_000, mvp: true, wants: { kind: 'card', rarities: SR_UP, tagChance: 500_000 }, premium: [0.1, 0.35], patience: 2, detect: { low_fake: 800_000, high_fake: 500_000 } },
   // 2026-11-17 加：点名要某一张卡，找到了出价很高
-  nostalgic: { name: '怀旧老顾客', ppm: 80_000, mvp: true, wants: { kind: 'card', rarities: ALL, tagChance: 0, template: true }, priceCoef: 1.5, patience: 3, detect: { low_fake: 500_000, high_fake: 200_000 } },
-  rich: { name: '上层区富人', ppm: 100_000, mvp: true, wants: { kind: 'card', rarities: SR_UP, tagChance: 500_000 }, priceCoef: 1.4, patience: 3, detect: { low_fake: 100_000, high_fake: 50_000 } },
-  // 2026-11-17 加：炒卡客只肯低价收 SR 以上，没耐心
-  speculator: { name: '炒卡客', ppm: 80_000, mvp: true, wants: { kind: 'card', rarities: SR_UP, tagChance: 300_000 }, priceCoef: 0.9, patience: 2, detect: { low_fake: 600_000, high_fake: 300_000 } },
+  nostalgic: { name: '怀旧老顾客', ppm: 80_000, mvp: true, wants: { kind: 'card', rarities: ALL, tagChance: 0, template: true }, premium: [0.3, 0.7], patience: 3, detect: { low_fake: 500_000, high_fake: 200_000 } },
+  rich: { name: '上层区富人', ppm: 100_000, mvp: true, wants: { kind: 'card', rarities: SR_UP, tagChance: 500_000 }, premium: [0.2, 0.5], patience: 3, detect: { low_fake: 100_000, high_fake: 50_000 } },
+  // 2026-11-17 加：炒卡客只收 SR 以上、几乎不肯多给，没耐心
+  speculator: { name: '炒卡客', ppm: 80_000, mvp: true, wants: { kind: 'card', rarities: SR_UP, tagChance: 300_000 }, premium: [0, 0.08], patience: 2, detect: { low_fake: 600_000, high_fake: 300_000 } },
   // 2026-11-17 加：开箱主播买没拆的卡包回去直播开箱，按卡包价加价收
-  streamer: { name: '开箱主播', ppm: 80_000, mvp: true, wants: { kind: 'pack' }, priceCoef: 1.3, patience: 3, detect: { low_fake: 0, high_fake: 0 } },
-  middleman: { name: '黑市中间人', ppm: 100_000, mvp: true, wants: { kind: 'card', rarities: ALL, tagChance: 0 }, priceCoef: 0.4, patience: 3, detect: { low_fake: 0, high_fake: 0 } },
+  streamer: { name: '开箱主播', ppm: 80_000, mvp: true, wants: { kind: 'pack' }, premium: [0.1, 0.3], patience: 3, detect: { low_fake: 0, high_fake: 0 } },
+  middleman: { name: '黑市中间人', ppm: 100_000, mvp: true, wants: { kind: 'card', rarities: ALL, tagChance: 0 }, premium: [0, 0], patience: 3, detect: { low_fake: 0, high_fake: 0 } },
   // 2026-11-17 加：大藏家，高级顾客。不按出现率抽（ppm 0），只在珍藏柜展示分够高时按 GRAND_COLLECTOR 的几率来（见下）。
-  // 只要 UR 以上，出价约是富人的 2 倍，耐心少、识假很强
-  grand: { name: '大藏家', ppm: 0, mvp: false, wants: { kind: 'card', rarities: ['UR', 'LR', 'MR'], tagChance: 0 }, priceCoef: 2.8, patience: 2, detect: { low_fake: 950_000, high_fake: 700_000 } },
-  dealer: { name: '卡贩', ppm: 30_000, mvp: false, wants: { kind: 'card', rarities: ALL, tagChance: 0 }, priceCoef: 1, patience: 3, detect: { low_fake: 0, high_fake: 0 } },
-  undercover: { name: '便衣治安员', ppm: 20_000, mvp: false, wants: { kind: 'card', rarities: ALL, tagChance: 0 }, priceCoef: 1, patience: 3, detect: { low_fake: 0, high_fake: 0 } },
+  // 只要 UR 以上，出价是市场价的 1.9–2.6 倍，耐心少、识假很强
+  grand: { name: '大藏家', ppm: 0, mvp: false, wants: { kind: 'card', rarities: ['UR', 'LR', 'MR'], tagChance: 0 }, premium: [0.9, 1.6], patience: 2, detect: { low_fake: 950_000, high_fake: 700_000 } },
+  dealer: { name: '卡贩', ppm: 30_000, mvp: false, wants: { kind: 'card', rarities: ALL, tagChance: 0 }, premium: [0, 0.1], patience: 3, detect: { low_fake: 0, high_fake: 0 } },
+  undercover: { name: '便衣治安员', ppm: 20_000, mvp: false, wants: { kind: 'card', rarities: ALL, tagChance: 0 }, premium: [0, 0.1], patience: 3, detect: { low_fake: 0, high_fake: 0 } },
 };
 
 export const COUNTER = {
@@ -212,9 +216,6 @@ export const COUNTER = {
    * 2026-11-17 用户要求每天客人不固定、中位 10 位；顾客一位一位进门，处理完下一位才来。科技树客流节点、特殊事件在这个基础上加人。
    */
   customersPerDayDist: { 8: 100_000, 9: 200_000, 10: 400_000, 11: 200_000, 12: 100_000 } as Record<number, number>,
-  /** 心理价位随机浮动范围 */
-  floatMin: 0.85,
-  floatMax: 1.25,
   /** 开价 ≤ 心理价位 × 这个数算"高出不多"，扣 1 点耐心；再高扣 2 点 */
   counterThreshold: 1.15,
   /** 需求从玩家库存里出的概率（ppm），其余从全卡池出 */
@@ -229,6 +230,9 @@ export const COUNTER = {
  * 收藏家收什么（2026-11-17 模拟调参：原来只收封壳卡，保守玩家碰不到两成多的顾客，周收入中位太低）：
  * 没封壳的卡要 rawMinRarity 及以上；封壳卡不限稀有度，但评分要 ≥ gradedMinGrade。
  */
+/** 黑市中间人：什么卡都收，不看市场价，只按稀有度基准价的 basePct 收（不问来路） */
+export const MIDDLEMAN = { basePct: 0.4 };
+
 export const COLLECTOR = { rawMinRarity: 'SR' as Rarity, gradedMinGrade: 9 };
 
 /**

@@ -1,7 +1,7 @@
 // 柜台页（FR-CTR-1～5）：顾客一位一位进门（学深空当铺）。只看得到眼前这一位，处理完下一位才进来，
 // 不知道下一位是谁、今天还剩几位。挑卡（或卡包）→ 开价 / 接受还价 / 快速出售 / 请走。都接待完就能打烊。
 import { useEffect, useRef, useState } from 'react';
-import { COUNTER, STORE } from '@kanu/shared/balance';
+import { COUNTER, CUSTOMER, STORE, type CustomerType } from '@kanu/shared/balance';
 import type { CardAppraisalResponse, CardView, InspectionView, CounterBinderPageResponse, CounterResponse, CustomerView, EligibleCardsResponse, EndDayResponse, MeResponse, OfferResponse } from '@kanu/shared/types';
 import { api, newIdempotencyKey } from '../api.ts';
 import { Card, fmt } from '../Card.tsx';
@@ -209,6 +209,26 @@ const keyOf = (it: Item) => `${it.kind}-${it.id}`;
  * 点台面上的一样选中它 → 调价 → 按"开价 / 接受还价 / 快速出售"。台面上的东西换客人时留着，
  * 不符合新客人要求的变暗。台面上留了客人那一侧，以后客人卖卡给你时，他的卡也摆在台面上。
  */
+/**
+ * 开价参考（2026-11-18 用户定：开价不超过市场价，客人就不会不满意）。只用公开信息：
+ * 稳卖价 = 快速出售价（这类顾客最低肯出的价，不低于市场价）；最多 ≈ 稳卖价 × (1 + premium 上限) / (1 + 下限)。
+ * 珍藏柜加成会让真实上限再高一点，所以写"约"。黑市中间人不看市场价。
+ */
+function PriceGuide({ type, typeName, quick, price }: { type: string; typeName: string; quick: number; price: number }) {
+  const spec = CUSTOMER[type as CustomerType];
+  if (!spec) return null;
+  if (type === 'middleman') return <p className="price-guide">黑市中间人不看市场价，只按稀有度基准价的四成收：开 {fmt(quick)} 以内一定成交。</p>;
+  const [lo, hi] = spec.premium;
+  const top = Math.round((quick * (1 + hi)) / (1 + lo));
+  const zone = price <= quick ? 'safe' : price <= top ? 'gamble' : 'over';
+  return (
+    <p className={`price-guide ${zone}`}>
+      开 <b>{fmt(quick)}</b> 以内一定成交；这位{typeName}最多可能出到约 <b>{fmt(top)}</b>。
+      {price > 0 && <span className="price-zone">{zone === 'safe' ? '稳卖' : zone === 'gamble' ? '赌一把：他可能还价' : '太贵了，他大概不会出这么多'}</span>}
+    </p>
+  );
+}
+
 /** 放大镜在一张卡上停多久算查验（毫秒，界面手感，不是游戏数值） */
 const LOUPE_DWELL_MS = 300;
 
@@ -396,6 +416,7 @@ function Deal({ customer, onChange, onDone, onUpdate, openBinders, setOpenBinder
         {selected && (
           <div className="offer-box">
             <p className="offer-title"><b>{selected.name}</b> <span className="hint">{selected.kind === 'pack' ? '没拆的卡包' : `市场价约 ${fmt(selected.price)}`}</span></p>
+            <PriceGuide type={customer.type} typeName={customer.typeName} quick={selectedQuick} price={Number(price) || 0} />
             <div className="price-input">
               <span>开价</span>
               <button className="step-btn" aria-label={`减 ${step}`} disabled={!price || Number(price) <= 1} onClick={() => bump(-step)}>−</button>

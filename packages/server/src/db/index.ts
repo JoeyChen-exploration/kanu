@@ -3,9 +3,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import Database from 'better-sqlite3';
-import { PLAYER, RARITY, type Grade, type QuestMetric, type Rarity, type Style } from '@kanu/shared/balance';
+import { PLAYER, RARITIES, RARITY, type Grade, type QuestMetric, type Rarity, type Style } from '@kanu/shared/balance';
 import type { CardLocation, CardView, SessionUser } from '@kanu/shared/types';
 import { publicPrice } from '../game/price.ts';
+
+/** 卡册排序（2026-11-18 用户定）：稀有度从高到低，同一张卡挨在一起，再按放进去的先后 */
+const BINDER_ORDER = `CASE t.rarity ${[...RARITIES].reverse().map((r, k) => `WHEN '${r}' THEN ${k}`).join(' ')} ELSE 99 END, t.id, i.style, i.id`;
 
 const MIGRATIONS: string[] = [
   // 1：M0 建档（players、events_log）
@@ -560,13 +563,13 @@ function createRepo(db: Database.Database) {
       const rows = db.prepare(`${q.cardsWithTemplate} WHERE i.owner_id = ? AND i.location = 'inventory' AND i.binder_id IS NULL ORDER BY i.id`).all(ownerId) as CardViewRow[];
       return rows.map(toCardView);
     },
-    /** 一本卡册里的全部卡（按放进去的顺序），柜台按顾客需要重新排 */
+    /** 一本卡册里的全部卡（按稀有度从高到低），柜台按顾客需要重新排 */
     allBinderCards(binderId: number): CardView[] {
-      const rows = db.prepare(`${q.cardsWithTemplate} WHERE i.binder_id = ? AND i.location = 'inventory' ORDER BY i.id`).all(binderId) as CardViewRow[];
+      const rows = db.prepare(`${q.cardsWithTemplate} WHERE i.binder_id = ? AND i.location = 'inventory' ORDER BY ${BINDER_ORDER}`).all(binderId) as CardViewRow[];
       return rows.map(toCardView);
     },
     binderCards(binderId: number, page: number, pageSize: number): CardView[] {
-      const rows = db.prepare(`${q.cardsWithTemplate} WHERE i.binder_id = ? ORDER BY i.id LIMIT ? OFFSET ?`).all(binderId, pageSize, (page - 1) * pageSize) as CardViewRow[];
+      const rows = db.prepare(`${q.cardsWithTemplate} WHERE i.binder_id = ? ORDER BY ${BINDER_ORDER} LIMIT ? OFFSET ?`).all(binderId, pageSize, (page - 1) * pageSize) as CardViewRow[];
       return rows.map(toCardView);
     },
     /** 磨损：只改隐藏的品相，不发给玩家 */

@@ -1,9 +1,9 @@
 // 任务栏（FR-UI-4，2026-11-17 用户定）：固定在右上角的窗口，顶部三角收起 / 展开（状态记在本机）。
 // 一开始是新手指引：按顺序显示前几条没领奖的任务，点任务跳到对应页面，做完点"领取"拿信用点。
-// 以后科技树上线，玩家可以在这里追踪节点的解锁条件。
+// 科技树里点"追踪"的节点钉在最上面，显示解锁条件的进度，点它跳到店铺页的科技树。
 import { useEffect, useRef, useState } from 'react';
 import { QUEST_BAR } from '@kanu/shared/balance';
-import type { MeResponse, QuestClaimResponse, QuestView, QuestsResponse } from '@kanu/shared/types';
+import type { MeResponse, QuestClaimResponse, QuestView, QuestsResponse, TechNodeView } from '@kanu/shared/types';
 import { WRITE_EVENT, api, newIdempotencyKey } from './api.ts';
 import { fmt } from './Card.tsx';
 
@@ -12,6 +12,7 @@ const readOpen = () => { try { return localStorage.getItem(OPEN_KEY) !== '0'; } 
 
 export function QuestBar({ onGo, onChange }: { onGo: (tab: string) => void; onChange: (p: Partial<MeResponse>) => void }) {
   const [quests, setQuests] = useState<QuestView[] | null>(null);
+  const [tracked, setTracked] = useState<TechNodeView | null>(null);
   const [open, setOpen] = useState(readOpen);
   const [busy, setBusy] = useState<string | null>(null);
   const [flash, setFlash] = useState('');
@@ -19,7 +20,7 @@ export function QuestBar({ onGo, onChange }: { onGo: (tab: string) => void; onCh
 
   // 进来拉一次；之后每次有写操作成功（买包、拆包、成交、打烊……）都重新拉
   useEffect(() => {
-    const load = () => api<QuestsResponse>('/quests').then((r) => setQuests(r.quests)).catch(() => {});
+    const load = () => api<QuestsResponse>('/quests').then((r) => { setQuests(r.quests); setTracked(r.tracked); }).catch(() => {});
     void load();
     const onWrite = () => {
       if (timer.current) window.clearTimeout(timer.current);
@@ -68,7 +69,24 @@ export function QuestBar({ onGo, onChange }: { onGo: (tab: string) => void; onCh
       {open && (
         <div className="quest-body">
           {flash && <p className="quest-flash">{flash}</p>}
-          {shown.length === 0 && <p className="hint">新手任务都完成了。科技树上线后，可以在这里追踪节点的解锁条件。</p>}
+          {tracked && (
+            <div className={tracked.unlockable ? 'quest tech-track done' : 'quest tech-track'}>
+              <button className="quest-main" onClick={() => onGo('shop')} title="去科技树">
+                <span className="quest-title">🔧 {tracked.name}<small>（科技树 · {fmt(tracked.price)} 蓝图）</small></span>
+                <span className="quest-hint">{tracked.effect}</span>
+                {tracked.requires.filter((r) => !r.owned).map((r) => <span key={r.id} className="quest-hint">· 先点 {r.name}</span>)}
+                {tracked.conditions.map((c) => (
+                  <span key={c.text} className="tech-track-cond">
+                    <span className="quest-hint">{c.met ? '✓' : '·'} {c.text}</span>
+                    <span className="quest-prog"><span style={{ width: `${(c.current / c.target) * 100}%` }} /></span>
+                    <span className="quest-num">{c.current} / {c.target}</span>
+                  </span>
+                ))}
+                {tracked.unlockable && <span className="quest-hint">条件都满足了，去店铺页点亮</span>}
+              </button>
+            </div>
+          )}
+          {shown.length === 0 && !tracked && <p className="hint">新手任务都完成了。在店铺页的科技树里点"追踪"，可以把节点的解锁条件放到这里。</p>}
           {shown.map((q) => (
             <div key={q.id} className={q.done ? 'quest done' : 'quest'}>
               <button className="quest-main" onClick={() => onGo(q.tab)} title="去看看">

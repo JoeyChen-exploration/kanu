@@ -12,6 +12,7 @@ import { Counter } from './pages/Counter.tsx';
 import { Phone } from './Phone.tsx';
 import { Booklet, bookletUnseen } from './Booklet.tsx';
 import { QuestBar } from './QuestBar.tsx';
+import { TechTree } from './TechTree.tsx';
 
 type State =
   | { kind: 'loading'; text: string }
@@ -131,6 +132,7 @@ function Shop({ me, onChange }: { me: MeResponse; onChange: (p: Partial<MeRespon
         <div className="stat"><span className="label">营业</span><span className="value">第 {me.gameDay} 天</span></div>
       </section>
       <p className="hint">去"进货"开包，再到"柜台"把卡卖给顾客。不清楚规则就点 📖 看新手手册。</p>
+      <TechTree onChange={onChange} />
       {me.devTools && <DevTools onChange={onChange} />}
     </section>
   );

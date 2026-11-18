@@ -1,7 +1,7 @@
 // 柜台页（FR-CTR-1～5）：顾客一位一位进门（学深空当铺）。只看得到眼前这一位，处理完下一位才进来，
 // 不知道下一位是谁、今天还剩几位。挑卡（或卡包）→ 开价 / 接受还价 / 快速出售 / 请走。都接待完就能打烊。
 import { useEffect, useRef, useState } from 'react';
-import { COUNTER, CUSTOMER, STORE, type CustomerType } from '@kanu/shared/balance';
+import { COUNTER, CUSTOMER, type CustomerType } from '@kanu/shared/balance';
 import type { CardAppraisalResponse, CardView, InspectionView, CounterBinderPageResponse, CounterResponse, CustomerView, EligibleCardsResponse, EndDayResponse, MeResponse, OfferResponse, ReceiveResponse } from '@kanu/shared/types';
 import { api, newIdempotencyKey } from '../api.ts';
 import { Card, fmt } from '../Card.tsx';
@@ -44,7 +44,9 @@ export function Counter({ onChange }: { onChange: (patch: Partial<MeResponse>) =
     setErr('');
     try {
       const r = await api<EndDayResponse>('/day/end', { method: 'POST', body: {}, idempotencyKey: newIdempotencyKey() });
-      onChange({ gameDay: r.day, packsLeftToday: STORE.packsPerDay });
+      onChange({ gameDay: r.day });
+      // 今天还能订几包要算上科技树（批发证），从服务器重新拿
+      api<MeResponse>('/me').then((m) => onChange({ packsLeftToday: m.packsLeftToday })).catch(() => {});
       // 鉴定机构 / 评级社在打烊时出结果
       // 星港评级社在打烊时出结果
       setMsg(r.appraisals.map((a) => `「${a.name}」${a.outcome === 'slab'

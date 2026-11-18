@@ -27,8 +27,8 @@ export function grandChancePpm(score: number): number {
   return Math.min(GRAND_COLLECTOR.maxPpm, score * GRAND_COLLECTOR.ppmPerPoint);
 }
 
-/** 第 level 级有几格；超出范围按最高级算 */
-export function showcaseSlots(level: number): number {
+/** 第 level 级有几格；超出范围按最高级算。bonus：科技树（S1 保险柜）额外的格子，没解锁珍藏柜时不算 */
+export function showcaseSlots(level: number, bonus = 0): number {
   const lv = Math.max(0, Math.min(SHOWCASE.levels.length - 1, level));
-  return SHOWCASE.levels[lv]!.slots;
+  return lv === 0 ? 0 : SHOWCASE.levels[lv]!.slots + bonus;
 }

@@ -6,6 +6,7 @@
 //   POST /api/phone/buy             买电话（要幂等 key）
 //   POST /api/cards/:id/grade       打电话给星港评级社送评（要电话、要幂等 key、扣费）：卡送走不能卖，下次打烊出结果
 // 结论只给主人看；卡价只看封壳后公开的评分和错版（FR-APPR-5）。
+import { techEffects } from '../game/tech.ts';
 import type { FastifyInstance } from 'fastify';
 import { APPRAISAL, PACKS, PHONE, WHOLESALE, type PackType, type Rarity, type Style } from '@kanu/shared/balance';
 import type {
@@ -83,7 +84,7 @@ export function registerAppraisalRoutes(app: FastifyInstance, deps: Deps, now: (
       const before = appraisalOf(repo, card);
       if (before.inspection) return before; // 只查一次：再拖上去还是同一个结论
       if (!before.canInspect) throw new ApiError(400, 'cannot_inspect', '这张卡在评级社，等它回来再看');
-      const result = inspect(rng, { authenticity: inst.authenticity, grade: inst.grade, misprint: inst.misprint === 1 });
+      const result = inspect(rng, { authenticity: inst.authenticity, grade: inst.grade, misprint: inst.misprint === 1 }, techEffects(repo.techOwned(userId)).errataDetectPpm);
       repo.putAppraisal(card.id, 'inspect', result, now());
       repo.logEvent(userId, now(), 'inspect', { card: card.id });
       return appraisalOf(repo, card);
@@ -98,7 +99,7 @@ export function registerAppraisalRoutes(app: FastifyInstance, deps: Deps, now: (
       ok: true, owned: player.phone === 1, price: PHONE.price, day: player.game_day, grading: repo.gradingCards(req.user.id),
       wholesale: {
         leftToday: deps.config.devUnlimitedIds.has(req.user.id) ? WHOLESALE.perDay : Math.max(0, WHOLESALE.perDay - repo.wholesaleToday(req.user.id, player.game_day)),
-        offers: wholesaleOffers(),
+        offers: wholesaleOffers(req.user.id),
         pending: pendingView(req.user.id),
       },
     } satisfies PhoneResponse;
@@ -110,9 +111,10 @@ export function registerAppraisalRoutes(app: FastifyInstance, deps: Deps, now: (
   };
 
   /** 批发商的报价：每种卡包一盒（DESIGN 4） */
-  const wholesaleOffers = () => repo.allSeries().map((s) => {
+  const wholesaleOffers = (ownerId: string) => repo.allSeries().map((s) => {
     const normal = PACKS[s.kind as PackType].price;
-    return { seriesId: s.id, name: s.name, kind: s.kind, packs: WHOLESALE.boxPacks, normalPrice: normal * WHOLESALE.boxPacks, boxPrice: Math.round(normal * WHOLESALE.discount) * WHOLESALE.boxPacks };
+    const discount = techEffects(repo.techOwned(ownerId)).wholesaleDiscount;
+    return { seriesId: s.id, name: s.name, kind: s.kind, packs: WHOLESALE.boxPacks, normalPrice: normal * WHOLESALE.boxPacks, boxPrice: Math.round(normal * discount) * WHOLESALE.boxPacks };
   });
 
   // 电话批发（DESIGN 4）：打给批发商订一盒。2026-11-18 用户定：只下单不扣钱，送货员作为下一位顾客来柜台，
@@ -130,7 +132,7 @@ export function registerAppraisalRoutes(app: FastifyInstance, deps: Deps, now: (
       const player = repo.getPlayer(userId);
       if (!player) throw new ApiError(401, 'unauthorized', '请重新打开卡奴登录');
       if (player.phone !== 1) throw new ApiError(400, 'no_phone', '还没有电话，先买一部电话才能打给批发商');
-      const offer = wholesaleOffers().find((o) => o.seriesId === seriesId);
+      const offer = wholesaleOffers(userId).find((o) => o.seriesId === seriesId);
       if (!offer) throw new ApiError(400, 'bad_series', '批发商没有这种卡包');
       const free = deps.config.devUnlimitedIds.has(userId);
       if (!free && repo.wholesaleToday(userId, player.game_day) >= WHOLESALE.perDay) {

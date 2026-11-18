@@ -8,6 +8,7 @@
 //   POST /api/day/end                 今天的顾客都接待完了才能打烊，进入下一个营业日
 // 上一位走了才生成下一位，需求参照玩家当时的库存。写操作都在一个事务里，要求幂等 key（dismiss 除外，它是设成目标状态）。
 // 心理价位、个人浮动、今天还剩几位都不出现在响应里。
+import { techEffects } from '../game/tech.ts';
 import type { FastifyInstance } from 'fastify';
 import { BINDER_PAGE_SIZE, BINDERS, CUSTOMER, PACKS, RARITIES, RARITY, REPUTATION, COUNTER, WHOLESALE, type BinderKind, type CustomerType, type Rarity } from '@kanu/shared/balance';
 import type { CardView, CounterBinderPageResponse, CounterResponse, CustomerView, EligibleCardsResponse, EndDayResponse, OfferResponse, ReceiveResponse } from '@kanu/shared/types';
@@ -80,8 +81,10 @@ export function registerCounterRoutes(app: FastifyInstance, deps: Deps, now: () 
     let player = repo.getPlayer(ownerId)!;
     // 卡册效果（典藏皮面册）带来的额外收藏家：排在当天最后几位
     const extra = deps.binders!.extraCollectors(ownerId);
+    const tech = techEffects(repo.techOwned(ownerId));
     if (player.day_customer_count === 0) {
-      repo.setDayCustomerCount(ownerId, rollCustomerCount(rng, extra));
+      // 科技树 C2 二号柜台：每天多来几位
+      repo.setDayCustomerCount(ownerId, rollCustomerCount(rng, extra + tech.customersPerDay));
       player = repo.getPlayer(ownerId)!;
     }
     const day = dayKey(player.game_day);
@@ -107,7 +110,9 @@ export function registerCounterRoutes(app: FastifyInstance, deps: Deps, now: () 
       const showcase = showcaseEffects(score);
       const forceType: CustomerType | undefined = rows.length >= player.day_customer_count - extra ? 'collector'
         : grandChancePpm(score) > 0 && chance(rng, grandChancePpm(score)) ? 'grand' : undefined;
-      const c = rollCustomer(rng, { inventory: repo.sellableCards(ownerId).map(toSellable), packs: sellablePacks(ownerId), templates, series, typicalPrice, forceType, showcase });
+      // 科技树 C1 霓虹招牌：所有顾客耐心 +1
+      const rolled = rollCustomer(rng, { inventory: repo.sellableCards(ownerId).map(toSellable), packs: sellablePacks(ownerId), templates, series, typicalPrice, forceType, showcase });
+      const c = { ...rolled, patience: rolled.patience + tech.patience };
       repo.insertCustomer({
         owner_id: ownerId, day_key: day, slot: 0, seat: rows.length, type: c.type, demand: JSON.stringify(c.demand), float: c.float,
         patience: c.patience, max_patience: c.patience, line: say(c.type, 'greet', { demand: demandText(c.type, c.demand) }), budget_low: c.budgetLow, budget_high: c.budgetHigh, created_at: t,

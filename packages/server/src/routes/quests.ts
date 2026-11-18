@@ -4,8 +4,9 @@
 // 进度从已有的流水和库存里数（repo.questStats），不另记计数。
 import type { FastifyInstance } from 'fastify';
 import { QUESTS } from '@kanu/shared/balance';
-import type { QuestClaimResponse, QuestView, QuestsResponse } from '@kanu/shared/types';
+import type { QuestClaimResponse, QuestView, QuestsResponse, TechNodeView } from '@kanu/shared/types';
 import { ApiError, fail, idempotencyKey, type Deps } from '../app.ts';
+import { techNodeViews } from './tech.ts';
 
 export function registerQuestRoutes(app: FastifyInstance, deps: Deps, now: () => number) {
   const { repo } = deps;
@@ -19,9 +20,12 @@ export function registerQuestRoutes(app: FastifyInstance, deps: Deps, now: () =>
     });
   };
 
+  /** 任务栏里追踪的科技树节点（点过了就不再显示） */
+  const tracked = (ownerId: string): TechNodeView | null => techNodeViews(repo, ownerId).find((v) => v.tracked && !v.owned) ?? null;
+
   app.get('/api/quests', async (req, reply) => {
     if (!req.user) return fail(reply, 401, 'unauthorized', '请重新打开卡奴登录');
-    return { ok: true, quests: view(req.user.id) } satisfies QuestsResponse;
+    return { ok: true, quests: view(req.user.id), tracked: tracked(req.user.id) } satisfies QuestsResponse;
   });
 
   app.post<{ Params: { id: string } }>('/api/quests/:id/claim', async (req, reply) => {

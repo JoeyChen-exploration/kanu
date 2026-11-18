@@ -208,6 +208,15 @@ const MIGRATIONS: string[] = [
      created_at  INTEGER NOT NULL
    );
    CREATE INDEX wholesale_orders_owner ON wholesale_orders (owner_id, status);`,
+  // 16：科技树（docs/TECH-TREE.md MVP）。点过的节点永久保留；蓝图余额；任务栏里追踪的节点
+  `CREATE TABLE tech_owned (
+     discord_id TEXT NOT NULL REFERENCES players(discord_id),
+     node_id    TEXT NOT NULL,
+     bought_at  INTEGER NOT NULL,
+     PRIMARY KEY (discord_id, node_id)
+   );
+   ALTER TABLE players ADD COLUMN blueprints INTEGER NOT NULL DEFAULT 0;
+   ALTER TABLE players ADD COLUMN tech_tracked TEXT;`,
 ];
 
 /** 营业日在 customers、daily_usage 里的键 */
@@ -246,6 +255,10 @@ export interface PlayerRow {
   showcase_level: number;
   /** 买了电话没有（1 = 有） */
   phone: number;
+  /** 蓝图余额（科技树货币） */
+  blueprints: number;
+  /** 任务栏里追踪的科技树节点 */
+  tech_tracked: string | null;
   created_at: number;
 }
 
@@ -426,6 +439,13 @@ function createRepo(db: Database.Database) {
       return id;
     },
     setPhone: (discordId: string) => db.prepare('UPDATE players SET phone = 1 WHERE discord_id = ?').run(discordId),
+    // ---- 科技树 ----
+    techOwned: (discordId: string) =>
+      new Set((db.prepare('SELECT node_id FROM tech_owned WHERE discord_id = ?').all(discordId) as Array<{ node_id: string }>).map((r) => r.node_id)),
+    addTech: (discordId: string, nodeId: string, now: number) =>
+      db.prepare('INSERT INTO tech_owned (discord_id, node_id, bought_at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING').run(discordId, nodeId, now).changes > 0,
+    setBlueprints: (discordId: string, n: number) => db.prepare('UPDATE players SET blueprints = ? WHERE discord_id = ?').run(n, discordId),
+    setTechTracked: (discordId: string, nodeId: string | null) => db.prepare('UPDATE players SET tech_tracked = ? WHERE discord_id = ?').run(nodeId, discordId),
     /** 这个营业日已经打电话订过几次批发（不管后来收没收） */
     wholesaleToday: (discordId: string, gameDay: number) =>
       (db.prepare('SELECT COUNT(*) AS n FROM wholesale_orders WHERE owner_id = ? AND ordered_day = ?').get(discordId, gameDay) as { n: number }).n,

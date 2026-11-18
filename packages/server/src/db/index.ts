@@ -188,6 +188,10 @@ const MIGRATIONS: string[] = [
    ALTER TABLE card_instances ADD COLUMN slab_errata INTEGER NOT NULL DEFAULT 0;
    ALTER TABLE players ADD COLUMN phone INTEGER NOT NULL DEFAULT 0;
    UPDATE card_instances SET location = 'inventory', ready_day = NULL WHERE location = 'lab';`,
+
+  // 14：电话批发（2026-11-18）。acquired 是卡从哪来的（公开）：store 电脑订货、wholesale 电话批发。
+  // 玩家知道哪些卡来路不保证，好拿放大镜看
+  `ALTER TABLE card_instances ADD COLUMN acquired TEXT NOT NULL DEFAULT 'store';`,
 ];
 
 /** 营业日在 customers、daily_usage 里的键 */
@@ -336,7 +340,7 @@ function createRepo(db: Database.Database) {
     pruneIdem: db.prepare('DELETE FROM idempotency WHERE created_at < ?'),
 
     cardsWithTemplate: `SELECT i.id, i.template_id, i.style, i.serial_no, i.location, i.binder_id, i.loose_since_day, i.created_at,
-                               i.slab_score, i.slab_subgrades, i.slab_errata, i.grade_rejected, i.ready_day,
+                               i.slab_score, i.slab_subgrades, i.slab_errata, i.grade_rejected, i.ready_day, i.acquired,
                                t.name, t.rarity, t.tags, t.flavor, t.series_id, s.name AS series_name
                         FROM card_instances i JOIN card_templates t ON t.id = i.template_id JOIN series s ON s.id = t.series_id`,
   };
@@ -397,14 +401,20 @@ function createRepo(db: Database.Database) {
      * 新卡入库。collect：要不要马上点亮图鉴——只能按公开信息决定（M3 修）：电脑订货保证正品，拆出来就点亮；
      * 以后电话批发、卡贩这些来路不明的卡传 false，等鉴定机构验真（或封壳）后再点亮。不能按隐藏的真伪决定，否则图鉴会泄露真伪
      */
-    insertCard(c: { templateId: string; ownerId: string; authenticity: string; grade: string; origin: string; style: Style; serialNo: number | null; now: number; collect?: boolean; misprint?: boolean }): number {
+    insertCard(c: { templateId: string; ownerId: string; authenticity: string; grade: string; origin: string; style: Style; serialNo: number | null; now: number; collect?: boolean; misprint?: boolean; acquired?: 'store' | 'wholesale' }): number {
       const r = q.insertInstance.run(c.templateId, c.ownerId, c.authenticity, c.grade, c.origin, c.style, c.serialNo, c.now);
       const id = Number(r.lastInsertRowid);
       if (c.misprint) db.prepare('UPDATE card_instances SET misprint = 1 WHERE id = ?').run(id);
+      if (c.acquired === 'wholesale') db.prepare("UPDATE card_instances SET acquired = 'wholesale' WHERE id = ?").run(id);
       if (c.collect ?? true) repo.markCollected(c.ownerId, c.templateId, c.style, c.now);
       return id;
     },
     setPhone: (discordId: string) => db.prepare('UPDATE players SET phone = 1 WHERE discord_id = ?').run(discordId),
+    /** 这个营业日已经批发过几次（从流水里数） */
+    wholesaleToday: (discordId: string, gameDay: number) =>
+      (db.prepare("SELECT COUNT(*) AS n FROM events_log WHERE discord_id = ? AND kind = 'wholesale' AND json_extract(data, '$.day') = ?").get(discordId, gameDay) as { n: number }).n,
+    /** 新的整盒编号 */
+    nextBoxId: () => ((db.prepare('SELECT MAX(box_id) AS m FROM sealed_packs').get() as { m: number | null }).m ?? 0) + 1,
     markCollected(ownerId: string, templateId: string, style: string, now: number) {
       q.markCollected.run(ownerId, templateId, now);
       q.markStyleCollected.run(ownerId, templateId, style, now);
@@ -590,6 +600,7 @@ interface CardViewRow {
   slab_errata: number;
   grade_rejected: number;
   ready_day: number | null;
+  acquired: string;
   name: string;
   rarity: Rarity;
   tags: string;
@@ -620,6 +631,7 @@ function toCardView(r: CardViewRow): CardView {
     slab: r.slab_score ? { score: r.slab_score, subgrades: JSON.parse(r.slab_subgrades ?? '{}') as Record<string, number>, errata: r.slab_errata === 1 } : null,
     gradeRejected: r.grade_rejected === 1,
     readyDay: r.ready_day,
+    acquired: r.acquired === 'wholesale' ? 'wholesale' : 'store',
   };
 }
 

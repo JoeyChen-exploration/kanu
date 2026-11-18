@@ -91,11 +91,11 @@ export function Packs({ me, onChange }: { me: MeResponse; onChange: (patch: Part
       {sealed && sealed.groups.length === 0 && <p className="hint">还没有卡包，在下面电脑订货。</p>}
       <div className="sealed-list">
         {sealed?.groups.map((g) => (
-          <div key={g.seriesId} className={`sealed kind-${g.kind}`}>
+          <div key={`${g.seriesId}-${g.wholesale ? 'w' : 's'}`} className={`sealed kind-${g.kind}${g.wholesale ? ' wholesale' : ''}`}>
             <div className="pack-art small" aria-hidden>{g.name.slice(0, 2)}</div>
             <div className="sealed-body">
-              <b>{g.name}</b>
-              <span className="hint">{g.ids.length} 包</span>
+              <b>{g.name}{g.wholesale && <span className="wholesale-tag">批发</span>}</b>
+              <span className="hint">{g.ids.length} 包{g.wholesale ? ' · 批发商不保证正品，拆出来拿放大镜看看' : ''}</span>
             </div>
             <button className="chip on" disabled={busy} onClick={() => open(g.ids[0]!)}>拆一包</button>
           </div>

@@ -29,6 +29,7 @@ export function Card({ card, small }: { card: Pick<CardView, 'name' | 'rarity' |
       {/* 鉴定的公开标记（DESIGN 5）：封壳评分（含错版认定）、评级社拒评 */}
       {slab && <div className={slab.score === 'BL' ? 'slab-label black' : 'slab-label'}>星港评级 <b>{slab.score === 'BL' ? '黑标' : slab.score}</b>{slab.errata && <span className="slab-errata">错版</span>}</div>}
       {card.gradeRejected && <span className="rejected-mark" title="评级社拒评：疑似假卡">拒评</span>}
+      {card.acquired === 'wholesale' && !slab && <span className="wholesale-mark" title="电话批发来的：批发商不保证正品">批</span>}
       <div className="card-face">
         <div className="card-top">
           <span className="card-rarity">{card.rarity}</span>

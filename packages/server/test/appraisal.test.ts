@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { APPRAISAL, ERRATA, PHONE, REPUTATION } from '@kanu/shared/balance';
-import type { BuyPhoneResponse, CardAppraisalResponse, EndDayResponse, GradeBatchResponse, GradeResponse, InventoryResponse, PhoneResponse } from '@kanu/shared/types';
+import { APPRAISAL, ERRATA, PACKS, PHONE, REPUTATION, WHOLESALE } from '@kanu/shared/balance';
+import type { BuyPhoneResponse, CardAppraisalResponse, EndDayResponse, GradeBatchResponse, GradeResponse, InventoryResponse, PhoneResponse, WholesaleResponse } from '@kanu/shared/types';
 import { gradeCard, inspect, loupeGrade, rollErrata } from '../src/game/appraisal.ts';
 import { seeded } from '../src/game/rng.ts';
 import { HIDDEN_KEYS, NOW, findKeys, idem, login, setup } from './helpers.ts';
@@ -162,6 +162,60 @@ describe('电话 + 送评（星港评级社）', () => {
     const end = await closeDay(app, h);
     expect(end.appraisals.map((a) => a.cardId).sort()).toEqual([...ids].sort());
     expect(findKeys(r, HIDDEN)).toEqual([]);
+  });
+
+  it('电话批发：一盒 10 包打折、马上到货、一天一次；拆出来带"批发"标记，图鉴不点亮；按批发假卡率出假卡', async () => {
+    const { app, repo } = setup();
+    cleanup = () => app.close();
+    const h = await login(app);
+    repo.db.prepare('UPDATE players SET credits = 1000000').run();
+    const wholesale = (key = idem()) => app.inject({ method: 'POST', url: '/api/phone/wholesale', headers: { ...h, ...key }, payload: { seriesId: 'NEO' } });
+    expect((await wholesale()).json().code).toBe('no_phone');
+    repo.db.prepare('UPDATE players SET phone = 1').run();
+
+    const phone = (await app.inject({ method: 'GET', url: '/api/phone', headers: h })).json() as PhoneResponse;
+    const neo = phone.wholesale.offers.find((o) => o.seriesId === 'NEO')!;
+    expect(neo.boxPrice).toBe(Math.round(PACKS.themed.price * WHOLESALE.discount) * WHOLESALE.boxPacks);
+    expect(neo.boxPrice).toBeLessThan(neo.normalPrice);
+    expect(phone.wholesale.leftToday).toBe(WHOLESALE.perDay);
+
+    const key = idem();
+    const r = (await wholesale(key)).json() as WholesaleResponse;
+    expect((await wholesale(key)).json()).toEqual(r);
+    expect(r.packIds).toHaveLength(WHOLESALE.boxPacks);
+    expect(r.cost).toBe(neo.boxPrice);
+    expect((await wholesale()).json().code).toBe('wholesale_limit');
+    expect(((await app.inject({ method: 'GET', url: '/api/phone', headers: h })).json() as PhoneResponse).wholesale.leftToday).toBe(0);
+
+    // 拆一包：带批发标记、图鉴不点亮（来路不明，要送评封壳才点亮）
+    const opened = (await app.inject({ method: 'POST', url: `/api/packs/${r.packIds[0]}/open`, headers: { ...h, ...idem() } })).json();
+    expect(opened.cards.every((c: { acquired: string }) => c.acquired === 'wholesale')).toBe(true);
+    const coll = (await app.inject({ method: 'GET', url: '/api/collection', headers: h })).json();
+    expect(coll.series.find((s: { id: string }) => s.id === 'NEO').owned).toBe(0);
+    expect(findKeys(opened, HIDDEN)).toEqual([]);
+  });
+
+  it('批发包的假卡率按 WHOLESALE.fakePpm（大约），电脑订货的一张假卡都没有', async () => {
+    const { app, repo } = setup({ rng: seeded(11) });
+    cleanup = () => app.close();
+    const h = await login(app);
+    repo.db.prepare('UPDATE players SET credits = 100000000, phone = 1').run();
+    // 绕过每天一次：直接塞 200 包批发包和 100 包电脑包
+    for (let i = 0; i < 200; i += 1) repo.insertSealed(UID, 'NEO', 'phone', NOW, 1);
+    for (let i = 0; i < 100; i += 1) repo.insertSealed(UID, 'MEC', 'store', NOW);
+    repo.db.prepare("UPDATE binders SET kind = 'leather'").run();
+    for (let i = 0; i < 3; i += 1) repo.insertBinder(UID, 'leather', NOW);
+    for (const p of repo.sealedByOwner(UID)) await app.inject({ method: 'POST', url: `/api/packs/${p.id}/open`, headers: { ...h, ...idem() } });
+    const rate = (acq: string) => {
+      const rows = repo.db.prepare("SELECT authenticity FROM card_instances WHERE owner_id = ? AND acquired = ?").all(UID, acq) as Array<{ authenticity: string }>;
+      return { n: rows.length, fake: rows.filter((x) => x.authenticity !== 'real').length / rows.length };
+    };
+    const w = rate('wholesale');
+    const s = rate('store');
+    expect(w.n).toBe(1000);
+    expect(w.fake).toBeGreaterThan(WHOLESALE.fakePpm / 1e6 / 2);
+    expect(w.fake).toBeLessThan((WHOLESALE.fakePpm / 1e6) * 2);
+    expect(s.fake).toBe(0);
   });
 
   it('钱不够、别人的卡都拒绝', async () => {

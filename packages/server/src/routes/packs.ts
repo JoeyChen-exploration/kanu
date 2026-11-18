@@ -5,7 +5,7 @@
 //   POST /api/packs/:id/open     拆一包：发卡、保底、编号限定、点亮图鉴、播报
 // 写操作都在一个事务里、要求幂等 key，信用点变动写流水（DR-1、DR-2）。播报在事务提交之后再发。
 import type { FastifyInstance } from 'fastify';
-import { ANNOUNCE, PACKS, RARITIES, SERIAL_LIMIT, STORE, STYLE, atLeast, type PackType, type Rarity } from '@kanu/shared/balance';
+import { ANNOUNCE, PACKS, RARITIES, SERIAL_LIMIT, STORE, STYLE, WHOLESALE, atLeast, type PackType, type Rarity } from '@kanu/shared/balance';
 import type { BuyPacksResponse, CardView, OpenPackResponse, SealedPacksResponse, StoreResponse } from '@kanu/shared/types';
 import { ApiError, fail, idempotencyKey, type Deps } from '../app.ts';
 import { dayKey } from '../db/index.ts';
@@ -100,10 +100,13 @@ export function registerPackRoutes(app: FastifyInstance, deps: Deps, now: () => 
   app.get('/api/packs', async (req, reply) => {
     if (!req.user) return fail(reply, 401, 'unauthorized', '请重新打开卡奴登录');
     const groups = new Map<string, SealedPacksResponse['groups'][number]>();
+    // 电话批发来的卡包单独一组（公开：批发商不保证正品）
     for (const p of repo.sealedByOwner(req.user.id)) {
-      const g = groups.get(p.series_id) ?? { seriesId: p.series_id, name: p.name, kind: p.kind, ids: [] };
+      const wholesale = p.source === 'phone';
+      const k = `${p.series_id}|${wholesale ? 'w' : 's'}`;
+      const g = groups.get(k) ?? { seriesId: p.series_id, name: p.name, kind: p.kind, ids: [], wholesale };
       g.ids.push(p.id);
-      groups.set(p.series_id, g);
+      groups.set(k, g);
     }
     return { ok: true, groups: [...groups.values()] } satisfies SealedPacksResponse;
   });
@@ -139,6 +142,8 @@ export function registerPackRoutes(app: FastifyInstance, deps: Deps, now: () => 
         pityCount: player.pity_count,
         templateCounts: counts,
         serialAvailable: (r, i) => repo.serialLeft(byRarity[r][i]!.id, SERIAL_LIMIT),
+        // 电话批发的卡包批发商不保证正品（DESIGN 4）
+        ...(sealed.source === 'phone' ? { fakePpm: WHOLESALE.fakePpm } : {}),
       });
 
       const ids = rolled.cards.map((c) => {
@@ -155,6 +160,7 @@ export function registerPackRoutes(app: FastifyInstance, deps: Deps, now: () => 
         return repo.insertCard({
           templateId: tpl.id, ownerId: userId, authenticity: c.authenticity, grade: String(c.grade), origin: c.origin, style, serialNo, now: t,
           collect: sealed.source === 'store', misprint: rollErrata(deps.rng),
+          acquired: sealed.source === 'phone' ? 'wholesale' : 'store',
         });
       });
 

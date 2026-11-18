@@ -1,9 +1,9 @@
-// 电话（道具浮窗，2026-11-17 用户定）：花信用点买；里面两个号码——星港评级社（送评）、批发商（下一步开通）。
+// 电话（道具浮窗，2026-11-17 用户定）：花信用点买；里面两个号码——星港评级社（送评）、批发商（整盒订货，DESIGN 4）。
 // 送评：把卡（从库存页 / 柜台的卡册浮窗、台面、桌面）拖到电话的评级社上，再按"送评"。下次打烊出结果。
 // 各页面的拖拽在松手到电话上时广播 PHONE_DROP，电话自己接住。
 import { useEffect, useState } from 'react';
-import { APPRAISAL, ERRATA, PHONE } from '@kanu/shared/balance';
-import type { BuyPhoneResponse, CardAppraisalResponse, CardView, GradeBatchResponse, MeResponse, PhoneResponse } from '@kanu/shared/types';
+import { APPRAISAL, ERRATA, PHONE, WHOLESALE } from '@kanu/shared/balance';
+import type { BuyPhoneResponse, CardAppraisalResponse, CardView, GradeBatchResponse, MeResponse, PhoneResponse, WholesaleResponse } from '@kanu/shared/types';
 import { WRITE_EVENT, api, newIdempotencyKey } from './api.ts';
 import { Card, fmt } from './Card.tsx';
 import { FloatWindow } from './drag.tsx';
@@ -62,12 +62,23 @@ export function Phone({ onClose, onChange }: { onClose: () => void; onChange: (p
   };
   const total = slot.reduce((s, x) => s + x.gradingFee, 0);
 
+  /** 打给批发商订一盒：马上到货，去进货页拆 */
+  const order = async (seriesId: string, name: string) => {
+    setBusy(true); setErr(''); setMsg('');
+    try {
+      const r = await api<WholesaleResponse>('/phone/wholesale', { method: 'POST', body: { seriesId }, idempotencyKey: newIdempotencyKey() });
+      onChange({ credits: r.credits });
+      setMsg(`「${name}」一盒 ${r.packIds.length} 包到货了（${fmt(r.cost)} 信用点），去进货页的"我的卡包"拆`);
+      await load();
+    } catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
+  };
+
   return (
     <FloatWindow id="phone" className="float-phone" title="📞 电话" onClose={onClose}>
       {!data ? <p className="hint">接通中…</p> : !data.owned
         ? (
           <div className="phone-buy">
-            <p>店里还没装电话。装了电话可以打给<b>星港评级社</b>送评（真卡封壳出分，按分数卖高价），以后还能打给批发商整盒订货。</p>
+            <p>店里还没装电话。装了电话可以打给<b>星港评级社</b>送评（真卡封壳出分，按分数卖高价），还能打给批发商整盒订货（便宜，但不保证正品）。</p>
             <button className="primary" disabled={busy} onClick={buy}>买一部电话 · {fmt(PHONE.price)} 信用点</button>
           </div>
         )
@@ -100,9 +111,21 @@ export function Phone({ onClose, onChange }: { onClose: () => void; onChange: (p
                 </div>
               )}
             </div>
-            <div className="phone-contact disabled">
-              <div className="phone-contact-head"><b>批发商</b><span className="hint">整盒订货</span></div>
-              <p className="hint">线路还在接，下一步开通。</p>
+            <div className="phone-contact">
+              <div className="phone-contact-head"><b>批发商</b><span className="hint">整盒订货 · 今天还能订 {data.wholesale.leftToday} 盒</span></div>
+              <div className="wholesale-offers">
+                {data.wholesale.offers.map((o) => (
+                  <div key={o.seriesId} className={`wholesale-offer kind-${o.kind}`}>
+                    <div className="pack-art" aria-hidden>{o.name.slice(0, 2)}</div>
+                    <div className="wholesale-offer-body">
+                      <b>{o.name}</b>
+                      <span>一盒 {o.packs} 包 · <b>{fmt(o.boxPrice)}</b> <s>{fmt(o.normalPrice)}</s></span>
+                    </div>
+                    <button className="chip on" disabled={busy || data.wholesale.leftToday <= 0} onClick={() => order(o.seriesId, o.name)}>订一盒</button>
+                  </div>
+                ))}
+              </div>
+              <p className="hint station-hint">比电脑订货便宜，马上到货，但批发商不保证正品：每张卡约 {WHOLESALE.fakePpm / 10_000}% 是假卡。拆出来的卡带"批"字，用柜台上的放大镜看看再卖。每天只能订一盒。</p>
             </div>
           </>
         )}

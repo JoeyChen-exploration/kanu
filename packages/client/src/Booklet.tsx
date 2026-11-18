@@ -3,7 +3,7 @@
 import { useRef, useState, type ReactNode } from 'react';
 import {
   ANNOUNCE, APPRAISAL, BINDER_KINDS, ERRATA, PHONE, GRAND_COLLECTOR, BINDERS, COUNTER, CUSTOMER, CUSTOMER_TYPES, EXCHANGE, LOOSE, PACKS, PITY, RARITIES, RARITY,
-  RENT, SERIAL_LIMIT, SHOP_PRICE, SHOWCASE, STARTER_BINDER, STORE, STYLE, STYLES, UNGRADED_MULT, type CustomerWants,
+  RENT, SERIAL_LIMIT, SHOP_PRICE, SHOWCASE, STARTER_BINDER, STORE, STYLE, STYLES, UNGRADED_MULT, WHOLESALE, type CustomerWants,
 } from '@kanu/shared/balance';
 import { Card, GameDayContext, fmt } from './Card.tsx';
 import { AVATAR } from './pages/Counter.tsx';
@@ -88,6 +88,7 @@ const PAGES: Array<{ title: string; body: ReactNode }> = [
           <li>每种卡包就是一个系列，进货页能看到各稀有度的出货率。</li>
           <li><b>保底</b>：连续 {PITY.packs - 1} 包都没开出 {PITY.rarity} 或以上，第 {PITY.packs} 包必出一张 {PITY.rarity}。</li>
           <li>没拆的卡包可以先放着，开箱主播会来收。</li>
+          <li><b>电话批发</b>（买了电话 📞 才有）：一盒 {WHOLESALE.boxPacks} 包，每包打 {Math.round(WHOLESALE.discount * 10)} 折，每天只能订一盒。便宜但<b>批发商不保证正品</b>，每张约 {WHOLESALE.fakePpm / 10_000}% 是假卡；拆出来的卡带"批"字，卖之前用放大镜看看。</li>
         </ul>
       </>
     ),

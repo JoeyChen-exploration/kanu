@@ -1,4 +1,5 @@
 // 库存、珍藏柜、图鉴（FR-INV-1、2、4、5、6）。返回的卡牌一律经过 toCardView，只有公开信息。
+import { techEffects } from '../game/tech.ts';
 import type { FastifyInstance } from 'fastify';
 import { RARITIES, STYLE, stylesFor } from '@kanu/shared/balance';
 import { showcaseSlots } from '../game/showcase.ts';
@@ -28,7 +29,7 @@ export function registerInventoryRoutes(app: FastifyInstance, deps: Deps) {
       const card = repo.ownedInstance(req.user!.id, id);
       if (!card) return fail(reply, 404, 'not_found', '找不到这张卡');
       if (card.location !== 'inventory' && card.location !== 'showcase') return fail(reply, 400, 'busy', '这张卡现在不能动');
-      const slots = showcaseSlots(repo.getPlayer(req.user!.id)?.showcase_level ?? 0);
+      const slots = showcaseSlots(repo.getPlayer(req.user!.id)?.showcase_level ?? 0, techEffects(repo.techOwned(req.user!.id)).showcaseSlots);
       if (on && card.location !== 'showcase' && slots === 0) return fail(reply, 400, 'showcase_locked', '还没有珍藏柜，先在库存页解锁');
       if (on && card.location !== 'showcase' && repo.countLocation(req.user!.id, 'showcase') >= slots) {
         return fail(reply, 400, 'showcase_full', `珍藏柜只有 ${slots} 格，先取出一张或者升级珍藏柜`);

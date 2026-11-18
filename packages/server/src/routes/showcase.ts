@@ -2,6 +2,7 @@
 //   GET  /api/showcase           珍藏柜状态（等级、格数、展示分和效果）+ 柜里的卡
 //   POST /api/showcase/upgrade   解锁 / 升一级（要幂等 key，扣信用点写流水）
 // 放进 / 取出珍藏柜还是 POST /api/inventory/:id/showcase。
+import { techEffects } from '../game/tech.ts';
 import type { FastifyInstance } from 'fastify';
 import { SHOWCASE, type Rarity } from '@kanu/shared/balance';
 import type { ShowcaseResponse, ShowcaseStatus, ShowcaseUpgradeResponse } from '@kanu/shared/types';
@@ -16,7 +17,7 @@ export function showcaseStatus(repo: Deps['repo'], ownerId: string): ShowcaseSta
   const nextSpec = SHOWCASE.levels[level + 1];
   return {
     level,
-    slots: showcaseSlots(level),
+    slots: showcaseSlots(level, techEffects(repo.techOwned(ownerId)).showcaseSlots),
     used: cards.length,
     score,
     priceBonusPct: Math.round((fx.priceMult - 1) * 100),

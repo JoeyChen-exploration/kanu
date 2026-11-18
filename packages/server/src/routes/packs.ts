@@ -4,6 +4,7 @@
 //   GET  /api/packs              库存里还没拆的卡包（按种类分组）
 //   POST /api/packs/:id/open     拆一包：发卡、保底、编号限定、点亮图鉴、播报
 // 写操作都在一个事务里、要求幂等 key，信用点变动写流水（DR-1、DR-2）。播报在事务提交之后再发。
+import { techEffects } from '../game/tech.ts';
 import type { FastifyInstance } from 'fastify';
 import { ANNOUNCE, PACKS, RARITIES, SERIAL_LIMIT, STORE, STYLE, WHOLESALE, atLeast, type PackType, type Rarity } from '@kanu/shared/balance';
 import type { BuyPacksResponse, CardView, OpenPackResponse, SealedPacksResponse, StoreResponse } from '@kanu/shared/types';
@@ -25,10 +26,13 @@ export function registerPackRoutes(app: FastifyInstance, deps: Deps, now: () => 
   const { repo } = deps;
   const unlimited = (id: string) => deps.config.devUnlimitedIds.has(id);
 
+  /** 电脑订货每天限购：基础值 + 科技树（G1 批发证） */
+  const packsPerDay = (userId: string) => STORE.packsPerDay + techEffects(repo.techOwned(userId)).storePacksPerDay;
+
   const leftToday = (userId: string) => {
     if (unlimited(userId)) return null;
     const player = repo.getPlayer(userId)!;
-    return Math.max(0, STORE.packsPerDay - repo.packsOpenedToday(userId, dayKey(player.game_day)));
+    return Math.max(0, packsPerDay(userId) - repo.packsOpenedToday(userId, dayKey(player.game_day)));
   };
 
   app.get('/api/store', async (req, reply) => {
@@ -78,8 +82,9 @@ export function registerPackRoutes(app: FastifyInstance, deps: Deps, now: () => 
       const total = priced.reduce((n, x) => n + x.count, 0);
       // 测试账号（DEV_UNLIMITED_IDS，只在 DEV_AUTH=1 时有）：不限购、不扣钱
       const free = unlimited(userId);
-      if (!free && used + total > STORE.packsPerDay) {
-        throw new ApiError(400, 'daily_limit', `电脑订货每个营业日最多 ${STORE.packsPerDay} 包，今天还能买 ${Math.max(0, STORE.packsPerDay - used)} 包`);
+      const limit = packsPerDay(userId);
+      if (!free && used + total > limit) {
+        throw new ApiError(400, 'daily_limit', `电脑订货每个营业日最多 ${limit} 包，今天还能买 ${Math.max(0, limit - used)} 包`);
       }
       const cost = free ? 0 : priced.reduce((n, x) => n + x.price * x.count, 0);
       if (player.credits < cost) throw new ApiError(400, 'insufficient_credits', `信用点不够：要 ${cost}，你有 ${player.credits}`);
@@ -90,7 +95,7 @@ export function registerPackRoutes(app: FastifyInstance, deps: Deps, now: () => 
       for (let i = 0; i < total; i += 1) repo.bumpNormalPacks(userId, day);
       repo.logCredits(userId, t, -cost, free ? 'store_test_free' : 'store', credits, { items: priced.map(({ seriesId, count }) => ({ seriesId, count })), packs: packIds });
       const response: BuyPacksResponse = {
-        ok: true, credits, packIds, packsLeftToday: free ? null : STORE.packsPerDay - used - total,
+        ok: true, credits, packIds, packsLeftToday: free ? null : limit - used - total,
       };
       repo.putIdempotent(userId, key, response, t);
       return response;

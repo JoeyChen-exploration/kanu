@@ -16,7 +16,7 @@
 // 没算进去的：送评、鉴定、科技树、顾客的具体标签、抵押赎回、新闻和供需。
 import {
   COUNTER, CUSTOMER, CUSTOMER_TYPES, EXCHANGE, GRAND_COLLECTOR, MIDDLEMAN, PACKS, PHONE, WHOLESALE, atLeast, type Grade, QUESTS, type QuestMetric, PLAYER, RARITY, RENT, SEASON, SHOP_PRICE, SHOWCASE,
-  type CustomerType, type Rarity, type Style,
+  STORE, TECH_NODES, type CustomerType, type Rarity, type Style,
 } from '@kanu/shared/balance';
 import { openPack } from '../packages/server/src/game/cards.ts';
 import { gradingFee, publicPrice, rentForWeek } from '../packages/server/src/game/price.ts';
@@ -24,6 +24,7 @@ import { between, chance, pickPpm, seeded, type Rng } from '../packages/server/s
 import { detectFake, rollCustomerCount } from '../packages/server/src/game/customers.ts';
 import { gradeCard, inspect, rollErrata } from '../packages/server/src/game/appraisal.ts';
 import { grandChancePpm, showcaseEffects, showcaseScore, showcaseSlots } from '../packages/server/src/game/showcase.ts';
+import { techEffects } from '../packages/server/src/game/tech.ts';
 
 interface Card {
   rarity: Rarity; style: Style; value: number;
@@ -115,6 +116,8 @@ interface SeasonResult {
   grandSales: number;
   grandIncome: number;
   /** 交易策略：批发几盒、送评几张（封壳 / 拒评）、被顾客识破几次、假卡卖给中间人几张、送评花了多少 */
+  /** 科技树策略：点了几个节点、花了多少、第几周点满 MVP */
+  tech?: { nodes: number; spent: number; doneWeek: number | null };
   trade?: { boxes: number; graded: number; slabs: number; rejected: number; caught: number; fakesToMiddleman: number; gradingSpent: number };
 }
 
@@ -126,7 +129,18 @@ const cardScore = (c: Card) => showcaseScore([c]);
  */
 type ShowcaseMode = 'off' | 'hoard' | 'sell';
 
-function season(rng: Rng, packsPerDay: number, reserveFromDay: number, mode: ShowcaseMode, trade = false): SeasonResult {
+/**
+ * 科技树策略：只点对这种打法有用的节点（柜台 C1 → C2 人人有用；珍藏柜打法加 S1；批发送评打法加 A1、P1；
+ * 每天开不到限购的人不点 G1），先留出这周租金 + 1,000 再点，每天最多点一个。
+ */
+const techOrder = (mode: ShowcaseMode, trade: boolean, packsPerDay: number) =>
+  ['C1', 'C2', ...(mode !== 'off' ? ['S1'] : []), ...(trade ? ['A1', 'P1'] : []), ...(packsPerDay >= STORE.packsPerDay ? ['G1'] : [])];
+
+function season(rng: Rng, packsPerDay: number, reserveFromDay: number, mode: ShowcaseMode, trade = false, tech = false): SeasonResult {
+  const techOwned = new Set<string>();
+  let techSpent = 0;
+  let techDoneWeek: number | null = null;
+  let fx = techEffects(techOwned);
   const useShowcase = mode !== 'off';
   // 交易策略（trade）：钱够就买电话，每天批发一盒；新卡都用放大镜看，看出假的只卖中间人；
   // SR 以上、估品相 9 分以上或认出错版的送评，第二天出结果。鉴定相关的随机数用单独的 aRng
@@ -165,7 +179,7 @@ function season(rng: Rng, packsPerDay: number, reserveFromDay: number, mode: Sho
   const addCard = (c: { rarity: Rarity; style: Style; authenticity: string; grade: Grade }, reserve = 0) => {
     const card: Card = { rarity: c.rarity, style: c.style, value: publicPrice({ rarity: c.rarity, style: c.style, publicGrade: null }), auth: c.authenticity, grade: String(c.grade), misprint: rollErrata(aRng) };
     if (trade) {
-      const look = inspect(aRng, { authenticity: card.auth, grade: card.grade, misprint: card.misprint });
+      const look = inspect(aRng, { authenticity: card.auth, grade: card.grade, misprint: card.misprint }, fx.errataDetectPpm);
       if (look.looks === 'fake') card.knownFake = true;
       const good = ['9', '10', 'BL'].includes(look.gradeRange[0]) || look.errataFound;
       const fee = gradingFee(card.rarity, card.style);
@@ -178,7 +192,7 @@ function season(rng: Rng, packsPerDay: number, reserveFromDay: number, mode: Sho
     inv.push(card);
   };
   const restock = () => {
-    const slots = showcaseSlots(level);
+    const slots = showcaseSlots(level, fx.showcaseSlots);
     const pool = [...shelf, ...inv].sort((a, b) => cardScore(b) - cardScore(a) || b.value - a.value);
     shelf = pool.slice(0, slots).filter((c) => cardScore(c) > 0);
     const kept = new Set(shelf);
@@ -193,6 +207,14 @@ function season(rng: Rng, packsPerDay: number, reserveFromDay: number, mode: Sho
     for (let day = 0; day < 7; day += 1) {
       const reserve = shopWeek || day < reserveFromDay ? 0 : rentForWeek(week);
       dayIndex += 1;
+      if (tech) {
+        const next = techOrder(mode, trade, packsPerDay).map((id) => TECH_NODES.find((n) => n.id === id)!).find((n) => !techOwned.has(n.id)
+          && n.requires.every((r) => techOwned.has(r)) && n.conditions.every((c) => c.kind !== 'metric' || qstats[c.metric] >= c.target));
+        if (next && credits - next.price >= (shopWeek ? 0 : rentForWeek(week)) + 1000) {
+          credits -= next.price; techSpent += next.price; techOwned.add(next.id); fx = techEffects(techOwned);
+          if (techOwned.size === techOrder(mode, trade, packsPerDay).length) techDoneWeek ??= w;
+        }
+      }
       if (trade) {
         // 评级社出结果：真卡封壳按分定价（错版 ×），假卡拒评、知道是假的
         const back = gradingQueue.filter((g) => g.due <= dayIndex);
@@ -207,7 +229,7 @@ function season(rng: Rng, packsPerDay: number, reserveFromDay: number, mode: Sho
         }
         const keep = reserve + 1000;
         if (!phone && credits - PHONE.price >= keep) { credits -= PHONE.price; spent += PHONE.price; phone = true; }
-        const box = Math.round(PACKS.themed.price * WHOLESALE.discount) * WHOLESALE.boxPacks;
+        const box = Math.round(PACKS.themed.price * fx.wholesaleDiscount) * WHOLESALE.boxPacks;
         // 隔日送达：昨天订的今天送货员来柜台（占一个顾客名额），钱够就收货付款，不够就拒收
         if (orderedDay !== null && dayIndex >= orderedDay + WHOLESALE.deliveryDays) {
           orderedDay = null; courierToday = 1;
@@ -247,7 +269,7 @@ function season(rng: Rng, packsPerDay: number, reserveFromDay: number, mode: Sho
       const mult = showcaseEffects(score).priceMult;
       // 照卖：柜里的卡放回可卖的池子，今天卖掉的明天再补
       if (mode === 'sell') { inv.push(...shelf); shelf = []; }
-      const todayCustomers = Math.max(0, rollCustomerCount(rng, PER_DAY_SHIFT) - courierToday);
+      const todayCustomers = Math.max(0, rollCustomerCount(rng, PER_DAY_SHIFT + fx.customersPerDay) - courierToday);
       courierToday = 0;
       for (let k = 0; k < todayCustomers; k += 1) {
         // 珍藏柜展示分够高时，有几率换成大藏家（和服务器同一个函数）
@@ -298,6 +320,7 @@ function season(rng: Rng, packsPerDay: number, reserveFromDay: number, mode: Sho
     if (!shopWeek && credits >= SHOP + SHOP_BUFFER) { credits -= SHOP; shopWeek = w; }
   }
   return { bankrupts, shopWeek, weeklyNet, endCredits: credits, showcaseLevel: level, dailyScore, showcaseSpent, showcaseWeek, grandVisits, grandSales, grandIncome, questIncome, firstBankruptWeek,
+    tech: tech ? { nodes: techOwned.size, spent: techSpent, doneWeek: techDoneWeek } : undefined,
     trade: trade ? { boxes, graded, slabs, rejected, caught, fakesToMiddleman, gradingSpent } : undefined };
 }
 
@@ -307,17 +330,17 @@ const fmt = (n: number) => Math.round(n).toLocaleString('en-US');
 console.log(`卡奴经济模拟：只走正规，${SEASONS} 个赛季 × ${SEASON.weeks} 周，种子 ${SEED}\n`);
 const MODE_LABEL: Record<ShowcaseMode, string> = { off: '', hoard: '，珍藏柜（柜里的卡不卖）', sell: '，珍藏柜（柜里的卡照卖）' };
 const VARIANTS = ([
-  [2, 'off', false], [2, 'off', true], [2, 'sell', false], [2, 'hoard', false],
-  ...(ONLY_MAIN ? [] : [[5, 'off', false], [5, 'off', true], [5, 'sell', false], [5, 'hoard', false]]),
-]) as unknown as ReadonlyArray<readonly [number, ShowcaseMode, boolean]>;
-for (const [packsPerDay, mode, trade] of VARIANTS) {
+  [2, 'off', false, false], [2, 'off', false, true], [2, 'off', true, false], [2, 'off', true, true], [2, 'sell', false, false], [2, 'sell', false, true], [2, 'hoard', false, false],
+  ...(ONLY_MAIN ? [] : [[5, 'off', false, false], [5, 'off', false, true], [5, 'off', true, false], [5, 'sell', false, false], [5, 'hoard', false, false]]),
+]) as unknown as ReadonlyArray<readonly [number, ShowcaseMode, boolean, boolean]>;
+for (const [packsPerDay, mode, trade, tech] of VARIANTS) {
   const reserveFromDay = 5;
-  const label = `周五起才留租金${MODE_LABEL[mode]}${trade ? '，电话批发 + 放大镜 + 送评' : ''}`;
+  const label = `周五起才留租金${MODE_LABEL[mode]}${trade ? '，电话批发 + 放大镜 + 送评' : ''}${tech ? '，科技树（只点这种打法用得上的节点）' : ''}`;
   const useShowcase = mode !== 'off';
   const rng = seeded(SEED);
   questRng = seeded(SEED + 7919);
   aRng = seeded(SEED + 104729);
-  const rs = Array.from({ length: SEASONS }, () => season(rng, packsPerDay, reserveFromDay, mode, trade));
+  const rs = Array.from({ length: SEASONS }, () => season(rng, packsPerDay, reserveFromDay, mode, trade, tech));
   const nets = rs.flatMap((r) => r.weeklyNet);
   const shopWeeks = rs.flatMap((r) => (r.shopWeek ? [r.shopWeek] : []));
   const bankruptRate = rs.filter((r) => r.bankrupts > 0).length / SEASONS;
@@ -338,6 +361,11 @@ for (const [packsPerDay, mode, trade] of VARIANTS) {
   if (trade) {
     const avg = (k: 'boxes' | 'graded' | 'slabs' | 'rejected' | 'caught' | 'fakesToMiddleman' | 'gradingSpent') => rs.reduce((x, r) => x + (r.trade?.[k] ?? 0), 0) / SEASONS;
     console.log(`交易 每季平均：批发 ${avg('boxes').toFixed(1)} 盒，送评 ${avg('graded').toFixed(1)} 张（封壳 ${avg('slabs').toFixed(1)}、拒评 ${avg('rejected').toFixed(1)}，花 ${fmt(avg('gradingSpent'))}），假卡被顾客识破 ${avg('caught').toFixed(1)} 次、卖给中间人 ${avg('fakesToMiddleman').toFixed(1)} 张`);
+  }
+  if (tech) {
+    const t = rs.map((r) => r.tech!);
+    const done = t.flatMap((x) => (x.doneWeek ? [x.doneWeek] : []));
+    console.log(`科技树 每季平均点 ${(t.reduce((a, x) => a + x.nodes, 0) / SEASONS).toFixed(1)} 个、花 ${fmt(t.reduce((a, x) => a + x.spent, 0) / SEASONS)}；点完这种打法要的节点的 ${((done.length / SEASONS) * 100).toFixed(0)}%（中位第 ${done.length ? pct(done, 0.5) : '-'} 周）`);
   }
   if (QUESTS_ON) console.log(`新手任务奖励 平均             ${fmt(rs.reduce((s, r) => s + r.questIncome, 0) / SEASONS)} 信用点`);
   if (useShowcase) {

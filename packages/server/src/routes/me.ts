@@ -1,4 +1,5 @@
 // GET /api/me：玩家状态（SRS 6.1）：名字、信用点、信誉、周数、金币余额（FR-AUTH-7）、保底进度、今天还能开几包。
+import { techEffects } from '../game/tech.ts';
 import type { FastifyInstance } from 'fastify';
 import { STORE } from '@kanu/shared/balance';
 import type { MeResponse } from '@kanu/shared/types';
@@ -22,7 +23,7 @@ export function registerMeRoutes(app: FastifyInstance, deps: Deps, now: () => nu
       weekNo: player.week_no,
       wallet,
       pityCount: player.pity_count,
-      packsLeftToday: Math.max(0, STORE.packsPerDay - used),
+      packsLeftToday: Math.max(0, STORE.packsPerDay + techEffects(deps.repo.techOwned(player.discord_id)).storePacksPerDay - used),
       gameDay: player.game_day,
       devTools: deps.config.devUnlimitedIds.has(req.user.id),
     };

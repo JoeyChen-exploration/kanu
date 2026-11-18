@@ -407,6 +407,40 @@ export interface QuestView {
 export interface QuestsResponse {
   ok: true;
   quests: QuestView[];
+  /** 任务栏里追踪的科技树节点（没追踪 / 已点过就是 null） */
+  tracked: TechNodeView | null;
+}
+
+/** 科技树（docs/TECH-TREE.md）：一个节点在这个玩家眼里的样子 */
+export interface TechNodeView {
+  id: string;
+  branch: string;
+  branchName: string;
+  tier: number;
+  name: string;
+  price: number;
+  effect: string;
+  flavor: string;
+  requires: Array<{ id: string; name: string; owned: boolean }>;
+  conditions: Array<{ text: string; current: number; target: number; met: boolean }>;
+  owned: boolean;
+  /** 前置和条件都满足了（钱够不够另看） */
+  unlockable: boolean;
+  tracked: boolean;
+}
+export interface TechResponse {
+  ok: true;
+  credits: number;
+  blueprints: number;
+  branches: Array<{ id: string; name: string; contact: string; nodes: TechNodeView[] }>;
+}
+export interface TechBuyResponse {
+  ok: true;
+  credits: number;
+  blueprints: number;
+  /** 这次从信用点换了多少蓝图 */
+  converted: number;
+  node: TechNodeView;
 }
 
 /** POST /api/quests/:id/claim */

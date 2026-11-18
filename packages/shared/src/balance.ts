@@ -373,6 +373,52 @@ export const QUESTS: Array<{ id: string; title: string; hint: string; tab: Quest
 /** 任务栏里同时显示几条还没领奖的任务（能领奖的置顶且全部显示，不受这个数限制） */
 export const QUEST_BAR = { visible: 3 };
 
+/**
+ * 科技树（docs/TECH-TREE.md，MVP 第一阶段 6 个节点，2026-11-18 上线）。
+ * 节点用"蓝图"买：信用点按 BLUEPRINT.perCredit 单向换成蓝图，不能换回、不能兑金币。MVP 买节点时蓝图不够的部分自动用信用点换。
+ * 永久保留：赛季末、破产都不清空。条件：前置节点全部点过 + 额外条件（里程碑 / 信誉，只在购买那一刻检查）。
+ * 效果由 server/game/tech.ts 读这张表计算，路由里不写 if。
+ */
+export const BLUEPRINT = { perCredit: 1 };
+export type TechBranch = 'counter' | 'appraisal' | 'goods' | 'phone' | 'store';
+export const TECH_BRANCHES: Record<TechBranch, { name: string; contact: string }> = {
+  counter: { name: '柜台', contact: '招牌匠阿灯' },
+  appraisal: { name: '鉴定', contact: '退休鉴定师眼镜婆' },
+  goods: { name: '进货', contact: '货郎七号' },
+  phone: { name: '电话', contact: '接线员零号台' },
+  store: { name: '店面', contact: '房东塔姆先生' },
+};
+export type TechEffect =
+  | { kind: 'patience'; delta: number }
+  | { kind: 'customersPerDay'; delta: number }
+  | { kind: 'errataDetectPpm'; value: number }
+  | { kind: 'storePacksPerDay'; delta: number }
+  | { kind: 'showcaseSlots'; delta: number }
+  | { kind: 'wholesaleDiscount'; value: number };
+export type TechCondition = { kind: 'metric'; metric: QuestMetric; target: number } | { kind: 'reputation'; min: number };
+export interface TechNode {
+  id: string; branch: TechBranch; tier: number; name: string; requires: string[]; price: number;
+  conditions: TechCondition[]; effects: TechEffect[];
+  /** 效果说明（"当前 → 点了之后"） */
+  effect: string;
+  /** 联系人的一句话 */
+  flavor: string;
+}
+export const TECH_NODES: TechNode[] = [
+  { id: 'C1', branch: 'counter', tier: 1, name: '霓虹招牌', requires: [], price: 1500, conditions: [], effects: [{ kind: 'patience', delta: 1 }],
+    effect: '所有顾客耐心 +1', flavor: '灯一亮，人就不急着走。' },
+  { id: 'C2', branch: 'counter', tier: 2, name: '二号柜台', requires: ['C1'], price: 6000, conditions: [{ kind: 'metric', metric: 'sales', target: 10 }], effects: [{ kind: 'customersPerDay', delta: 1 }],
+    effect: '每天多来 1 位顾客', flavor: '多一张台面，多一个冤大头。' },
+  { id: 'A1', branch: 'appraisal', tier: 1, name: '好放大镜', requires: [], price: 1500, conditions: [], effects: [{ kind: 'errataDetectPpm', value: 900_000 }],
+    effect: '放大镜认出错版 80% → 90%', flavor: '镜片是从报废的轨道望远镜上拆的。' },
+  { id: 'G1', branch: 'goods', tier: 1, name: '批发证', requires: [], price: 1500, conditions: [], effects: [{ kind: 'storePacksPerDay', delta: 1 }],
+    effect: '电脑订货每天限购 5 → 6 包', flavor: '七号说：一张证，多一箱。' },
+  { id: 'P1', branch: 'phone', tier: 1, name: '零号台熟人', requires: [], price: 2000, conditions: [], effects: [{ kind: 'wholesaleDiscount', value: 0.75 }],
+    effect: '电话批发每包 8 折 → 7.5 折', flavor: '零号台：老熟人了，给你转便宜的批发商。' },
+  { id: 'S1', branch: 'store', tier: 1, name: '保险柜', requires: [], price: 1500, conditions: [], effects: [{ kind: 'showcaseSlots', delta: 2 }],
+    effect: '珍藏柜额外 +2 格（要先解锁珍藏柜）', flavor: '塔姆先生对有保险柜的租客客气一点。' },
+];
+
 /** 开包播报（FR-PACK-6）：开出这个稀有度及以上、或编号限定时全服播报 */
 export const ANNOUNCE = { minRarity: 'UR' as Rarity };
 

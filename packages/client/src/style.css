@@ -583,3 +583,33 @@ h2 small { color: var(--muted); font-weight: normal; font-size: 13px; margin-lef
 .delivery-box .box-art { width: 72px; aspect-ratio: 4 / 3; border-radius: 6px; flex: none; display: grid; place-items: center; align-content: center; font-weight: 800; color: #3a2a10; background: repeating-linear-gradient(90deg, #c9a46a 0 10px, #bf9a5e 10px 20px); box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.2), inset 0 8px 0 rgba(0, 0, 0, 0.12); }
 .delivery-box .box-art small { font-weight: 600; font-size: 11px; }
 .price-strong { color: var(--accent, #f0c060); }
+
+/* 科技树（店铺页，docs/TECH-TREE.md）：五条分支并排，窄屏换行 */
+.tech { margin-top: 18px; }
+.tech-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin-bottom: 8px; }
+.tech-head h2 { margin: 0; font-size: 16px; }
+.tech-branches { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
+.tech-branch { display: flex; flex-direction: column; gap: 8px; padding: 8px; border-radius: 10px; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--line, #2a2f3a); }
+.tech-branch-head { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; }
+.tech-node { display: flex; flex-direction: column; gap: 4px; padding: 8px; border-radius: 8px; background: var(--panel, #1a1e27); border: 1px solid transparent; }
+.tech-node.ready { border-color: var(--accent); }
+.tech-node.owned { border-color: #3d8f5a; background: rgba(61, 143, 90, 0.12); }
+.tech-node.locked { opacity: 0.75; }
+.tech-node-top { display: flex; align-items: baseline; gap: 6px; }
+.tech-id { font-size: 11px; font-weight: 800; color: var(--muted); }
+.tech-tier { margin-left: auto; font-size: 11px; color: var(--muted); }
+.tech-effect { margin: 0; font-size: 13px; }
+.tech-flavor { margin: 0; font-size: 11px; color: var(--muted); font-style: italic; }
+.tech-conds { margin: 0; padding: 0; list-style: none; font-size: 11px; color: var(--muted); }
+.tech-conds li.met { color: #6fcf8f; }
+.tech-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.tech-actions .primary { flex: 1; padding: 6px 8px; font-size: 13px; white-space: nowrap; }
+.tech-actions .chip { white-space: nowrap; }
+.tech-owned { font-size: 12px; font-weight: 700; color: #6fcf8f; }
+/* 任务栏里追踪的节点 */
+.tech-track .quest-main { display: flex; flex-direction: column; gap: 3px; }
+.tech-track .quest-title small { font-weight: 400; color: var(--muted); margin-left: 4px; }
+.tech-track-cond { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 8px; }
+.tech-track-cond .quest-hint { grid-row: 1; }
+.tech-track-cond .quest-prog { grid-row: 2; }
+.tech-track-cond .quest-num { grid-row: 2; }

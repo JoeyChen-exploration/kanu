@@ -30,10 +30,11 @@ export interface Inspection {
 }
 
 /** 放大镜查验：对假卡也照样估品相、找错版，估品相本身不暴露真假 */
-export function inspect(rng: Rng, card: { authenticity: string; grade: string; misprint: boolean }): Inspection {
+/** errataDetectPpm：放大镜认出错版的概率（科技树 A1 好放大镜会提高） */
+export function inspect(rng: Rng, card: { authenticity: string; grade: string; misprint: boolean }, errataDetectPpm: number = APPRAISAL.errataDetect): Inspection {
   const looks = isFake(card.authenticity) && chance(rng, APPRAISAL.loupeDetect[card.authenticity as 'low_fake' | 'high_fake']) ? 'fake' : 'looks_real';
   const gradeRange = loupeGrade(rng, card.grade);
-  const errataFound = card.misprint && chance(rng, APPRAISAL.errataDetect);
+  const errataFound = card.misprint && chance(rng, errataDetectPpm);
   return { looks, gradeRange, errataFound };
 }
 

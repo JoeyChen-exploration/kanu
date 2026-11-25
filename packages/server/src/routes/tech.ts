@@ -15,10 +15,12 @@ export function techNodeViews(repo: Deps['repo'], ownerId: string): TechNodeView
   const byId = new Map(TECH_NODES.map((n) => [n.id, n]));
   return TECH_NODES.map((n: TechNode) => {
     const block = techBlock(n, owned, ctx);
+    const ref = (r: string) => ({ id: r, name: byId.get(r)?.name ?? r, owned: owned.has(r) });
     return {
       id: n.id, branch: n.branch, branchName: TECH_BRANCHES[n.branch].name, tier: n.tier, name: n.name, price: n.price, effect: n.effect, flavor: n.flavor,
-      requires: n.requires.map((r) => ({ id: r, name: byId.get(r)?.name ?? r, owned: owned.has(r) })),
+      requires: n.requires.map(ref), anyOf: (n.anyOf ?? []).map(ref), exclusive: n.exclusive ? ref(n.exclusive) : null,
       conditions: n.conditions.map((c) => checkCondition(c, ctx)),
+      soon: n.soon ?? null, conditionText: n.conditionText ?? null,
       owned: owned.has(n.id), unlockable: block === null, tracked: player.tech_tracked === n.id,
     };
   });
@@ -57,8 +59,11 @@ export function registerTechRoutes(app: FastifyInstance, deps: Deps, now: () => 
       if (!player) throw new ApiError(401, 'unauthorized', '请重新打开卡奴登录');
       const view = techNodeViews(repo, userId).find((v) => v.id === node.id)!;
       if (view.owned) throw new ApiError(400, 'owned', `「${node.name}」已经点过了`);
+      if (view.soon) throw new ApiError(400, 'soon', `「${node.name}」第 ${view.soon} 阶段才开放`);
+      if (view.exclusive?.owned) throw new ApiError(400, 'exclusive', `「${node.name}」和「${view.exclusive.name}」只能二选一`);
       const missing = view.requires.filter((r) => !r.owned);
       if (missing.length) throw new ApiError(400, 'requires', `要先点：${missing.map((r) => r.name).join('、')}`);
+      if (view.anyOf.length && !view.anyOf.some((r) => r.owned)) throw new ApiError(400, 'requires', `要先点其中一个：${view.anyOf.map((r) => r.name).join(' / ')}`);
       const unmet = view.conditions.filter((c) => !c.met);
       if (unmet.length) throw new ApiError(400, 'conditions', `还没满足：${unmet.map((c) => `${c.text}（${c.current} / ${c.target}）`).join('、')}`);
       // 蓝图先用；不够的部分用信用点换（1 信用点 = perCredit 蓝图）

@@ -422,7 +422,14 @@ export interface TechNodeView {
   effect: string;
   flavor: string;
   requires: Array<{ id: string; name: string; owned: boolean }>;
+  /** 这几个里点过任意一个就行 */
+  anyOf: Array<{ id: string; name: string; owned: boolean }>;
+  /** 二选一的另一个节点 */
+  exclusive: { id: string; name: string; owned: boolean } | null;
   conditions: Array<{ text: string; current: number; target: number; met: boolean }>;
+  /** 还没开放的节点：第几阶段开放、之后的解锁条件说明 */
+  soon: number | null;
+  conditionText: string | null;
   owned: boolean;
   /** 前置和条件都满足了（钱够不够另看） */
   unlockable: boolean;

@@ -390,6 +390,8 @@ export interface MeResponse {
   gameDay: number;
   /** 房租（FR-RENT-6） */
   rent: RentStatus;
+  /** 管理员（ADMIN_USER_IDS）才是 true：前端显示管理页（FR-ADMIN-1） */
+  isAdmin: boolean;
   /** 测试账号（DEV_AUTH=1 且在 DEV_UNLIMITED_IDS 里）才是 true：前端显示测试工具 */
   devTools: boolean;
 }

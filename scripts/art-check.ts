@@ -14,6 +14,7 @@ const STYLES = ['standard', 'holo', 'ice', 'gold', 'dark', 'serial'];
 const RARITIES = ['N', 'R', 'SR', 'SSR', 'UR', 'LR', 'MR'];
 const LOUPE = ['halftone', 'ink', 'misregister', 'holo', 'border', 'scratch', 'dust', 'gap'];
 const CONTACTS = ['adeng', 'glasses', 'courier7', 'operator0', 'tam'];
+const SLAB = ['case', 'case-black', 'tag-error', 'stamp-reject'];
 
 const series = fs.readdirSync(SERIES_DIR).filter((f) => f.endsWith('.json')).map((f) => JSON.parse(fs.readFileSync(path.join(SERIES_DIR, f), 'utf8')) as { id: string; cards: Array<{ id: string }> });
 const cardIds = new Set(series.flatMap((s) => s.cards.map((c) => c.id)));
@@ -73,7 +74,9 @@ function ruleFor(dir: string, name: string): { rule: Rule; key: string } | strin
     case 'wear': return ['1', '2', '3'].includes(base) ? { key: `wear/${base}`, rule: { dims: [630, 880], alpha: true } } : '磨损只能是 1 2 3';
     case 'scenes': return /^[a-z0-9-]+$/.test(base) ? { key: `scenes/${base}`, rule: { landscape: true, minDims: [1920, 1080], limit: LIMIT.scene } } : '文件名用小写英文、数字、短横线';
     case 'brand':
-      return /^[a-z0-9-]+$/.test(base) ? { key: `brand/${base}`, rule: { limit: 600 * KB } } : '文件名用小写英文、数字、短横线';
+      // 品牌图只用来上传 Developer Portal，游戏里不加载，不卡体积
+      return /^[a-z0-9-]+$/.test(base) ? { key: `brand/${base}`, rule: { limit: Infinity } } : '文件名用小写英文、数字、短横线';
+    case 'slab': return SLAB.includes(base) ? { key: `slab/${base}`, rule: { alpha: true } } : `封壳只能是 ${SLAB.join(' ')}`;
     case 'ui': case 'items': case 'binders': case 'collection': case 'showcase': case 'tech': case 'logos':
       return /^[a-z0-9-]+$/.test(base) ? { key: `${dir}/${base}`, rule: { alpha: dir === 'ui' || dir === 'items' || dir === 'tech' || dir === 'logos' } } : '文件名用小写英文、数字、短横线';
     default: return `不认识的目录 art/${dir}/`;
@@ -105,7 +108,7 @@ function main() {
     if (info.format !== name.split('.').pop()) errors.push(`${rel}：扩展名是 .${name.split('.').pop()}，内容其实是 ${info.format}`);
     const { rule } = r;
     const limit = rule.limit ?? LIMIT.other;
-    if (buf.length > limit) errors.push(`${rel}：${Math.ceil(buf.length / KB)} KB，超过 ${limit / KB} KB`);
+    if (Number.isFinite(limit) && buf.length > limit) errors.push(`${rel}：${Math.ceil(buf.length / KB)} KB，超过 ${limit / KB} KB`);
     const size = `${info.width} × ${info.height}`;
     if (rule.dims && (info.width !== rule.dims[0] || info.height !== rule.dims[1])) errors.push(`${rel}：${size}，要 ${rule.dims[0]} × ${rule.dims[1]}`);
     if (rule.square && info.width !== info.height) errors.push(`${rel}：${size}，要正方形`);
@@ -128,6 +131,7 @@ function main() {
   console.log(`  联系人      ${count('contacts/')} / ${CONTACTS.length}`);
   console.log(`  放大镜细节  ${count('loupe/')} / ${LOUPE.length}`);
   console.log(`  磨损        ${count('wear/')} / 3`);
+  console.log(`  封壳        ${count('slab/')} / ${SLAB.length}`);
   if (errors.length) {
     console.log(`\n有 ${errors.length} 个问题：`);
     for (const e of errors) console.log(`  ✗ ${e}`);

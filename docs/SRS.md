@@ -206,6 +206,7 @@ kanu/
 | FR-CTR-5 | 成交后对假卡做识破判定，识破则退款、卡退回、扣信誉 | MVP |
 | FR-CTR-6 | 便衣、举报、卖赃卡被抓 | 第二阶段 |
 | FR-CTR-7 | 顾客台词从台词表随机抽取，台词表是可编辑的 JSON 文件 | MVP |
+| FR-CTR-9 | 卡贩（柜台收卡，DESIGN 4 / 6，2026-11-26）：点了科技树 G2 卡贩门路后，每位客人有 G2 的 dealerPpm（18%）概率换成卡贩，带 DEALER.cards 张卡摆在台面客人那一侧（卡挂在玩家名下、location = offered，不算库存、不能卖 / 抵押 / 送评，放大镜能看；卡贩走了就删）。卡属性全未知（fakePpm 假卡、stolenPpm 赃物），每张显示市场价；他心里的底价是市场价 × askPct（隐藏，不发给玩家）。`POST /api/counter/:id/buy { cardId, price }`（幂等）：够底价成交（扣信用点、进卡册 / 桌面、acquired = dealer 公开标"收"、图鉴不点亮），不够他还价、耐心减 1，用完就走；请走卡贩没收的卡他带走 | 第二阶段 |
 | FR-CTR-8 | 大藏家（DESIGN 8.1）：珍藏柜展示分 ≥ GRAND_COLLECTOR.minScore 时，每位进门的顾客有 min(maxPpm, 展示分 × ppmPerPoint) 的几率换成大藏家；只要 UR 以上，价格系数 2.8（富人 2 倍），耐心 2，识假很强 | MVP |
 
 ### 4.6 房租、破产、买店（RENT）

@@ -486,11 +486,12 @@ function createRepo(db: Database.Database) {
      * 新卡入库。collect：要不要马上点亮图鉴——只能按公开信息决定（M3 修）：电脑订货保证正品，拆出来就点亮；
      * 以后电话批发、卡贩这些来路不明的卡传 false，等鉴定机构验真（或封壳）后再点亮。不能按隐藏的真伪决定，否则图鉴会泄露真伪
      */
-    insertCard(c: { templateId: string; ownerId: string; authenticity: string; grade: string; origin: string; style: Style; serialNo: number | null; now: number; collect?: boolean; misprint?: boolean; acquired?: 'store' | 'wholesale' }): number {
+    insertCard(c: { templateId: string; ownerId: string; authenticity: string; grade: string; origin: string; style: Style; serialNo: number | null; now: number; collect?: boolean; misprint?: boolean; acquired?: 'store' | 'wholesale' | 'dealer'; location?: 'inventory' | 'offered' }): number {
       const r = q.insertInstance.run(c.templateId, c.ownerId, c.authenticity, c.grade, c.origin, c.style, c.serialNo, c.now);
       const id = Number(r.lastInsertRowid);
       if (c.misprint) db.prepare('UPDATE card_instances SET misprint = 1 WHERE id = ?').run(id);
-      if (c.acquired === 'wholesale') db.prepare("UPDATE card_instances SET acquired = 'wholesale' WHERE id = ?").run(id);
+      if (c.acquired === 'wholesale' || c.acquired === 'dealer') db.prepare('UPDATE card_instances SET acquired = ? WHERE id = ?').run(c.acquired, id);
+      if (c.location === 'offered') db.prepare("UPDATE card_instances SET location = 'offered' WHERE id = ?").run(id);
       if (c.collect ?? true) repo.markCollected(c.ownerId, c.templateId, c.style, c.now);
       return id;
     },
@@ -727,10 +728,10 @@ function createRepo(db: Database.Database) {
 
     collection(ownerId: string) {
       const owned = new Set((db.prepare('SELECT template_id FROM collection WHERE discord_id = ?').all(ownerId) as Array<{ template_id: string }>).map((r) => r.template_id));
-      const counts = new Map((db.prepare('SELECT template_id, COUNT(*) AS n FROM card_instances WHERE owner_id = ? GROUP BY template_id').all(ownerId) as Array<{ template_id: string; n: number }>).map((r) => [r.template_id, r.n]));
+      const counts = new Map((db.prepare("SELECT template_id, COUNT(*) AS n FROM card_instances WHERE owner_id = ? AND location <> 'offered' GROUP BY template_id").all(ownerId) as Array<{ template_id: string; n: number }>).map((r) => [r.template_id, r.n]));
       // 大师图鉴：每种风格有过没有（键 "模板|风格"）、现在手上各几张
       const ownedStyles = new Set((db.prepare('SELECT template_id, style FROM collection_styles WHERE discord_id = ?').all(ownerId) as Array<{ template_id: string; style: string }>).map((r) => `${r.template_id}|${r.style}`));
-      const styleCounts = new Map((db.prepare('SELECT template_id, style, COUNT(*) AS n FROM card_instances WHERE owner_id = ? GROUP BY template_id, style').all(ownerId) as Array<{ template_id: string; style: string; n: number }>).map((r) => [`${r.template_id}|${r.style}`, r.n]));
+      const styleCounts = new Map((db.prepare("SELECT template_id, style, COUNT(*) AS n FROM card_instances WHERE owner_id = ? AND location <> 'offered' GROUP BY template_id, style").all(ownerId) as Array<{ template_id: string; style: string; n: number }>).map((r) => [`${r.template_id}|${r.style}`, r.n]));
       return { owned, counts, ownedStyles, styleCounts };
     },
 
@@ -786,7 +787,7 @@ function toCardView(r: CardViewRow): CardView {
     slab: r.slab_score ? { score: r.slab_score, subgrades: JSON.parse(r.slab_subgrades ?? '{}') as Record<string, number>, errata: r.slab_errata === 1 } : null,
     gradeRejected: r.grade_rejected === 1,
     readyDay: r.ready_day,
-    acquired: r.acquired === 'wholesale' ? 'wholesale' : 'store',
+    acquired: r.acquired === 'wholesale' ? 'wholesale' : r.acquired === 'dealer' ? 'dealer' : 'store',
   };
 }
 

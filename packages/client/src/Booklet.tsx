@@ -1,7 +1,7 @@
 // 新手手册：一本可以左右翻页的小册子（顶栏 📖 打开，第一次进游戏自动打开）。
 // 数字全部从 balance.ts 读，调了数值手册跟着变。只讲公开规则，不写顾客心理价位怎么算、品相掉没掉这类隐藏信息。
 import { useRef, useState, type ReactNode } from 'react';
-import {
+import { DEALER,
   ANNOUNCE, APPRAISAL, BINDER_KINDS, ERRATA, PHONE, GRAND_COLLECTOR, BINDERS, COUNTER, CUSTOMER, CUSTOMER_TYPES, EXCHANGE, LOOSE, PACKS, PITY, RARITIES, RARITY,
   RENT, SERIAL_LIMIT, SHOP_PRICE, SHOWCASE, STARTER_BINDER, STORE, STYLE, STYLES, UNGRADED_MULT, WHOLESALE, PAWN, type CustomerWants, } from '@kanu/shared/balance';
 import { Card, GameDayContext, fmt } from './Card.tsx';
@@ -142,6 +142,13 @@ const PAGES: Array<{ title: string; body: ReactNode }> = [
             </div>
           </div>
         ))}
+        <div className="booklet-customer">
+          <span className="booklet-avatar" aria-hidden>{AVATAR.dealer}</span>
+          <div>
+            <b>卡贩</b> <span className="hint">点了科技树"卡贩门路"才来 · 反过来卖卡给你</span>
+            <p className="hint">带 {DEALER.cards[0]}–{DEALER.cards[1]} 张卡摆在柜台上，每张标着市场价，你出价收。属性全不知道，可能是假卡、也可能是赃物，先拿放大镜看。出价够他心里的价就卖，太低他会还价，磨太久就走。收来的卡带"收"字。</p>
+          </div>
+        </div>
       </div>
     ),
   },

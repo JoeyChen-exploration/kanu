@@ -18,9 +18,9 @@ const price = (id: string) => TECH_NODES.find((n) => n.id === id)!.price;
 
 describe('科技树效果（纯函数）', () => {
   it('没点任何节点时是基础值；点了按表加', () => {
-    expect(techEffects([])).toEqual({ patience: 0, customersPerDay: 0, errataDetectPpm: APPRAISAL.errataDetect, storePacksPerDay: 0, showcaseSlots: 0, wholesaleDiscount: WHOLESALE.discount });
+    expect(techEffects([])).toEqual({ patience: 0, customersPerDay: 0, errataDetectPpm: APPRAISAL.errataDetect, storePacksPerDay: 0, showcaseSlots: 0, wholesaleDiscount: WHOLESALE.discount, dealerPpm: 0 });
     const all = techEffects(TECH_NODES.map((n) => n.id));
-    expect(all).toEqual({ patience: 1, customersPerDay: 1, errataDetectPpm: 900_000, storePacksPerDay: 1, showcaseSlots: 2, wholesaleDiscount: 0.75 });
+    expect(all).toEqual({ patience: 1, customersPerDay: 1, errataDetectPpm: 900_000, storePacksPerDay: 1, showcaseSlots: 2, wholesaleDiscount: 0.75, dealerPpm: 180_000 });
   });
 
   it('放大镜认错版的概率可以传进去', () => {
@@ -52,7 +52,7 @@ describe('科技树接口（docs/TECH-TREE.md MVP）', () => {
     expect(t.branches.map((b) => b.id)).toEqual(['counter', 'appraisal', 'goods', 'phone', 'store']);
     const nodes = t.branches.flatMap((b) => b.nodes);
     expect(nodes).toHaveLength(32);
-    expect(nodes.filter((n) => !n.soon).map((n) => n.id).sort()).toEqual(['A1', 'C1', 'C2', 'G1', 'P1', 'S1']);
+    expect(nodes.filter((n) => !n.soon).map((n) => n.id).sort()).toEqual(['A1', 'C1', 'C2', 'G1', 'G2', 'P1', 'S1']);
     expect(nodes.find((n) => n.id === 'C4a')).toMatchObject({ soon: 2, exclusive: { id: 'C4b' }, unlockable: false });
     expect(nodes.find((n) => n.id === 'C5')!.anyOf.map((r) => r.id)).toEqual(['C4a', 'C4b']);
     // 每个前置都指向树上真有的节点

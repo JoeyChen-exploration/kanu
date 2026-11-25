@@ -2,7 +2,7 @@
 // 不知道下一位是谁、今天还剩几位。挑卡（或卡包）→ 开价 / 接受还价 / 快速出售 / 请走。都接待完就能打烊。
 import { useEffect, useRef, useState } from 'react';
 import { COUNTER, CUSTOMER, type CustomerType } from '@kanu/shared/balance';
-import type { CardAppraisalResponse, CardView, InspectionView, CounterBinderPageResponse, CounterResponse, CustomerView, EligibleCardsResponse, EndDayResponse, MeResponse, OfferResponse, ReceiveResponse } from '@kanu/shared/types';
+import type { CardAppraisalResponse, CardView, InspectionView, CounterBinderPageResponse, CounterResponse, CustomerView, EligibleCardsResponse, EndDayResponse, MeResponse, OfferResponse, ReceiveResponse, DealerBuyResponse } from '@kanu/shared/types';
 import { api, newIdempotencyKey } from '../api.ts';
 import { Card, fmt } from '../Card.tsx';
 import { ART, ArtImg, CustomerAvatar, PackArt } from '../art.tsx';
@@ -13,7 +13,7 @@ import { PHONE_ZONE, dropOnPhone } from '../Phone.tsx';
 
 export const AVATAR: Record<string, string> = {
   resident: '🧑‍🔧', student: '🧒', tourist: '🧳', collector: '🧐', nostalgic: '👴',
-  rich: '🤵', speculator: '📈', streamer: '🎥', middleman: '🕶️', grand: '🎩', courier: '📦',
+  rich: '🤵', speculator: '📈', streamer: '🎥', middleman: '🕶️', grand: '🎩', courier: '📦', dealer: '🧥',
 };
 const STATUS: Record<string, string> = { sold: '成交', left: '走了', dismissed: '请走', received: '收货' };
 /** 开价时每次加减多少，玩家自己选 */
@@ -75,7 +75,10 @@ export function Counter({ onChange, onGo }: { onChange: (patch: Partial<MeRespon
       {data.current?.type === 'courier' && (
         <Delivery key={data.current.id} customer={data.current} onChange={onChange} onDone={afterResult} />
       )}
-      {data.current && data.current.type !== 'courier' && (
+      {data.current?.type === 'dealer' && (
+        <DealerDeal key={data.current.id} customer={data.current} onChange={onChange} onDone={afterResult} onUpdate={(c) => setData({ ...data, current: c })} />
+      )}
+      {data.current && data.current.type !== 'courier' && data.current.type !== 'dealer' && (
         <Deal key={data.current.id} customer={data.current} onChange={onChange} onDone={afterResult} onUpdate={(c) => setData({ ...data, current: c })}
           openBinders={openBinders} setOpenBinders={setOpenBinders} table={table} setTable={setTable} guide={guide} setGuide={setGuide} />
       )}
@@ -163,6 +166,127 @@ function Delivery({ customer, onChange, onDone }: { customer: CustomerView; onCh
         <button className="secondary" disabled={busy} onClick={refuse}>拒收（不扣钱，订单取消）</button>
         {note && <p className="deal-msg">{note}</p>}
       </div>
+    </div>
+  );
+}
+
+/**
+ * 卡贩（柜台收卡，DESIGN 4 / 6）：他把 1–3 张卡摆在台面客人那一侧，每张标着市场价（未评级）。
+ * 放大镜照样拖到卡上查验（收之前先验，假卡、赃物都有可能）；点一张卡出价收，他嫌少会还价，耐心用完就走。
+ */
+function DealerDeal({ customer, onChange, onDone, onUpdate }: { customer: CustomerView; onChange: (p: Partial<MeResponse>) => void; onDone: (text: string) => void; onUpdate: (c: CustomerView) => void }) {
+  const offers = customer.demand.offers ?? [];
+  const [sel, setSel] = useState<number | null>(offers.find((o) => o.status === 'open')?.card.id ?? null);
+  const current = offers.find((o) => o.card.id === sel) ?? null;
+  const [price, setPrice] = useState(() => Math.max(1, Math.round((current?.card.price ?? 100) * 0.5)));
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState('');
+  const [looks, setLooks] = useState<Record<number, InspectionView | null>>({});
+  const asking = useRef(new Set<number>());
+
+  const choose = (id: number) => {
+    const o = offers.find((x) => x.card.id === id);
+    if (!o || o.status !== 'open') return;
+    setSel(id);
+    setPrice(o.counterPrice ?? Math.max(1, Math.round(o.card.price * 0.5)));
+  };
+  const inspectCard = async (cardId: number) => {
+    if (looks[cardId] || asking.current.has(cardId)) return;
+    asking.current.add(cardId);
+    try {
+      const r = await api<CardAppraisalResponse>(`/cards/${cardId}/inspect`, { method: 'POST', body: {} });
+      if (r.inspection) { setLooks((m) => ({ ...m, [cardId]: r.inspection })); setNote(`🔍「${r.card.name}」：${inspectionText(r.inspection)}`); }
+    } catch (e) { setNote((e as Error).message); } finally { asking.current.delete(cardId); }
+  };
+  const loupe = useDrag<'loupe'>((_, zone) => { if (zone.startsWith('card-')) void inspectCard(Number(zone.slice(5))); });
+  const hoverId = loupe.drag?.zone?.startsWith('card-') ? Number(loupe.drag.zone.slice(5)) : null;
+  useEffect(() => {
+    if (hoverId === null) return;
+    const t = window.setTimeout(() => void inspectCard(hoverId), LOUPE_DWELL_MS);
+    return () => window.clearTimeout(t);
+  }, [hoverId]);
+  // 以前查过的卡，结论带出来
+  useEffect(() => {
+    for (const o of offers) {
+      if (looks[o.card.id] !== undefined) continue;
+      api<CardAppraisalResponse>(`/cards/${o.card.id}/appraisal`).then((r) => setLooks((m) => ({ ...m, [o.card.id]: r.inspection }))).catch(() => {});
+    }
+  }, [customer.id]);
+  const lensRect = hoverId !== null ? document.querySelector(`[data-drop="card-${hoverId}"] .card`)?.getBoundingClientRect() ?? null : null;
+  const lensCard = hoverId !== null ? offers.find((o) => o.card.id === hoverId)?.card ?? null : null;
+
+  const offer = async (p: number) => {
+    if (!current) return;
+    setBusy(true); setNote('');
+    try {
+      const r = await api<DealerBuyResponse>(`/counter/${customer.id}/buy`, { method: 'POST', body: { cardId: current.card.id, price: p }, idempotencyKey: newIdempotencyKey() });
+      onChange({ credits: r.credits });
+      if (r.outcome === 'deal') {
+        const name = current.card.name;
+        if (r.customer.status === 'sold') onDone(`收下「${name}」，花了 ${fmt(p)}。卡贩的货都收完了`);
+        else { onUpdate(r.customer); setNote(`收下「${name}」，花了 ${fmt(p)}`); const next = r.customer.demand.offers?.find((o) => o.status === 'open'); if (next) { setSel(next.card.id); setPrice(Math.max(1, Math.round(next.card.price * 0.5))); } }
+      } else if (r.outcome === 'counter') {
+        onUpdate(r.customer);
+        const cp = r.customer.demand.offers?.find((o) => o.card.id === current.card.id)?.counterPrice ?? p;
+        setNote(`他还价 ${fmt(cp)}`);
+        setPrice(cp);
+      } else onDone('卡贩嫌你出价太低，走了');
+    } catch (e) { setNote((e as Error).message); } finally { setBusy(false); }
+  };
+  const dismiss = async () => {
+    setBusy(true);
+    try { await api(`/counter/${customer.id}/dismiss`, { method: 'POST', body: {} }); onDone('请卡贩离开了'); } catch (e) { setNote((e as Error).message); } finally { setBusy(false); }
+  };
+
+  return (
+    <div className="visitor dealer">
+      <div className="deal-main">
+        <div className="visitor-head">
+          <CustomerAvatar type="dealer" id={customer.id} emoji={AVATAR.dealer!} />
+          <div>
+            <b>{customer.typeName}</b> <Patience c={customer} />
+            <p className="bubble">{customer.line}</p>
+            <p className="hint">来卖卡的：属性全不知道，可能是假卡、也可能是赃物。先拿放大镜看看再出价。收来的卡带"收"字，送评封壳后才点亮图鉴。</p>
+          </div>
+        </div>
+        <div className="counter-top">
+          <div className="counter-side customer-side dealer-side">
+            {offers.map((o) => (
+              <div key={o.card.id} data-drop={`card-${o.card.id}`} className={`dealer-offer${sel === o.card.id ? ' on' : ''}${o.status === 'bought' ? ' bought' : ''}${loupe.drag && hoverId === o.card.id ? ' loupe-over' : ''}`} onClick={() => choose(o.card.id)}>
+                <Card card={o.card} small />
+                <span className="cell-price">市场价 {fmt(o.card.price)}</span>
+                {o.status === 'bought' ? <span className="badge">已收下</span> : o.counterPrice ? <span className="badge">还价 {fmt(o.counterPrice)}</span> : null}
+                {looks[o.card.id] && <span className="hint">🔍 {inspectionText(looks[o.card.id]!)}</span>}
+              </div>
+            ))}
+          </div>
+          <button className={loupe.drag ? 'loupe-tool lifted' : 'loupe-tool'} title="放大镜：拖到卡上查验" aria-label="放大镜" {...loupe.bind('loupe')}>🔍</button>
+          <div className="counter-side my-side">
+            {current && current.status === 'open'
+              ? (
+                <div className="dealer-bid">
+                  <span>收「{current.card.name}」出价</span>
+                  <div className="price-input">
+                    <button className="step-btn" disabled={busy || price <= 10} onClick={() => setPrice(Math.max(1, price - 10))} aria-label="少 10">−</button>
+                    <input inputMode="numeric" value={price} onChange={(e) => setPrice(Math.max(1, Number(e.target.value.replace(/\D/g, '')) || 1))} />
+                    <button className="step-btn" disabled={busy} onClick={() => setPrice(price + 10)} aria-label="多 10">+</button>
+                  </div>
+                </div>
+              )
+              : <p className="counter-empty">点卡贩那边的一张卡，出价收</p>}
+          </div>
+        </div>
+        {current && current.status === 'open' && (
+          <>
+            <button className="primary" disabled={busy} onClick={() => offer(price)}>出价 {fmt(price)} 收下</button>
+            {current.counterPrice && current.counterPrice !== price && <button className="secondary" disabled={busy} onClick={() => offer(current.counterPrice!)}>接受还价 {fmt(current.counterPrice)}</button>}
+          </>
+        )}
+        <button className="secondary" disabled={busy} onClick={dismiss}>请他离开（没收的卡他带走）</button>
+        {note && <p className="deal-msg">{note}</p>}
+      </div>
+      {loupe.drag && lensRect && lensCard && <LoupeLens x={loupe.drag.x} y={loupe.drag.y} rect={lensRect} card={lensCard} inspection={looks[lensCard.id] ?? null} />}
+      {loupe.drag && <DragGhost x={loupe.drag.x} y={loupe.drag.y}><span className="loupe-ghost" aria-hidden>🔍</span></DragGhost>}
     </div>
   );
 }

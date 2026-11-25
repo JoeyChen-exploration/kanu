@@ -26,7 +26,8 @@ export function appraisalOf(repo: Deps['repo'], card: CardView): CardAppraisalRe
   return {
     ok: true, card, inspection, grading,
     gradingFee: gradingFee(card.rarity as Rarity, card.style as Style),
-    canInspect: here && inspection === null,
+    // 放大镜还能看卡贩摆在台面上、还没收下的卡（offered），收之前先验
+    canInspect: (here || card.location === 'offered') && inspection === null,
     canGrade: here && !card.slab && !card.gradeRejected && grading === null,
   };
 }

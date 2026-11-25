@@ -8,11 +8,13 @@ export interface TechEffects {
   storePacksPerDay: number;
   showcaseSlots: number;
   wholesaleDiscount: number;
+  /** 每位客人换成卡贩的概率（ppm），0 = 没点 G2 */
+  dealerPpm: number;
 }
 
 /** 已点的节点合起来的效果：加法的相加，"换成某个值"的取最好的那个 */
 export function techEffects(owned: Iterable<string>): TechEffects {
-  const fx: TechEffects = { patience: 0, customersPerDay: 0, errataDetectPpm: APPRAISAL.errataDetect, storePacksPerDay: 0, showcaseSlots: 0, wholesaleDiscount: WHOLESALE.discount };
+  const fx: TechEffects = { patience: 0, customersPerDay: 0, errataDetectPpm: APPRAISAL.errataDetect, storePacksPerDay: 0, showcaseSlots: 0, wholesaleDiscount: WHOLESALE.discount, dealerPpm: 0 };
   const ids = new Set(owned);
   for (const node of TECH_NODES) {
     if (!ids.has(node.id)) continue;
@@ -23,6 +25,7 @@ export function techEffects(owned: Iterable<string>): TechEffects {
       else if (e.kind === 'showcaseSlots') fx.showcaseSlots += e.delta;
       else if (e.kind === 'errataDetectPpm') fx.errataDetectPpm = Math.max(fx.errataDetectPpm, e.value);
       else if (e.kind === 'wholesaleDiscount') fx.wholesaleDiscount = Math.min(fx.wholesaleDiscount, e.value);
+      else if (e.kind === 'dealerPpm') fx.dealerPpm = Math.max(fx.dealerPpm, e.value);
     }
   }
   return fx;

@@ -10,7 +10,7 @@
 // 心理价位、个人浮动、今天还剩几位都不出现在响应里。
 import { techEffects } from '../game/tech.ts';
 import type { FastifyInstance } from 'fastify';
-import { BINDER_PAGE_SIZE, BINDERS, CUSTOMER, PACKS, RARITIES, RARITY, REPUTATION, COUNTER, WHOLESALE, type BinderKind, type CustomerType, type Rarity } from '@kanu/shared/balance';
+import { BINDER_PAGE_SIZE, BINDERS, CUSTOMER, PACKS, RARITIES, RARITY, RENT, REPUTATION, COUNTER, WHOLESALE, type BinderKind, type CustomerType, type Rarity } from '@kanu/shared/balance';
 import type { CardView, CounterBinderPageResponse, CounterResponse, CustomerView, EligibleCardsResponse, EndDayResponse, OfferResponse, ReceiveResponse } from '@kanu/shared/types';
 import { ApiError, fail, idempotencyKey, type Deps } from '../app.ts';
 import { dayKey, type CustomerRow } from '../db/index.ts';
@@ -20,7 +20,9 @@ import {
 } from '../game/customers.ts';
 import { loadLines, type LineEvent } from '../content.ts';
 import { grandChancePpm, showcaseEffects, showcaseScore } from '../game/showcase.ts';
-import { settleAppraisals } from './appraisal.ts';
+import { finishDay } from '../day.ts';
+import { rentDueToday, runDay } from '../game/rent.ts';
+import { rentForWeek } from '../game/price.ts';
 import { chance } from '../game/rng.ts';
 
 const lines = loadLines();
@@ -125,6 +127,7 @@ export function registerCounterRoutes(app: FastifyInstance, deps: Deps, now: () 
       current: current ? toCustomerView(current) : null,
       served: rows.filter((c) => c.status !== 'waiting').map(toCustomerView),
       done: !current && rows.length >= player.day_customer_count,
+      arrears: player.rent_due > 0 ? { amount: player.rent_due, week: player.rent_week } : null,
     };
   };
   const counterTx = repo.db.transaction(counterState);
@@ -149,13 +152,31 @@ export function registerCounterRoutes(app: FastifyInstance, deps: Deps, now: () 
       if (today.some((c) => c.status === 'waiting') || today.length < player.day_customer_count) {
         throw new ApiError(400, 'customers_waiting', '还有顾客没接待完，接待完（或请走）再打烊');
       }
-      // 打烊结算：桌面上的散卡磨损（只改隐藏的品相，日志里只记张数）
-      const worn = deps.binders!.wear(userId);
-      repo.advanceDay(userId);
-      repo.logEvent(userId, now(), 'day_end', { day: player.game_day, customers: today.length, worn });
-      // 鉴定机构 / 评级社按营业日出结果（DESIGN 5，2026-11-17 改成打烊时出）
-      const appraisals = settleAppraisals(deps, userId, player.game_day + 1, now());
-      const response: EndDayResponse = { ok: true, day: player.game_day + 1, appraisals };
+      const t = now();
+      // 欠租中：不进下一天，先去店铺页交租 / 抵押（FR-RENT-2）
+      if (player.rent_due > 0) {
+        return { ok: true, day: player.game_day, appraisals: [], arrears: { amount: player.rent_due, week: player.rent_week } } satisfies EndDayResponse;
+      }
+      // 交租日（这一轮第 7、14、21……天）打烊时扣摊位费；店主不交（FR-RENT-1）
+      let rentPaid: EndDayResponse['rentPaid'] = null;
+      if (player.shop_owned !== 1 && rentDueToday(player.game_day, player.run_start_day)) {
+        const week = runDay(player.game_day, player.run_start_day) / RENT.everyDays;
+        const amount = rentForWeek(week);
+        if (player.credits < amount) {
+          repo.setArrears(userId, amount, week);
+          repo.logEvent(userId, t, 'rent_arrears', { day: player.game_day, week, amount, credits: player.credits });
+          const response: EndDayResponse = { ok: true, day: player.game_day, appraisals: [], arrears: { amount, week } };
+          repo.putIdempotent(userId, key, response, t);
+          return response;
+        }
+        const credits = player.credits - amount;
+        repo.setCreditsPity(userId, credits, player.pity_count);
+        repo.logCredits(userId, t, -amount, 'rent', credits, { week });
+        rentPaid = { amount, week };
+      }
+      // 打烊结算：散卡磨损、进入下一天、过期抵押归房东、评级社出结果
+      const { day, appraisals, forfeited } = finishDay(deps, userId, t, { customers: today.length });
+      const response: EndDayResponse = { ok: true, day, appraisals, rentPaid, forfeited };
       repo.putIdempotent(userId, key, response, now());
       return response;
     })();

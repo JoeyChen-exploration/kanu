@@ -3,8 +3,7 @@
 import { useRef, useState, type ReactNode } from 'react';
 import {
   ANNOUNCE, APPRAISAL, BINDER_KINDS, ERRATA, PHONE, GRAND_COLLECTOR, BINDERS, COUNTER, CUSTOMER, CUSTOMER_TYPES, EXCHANGE, LOOSE, PACKS, PITY, RARITIES, RARITY,
-  RENT, SERIAL_LIMIT, SHOP_PRICE, SHOWCASE, STARTER_BINDER, STORE, STYLE, STYLES, UNGRADED_MULT, WHOLESALE, type CustomerWants,
-} from '@kanu/shared/balance';
+  RENT, SERIAL_LIMIT, SHOP_PRICE, SHOWCASE, STARTER_BINDER, STORE, STYLE, STYLES, UNGRADED_MULT, WHOLESALE, PAWN, type CustomerWants, } from '@kanu/shared/balance';
 import { Card, GameDayContext, fmt } from './Card.tsx';
 import { AVATAR } from './pages/Counter.tsx';
 import { FloatWindow } from './drag.tsx';
@@ -233,6 +232,7 @@ const PAGES: Array<{ title: string; body: ReactNode }> = [
       <>
         <ul>
           <li><b>摊位费</b>：每 {RENT.everyDays} 个营业日交一次，从 {fmt(RENT.base)} 起，每周涨 {Math.round((RENT.growth - 1) * 100)}%，第 {RENT.capWeek} 周以后不再涨。交不起就倒闭，从头开始。</li>
+          <li><b>交不起</b>：交租日打烊时钱不够，柜台先关门、不能进下一天。去"店铺"页把卡抵押给房东（按市场价 {PAWN.loanPct * 100}% 给钱，{PAWN.days} 天内 {PAWN.redeemPct * 100}% 赎回，珍藏柜的卡不收），凑够就交租；实在不行就从头开始，只留珍藏柜里的卡。</li>
           <li><b>买下店铺</b>：攒够 {fmt(SHOP_PRICE)} 信用点买下来，以后就不用交摊位费了。</li>
           <li><b>换金币</b>：信用点可以按 {EXCHANGE.creditsPerCoin} : 1 换成旺财金币，每周最多 {fmt(EXCHANGE.weeklyCapCoins)} 金币。</li>
         </ul>

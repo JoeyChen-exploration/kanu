@@ -40,7 +40,7 @@ export interface WalletView {
 // 只放玩家能知道的信息（FR-INV-2、NFR-SEC-2）：真伪、真实品相、来源永远不出现在这里。
 
 /** inventory 库存（卡册或桌面）、showcase 珍藏柜、grading 送评中（在星港评级社） */
-export type CardLocation = 'inventory' | 'showcase' | 'grading';
+export type CardLocation = 'inventory' | 'showcase' | 'grading' | 'pawned';
 
 export interface CardView {
   id: number;
@@ -281,6 +281,8 @@ export interface CounterResponse {
   served: CustomerView[];
   /** 今天的顾客都接待完了，可以打烊。今天一共来几位不告诉玩家 */
   done: boolean;
+  /** 欠租中：柜台关门，先去店铺页交租 / 抵押（FR-RENT-2） */
+  arrears?: { amount: number; week: number } | null;
 }
 
 export interface EndDayResponse {
@@ -289,6 +291,51 @@ export interface EndDayResponse {
   day: number;
   /** 这次打烊出结果的鉴定 / 送评 */
   appraisals: AppraisalOutcome[];
+  /** 今天是交租日、交上了：交了多少、第几周 */
+  rentPaid?: { amount: number; week: number } | null;
+  /** 交租日钱不够：进入欠租，没有进入下一天（day 还是今天） */
+  arrears?: { amount: number; week: number } | null;
+  /** 过了赎回期、归房东的抵押卡张数 */
+  forfeited?: number;
+}
+
+/** 房租状态（FR-RENT-6）：首页、店铺页显示 */
+export interface RentStatus {
+  /** 买下店铺了，不再交租 */
+  owned: boolean;
+  /** 欠租中（交租日打烊时钱不够）：柜台关门、不能进下一天 */
+  arrears: { amount: number; week: number } | null;
+  /** 下一次交租：第几个营业日打烊时、这一轮第几周、多少钱；店主是 null */
+  next: { day: number; week: number; amount: number } | null;
+  shopPrice: number;
+}
+export interface PawnView {
+  id: number;
+  card: CardView;
+  /** 抵押时拿到的钱、赎回要付的钱、最后能赎回的营业日 */
+  loan: number;
+  redeem: number;
+  dueDay: number;
+}
+/** GET /api/rent：房租、抵押中的卡、能抵押的卡（珍藏柜不能抵押） */
+export interface RentResponse {
+  ok: true;
+  credits: number;
+  day: number;
+  rent: RentStatus;
+  pawns: PawnView[];
+  pawnable: Array<{ card: CardView; loan: number; redeem: number }>;
+}
+export interface RentActionResponse {
+  ok: true;
+  credits: number;
+  rent: RentStatus;
+  /** 这次抵押 / 赎回的卡 */
+  cards?: CardView[];
+  /** 交租或破产后进入的新营业日 */
+  day?: number;
+  /** 一键抵押：全部抵押完还不够 */
+  notEnough?: boolean;
 }
 
 export interface EligibleCardsResponse {
@@ -341,6 +388,8 @@ export interface MeResponse {
   packsLeftToday: number;
   /** 第几个营业日 */
   gameDay: number;
+  /** 房租（FR-RENT-6） */
+  rent: RentStatus;
   /** 测试账号（DEV_AUTH=1 且在 DEV_UNLIMITED_IDS 里）才是 true：前端显示测试工具 */
   devTools: boolean;
 }

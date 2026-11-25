@@ -6,7 +6,7 @@
 
 ## 总体要求
 
-- **风格**：反乌托邦空间站下层区，霓虹、赛博朋克、旧货店的感觉。不要做成文字游戏：柜台、库存、开包都要有画面。主色调沿用 Activity 图标：深紫底、紫罗兰和洋红色的霓虹光（见"风格基准"）。
+- **风格**：反乌托邦空间站下层区，霓虹、赛博朋克、旧货店的感觉。不要做成文字游戏：柜台、库存、开包都要有画面。紫色霓虹只作边缘光（呼应 Activity 图标），**主色调由系列决定**（见"风格基准"和系列表）。界面和卡框仍用暗物质 K 的深紫配色。
 - **配色**：界面和卡框是一套视觉，具体色值放在 `art-src/palette.json`：深底 `#030207 → #0d0619 → #241046`（径向渐变，中心亮），霓虹描边 `#b48cff`，外发光 `#4a1fd1`，高光 `#e6d7ff`，金框 `#fff3c4 → #e8b84a → #8a5a12 → #f7d77a`，镭射 `#7cf7ff → #b99bff → #ff8ad8 → #ffe28a`。标志字体 Unbounded 900。
 - **横屏**：卡奴是横屏游戏，主要在手机横屏（约 844 × 390）和电脑 16:9 上看。场景背景、界面底图按横版画。
 - **格式**：WebP（要透明的用带透明通道的 WebP 或 PNG）。体积上限：场景背景 300 KB，其余单张 150 KB。所有图由卡奴服务器自己托管，不引用外部链接。
@@ -89,27 +89,29 @@ AI 不擅长透明背景和成套统一的小图标，所以这些不交给它�
 
 - **模型**：先用 SDXL 类模型跑通，风格定下来后换成社区微调版（如 Juggernaut XL），之后不要中途换模型，否则风格会断。
 - **尺寸**：卡面用 832 × 1152 生成（导入时居中裁成 630 × 880）；头像、联系人用 1024 × 1024 生成（导入时缩到 256 × 256）；场景用 1344 × 768 生成，先用 Draw Things 自带的放大功能放大，导入时再缩放到 1920 × 1080（没放大也能导入，但会糊一些）。
-- **负面提示词**（所有图都加）：`text, letters, words, watermark, signature, logo, frame, border, card frame, blurry, lowres, extra fingers, deformed hands`
+- **负面提示词**（所有图都加）：`photo, photorealistic, photograph, 3d render, text, letters, words, watermark, signature, logo, frame, border, card frame, blurry, lowres, extra fingers, deformed hands`
+- **画风锚点**：卡面提示词在主体描述后面紧跟 `painterly digital illustration`，防止出成照片或 3D 渲染。
+- **卡面构图**：每条卡面提示词都带"底部五分之一只放地面或背景"（`bottom fifth of the image is empty floor or background only, no figures near the bottom edge`），避开名牌条（y 704 以下）；主体居中，放在主体安全区里。
 - **记录**：每张原图的模型、提示词、负面提示词、种子、步数、尺寸由 `npm run art:import` 从 PNG 自带的元数据里自动读出，写进 `art-src/prompts.csv`，不用手记。以后要重画、补画同系列的卡，照着这张表就能对上风格。原图如果没有元数据（比如在别的软件里另存过），导入时会提示，在原图目录的 `prompts.csv` 里手动补一行。
 - **挑图**：每张至少出 4 张备选，挑一张；N / R 卡可以放宽，SR 以上要精挑。
 
 ### 风格基准
 
-所有插画类提示词的开头固定用这一段，只在后面加主体描述：
+所有插画类提示词都带这一段（2026-11-25 改：紫色不再是全局主色，只作边缘光；主色调由系列风格决定）。卡面提示词的顺序是：主体描述 → 画风锚点 → 构图 → 系列风格 → 稀有度氛围 → 这一段：
 
 ```
-dystopian space station lower decks, cyberpunk junk shop atmosphere, deep purple and violet palette, magenta neon rim light, moody low-key lighting, detailed digital painting, trading card game illustration
+cyberpunk trading card art, concept art, dystopian space station, subtle violet neon rim light, highly detailed digital painting
 ```
 
-每个系列在这段后面再加一句系列风格（英文原样，是提示词的一部分）。100 张卡的完整提示词（主体 + 构图 + 系列风格 + 稀有度 + 通用风格，按出图优先级排好）在 `art-src/card-prompts.csv`，是卡面提示词的源头：
+每个系列加一句系列风格（英文原样，是提示词的一部分，决定这个系列的主色调）。100 张卡的完整提示词（主体 + 构图 + 系列风格 + 稀有度 + 通用风格，按出图优先级排好）在 `art-src/card-prompts.csv`，是卡面提示词的源头：
 
 | 系列编号 | 系列名 | 主题 | 系列风格补充 |
 | --- | --- | --- | --- |
-| NEO | 霓虹街头 | 下层区的夜街：路灯、积水街角、烤串摊、便利店夜班、雨夜侦探 | `rainy neon night street, wet reflections, drifting steam` |
-| GNG | 地下帮派 | 帮派、地下赌场、打手、黑市掮客 | `underground gangland, smoky back alleys, gritty noir mood` |
-| MEC | 机械义体 | 义体改造、维修铺、机械臂、电子脑、报废机器人 | `cybernetic implants, grimy repair workshop, chrome and rust, electric blue sparks` |
-| SEA | 深海星港 | 水循环区和港口：码头、潜水员、水母灯、星港 | `flooded water-recycling docks of a space station, bioluminescent teal accents, mist` |
-| ELT | 上层区典藏 | 上层区的奢华：镀金请柬、香槟塔、天台花园、贵族、私人管家 | `opulent upper district, gold and ivory luxury, art deco elegance, city lights far below` |
+| NEO | 霓虹街头 | 下层区的夜街：路灯、积水街角、烤串摊、便利店夜班、雨夜侦探 | `rainy neon night street, hot pink and cyan neon signs, warm orange street food glow, wet reflections, drifting steam` |
+| GNG | 地下帮派 | 帮派、地下赌场、打手、黑市掮客 | `underground gangland, smoky back rooms, crimson and amber tungsten light, deep black shadows, gritty noir mood` |
+| MEC | 机械义体 | 义体改造、维修铺、机械臂、电子脑、报废机器人 | `grimy cybernetic repair workshop, cold steel blue and electric cyan light, orange welding sparks, chrome and rust` |
+| SEA | 深海星港 | 水循环区和港口：码头、潜水员、水母灯、星港 | `flooded water-recycling docks of a space station, deep teal and aquamarine palette, bioluminescent cyan glow, thick mist` |
+| ELT | 上层区典藏 | 上层区的奢华：镀金请柬、香槟塔、天台花园、贵族、私人管家 | `opulent upper district, champagne gold and ivory palette, warm soft lighting, art deco elegance, city lights far below` |
 
 ### 头像规范
 
@@ -152,7 +154,7 @@ dystopian space station lower decks, cyberpunk junk shop atmosphere, deep purple
 | 内容 | 位置 | 进 git |
 | --- | --- | --- |
 | AI 原图（PNG，不裁剪不压缩）、放大前的大图、带图层的后期文件 | 网盘的原图目录（`ART_RAW_DIR`），目录结构和 `art/` 一一对应 | 不进（太大），网盘就是备份 |
-| 卡面提示词的源头（100 张，按出图优先级） | `art-src/card-prompts.csv`（美术维护，改了从网盘根目录复制过来） | 进 |
+| 卡面提示词的源头（100 张，按出图优先级） | `art-src/card-prompts.csv`（美术维护，改了从网盘根目录的 `card-prompts.csv` 复制过来） | 进 |
 | 每张 AI 图实际用的生成参数 | `art-src/prompts.csv`（`art:import` 自动写） | 进 |
 | 代码图的 SVG 源码、配色和安全区 | `art-src/svg/`、`art-src/palette.json` | 进 |
 | 给美术的资料（世界观、系列、卡牌列表、顾客、联系人） | `art-src/HANDOFF.md`、`art-src/cards.json` | 进 |

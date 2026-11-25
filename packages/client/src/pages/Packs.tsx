@@ -4,6 +4,7 @@ import { PITY } from '@kanu/shared/balance';
 import type { BindersResponse, BuyBinderResponse, BuyPacksResponse, MeResponse, OpenPackResponse, SealedPacksResponse, StoreResponse } from '@kanu/shared/types';
 import { api, newIdempotencyKey } from '../api.ts';
 import { Card, CardBack, fmt } from '../Card.tsx';
+import { PackArt } from '../art.tsx';
 
 export function Packs({ me, onChange }: { me: MeResponse; onChange: (patch: Partial<MeResponse>) => void }) {
   const [store, setStore] = useState<StoreResponse | null>(null);
@@ -92,7 +93,7 @@ export function Packs({ me, onChange }: { me: MeResponse; onChange: (patch: Part
       <div className="sealed-list">
         {sealed?.groups.map((g) => (
           <div key={`${g.seriesId}-${g.wholesale ? 'w' : 's'}`} className={`sealed kind-${g.kind}${g.wholesale ? ' wholesale' : ''}`}>
-            <div className="pack-art small" aria-hidden>{g.name.slice(0, 2)}</div>
+            <PackArt seriesId={g.seriesId} name={g.name} kind={g.kind} small box={g.wholesale} />
             <div className="sealed-body">
               <b>{g.name}{g.wholesale && <span className="wholesale-tag">批发</span>}</b>
               <span className="hint">{g.ids.length} 包{g.wholesale ? ' · 批发商不保证正品，拆出来拿放大镜看看' : ''}</span>
@@ -107,7 +108,7 @@ export function Packs({ me, onChange }: { me: MeResponse; onChange: (patch: Part
       <div className="store-list">
         {store?.packs.map((p) => (
           <div key={p.seriesId} className={`store-pack kind-${p.kind}`}>
-            <div className="pack-art" aria-hidden>{p.name.slice(0, 2)}</div>
+            <PackArt seriesId={p.seriesId} name={p.name} kind={p.kind} />
             <div className="store-body">
               <b>{p.name}</b>
               <span className="badge">{p.kindName} · {p.cardCount} 张</span>

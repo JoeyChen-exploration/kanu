@@ -1,0 +1,30 @@
+{
+  "note": "代码类美术的配色和卡面安全区（docs/ART.md）。改了这里跑 npm run art:build 重新生成。layout 必须和 style.css 卡牌一段、ART.md\"卡面安全区\"一致。",
+  "deep": ["#030207", "#0d0619", "#241046"],
+  "neon": "#b48cff",
+  "glow": "#4a1fd1",
+  "highlight": "#e6d7ff",
+  "gold": ["#fff3c4", "#e8b84a", "#8a5a12", "#f7d77a"],
+  "laser": ["#7cf7ff", "#b99bff", "#ff8ad8", "#ffe28a"],
+  "rarity": {
+    "N": "#8a8fa0",
+    "R": "#4aa3ff",
+    "SR": "#b48cff",
+    "SSR": ["#fff3c4", "#e8b84a", "#8a5a12", "#f7d77a"],
+    "UR": "#ff4f8b",
+    "LR": "#2ee6c8",
+    "MR": ["#7cf7ff", "#b99bff", "#ff8ad8", "#ffe28a"]
+  },
+  "layout": {
+    "width": 630,
+    "height": 880,
+    "band": 24,
+    "outerRadius": 28,
+    "windowRadius": 20,
+    "badge": { "x": 40, "y": 40, "size": 120 },
+    "serial": { "x": 430, "y": 48, "w": 160, "h": 60 },
+    "plate": { "top": 704, "bottom": 856 },
+    "style": { "x": 476, "y": 818, "w": 114, "h": 30 },
+    "safe": { "x1": 60, "y1": 176, "x2": 570, "y2": 690 }
+  }
+}

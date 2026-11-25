@@ -75,21 +75,27 @@ h2 small { color: var(--muted); font-weight: normal; font-size: 13px; margin-lef
 .flip-front { position: absolute; inset: 0; transform: rotateY(180deg); }
 
 /* ---- 卡牌（占位卡面） ---- */
-.card { --r1: #3a3f4d; --r2: #232733; aspect-ratio: 63 / 88; width: 100%; border-radius: 10px; padding: 4px; background: #4a4f5c; position: relative; overflow: hidden; }
-.card-face {
-  height: 100%; border-radius: 7px; background: linear-gradient(160deg, var(--r1), var(--r2));
-  display: flex; flex-direction: column; padding: 6px; gap: 4px; position: relative; overflow: hidden;
-}
-.card-top { display: flex; justify-content: space-between; font-size: 11px; font-weight: 700; }
-.card-rarity { background: rgba(0, 0, 0, 0.45); padding: 1px 6px; border-radius: 6px; }
-.card-serial { background: rgba(0, 0, 0, 0.55); padding: 1px 6px; border-radius: 6px; color: #e8e8f0; }
-.card-art { flex: 1; display: grid; place-items: center; font-size: 34px; font-weight: 800; color: rgba(255, 255, 255, 0.85); text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5); }
-.card-name { font-size: 13px; font-weight: 700; text-align: center; line-height: 1.2; }
-.card-tags { font-size: 11px; color: rgba(255, 255, 255, 0.7); text-align: center; }
-.card-style { position: absolute; bottom: 6px; right: 6px; font-size: 10px; background: rgba(0, 0, 0, 0.55); padding: 1px 6px; border-radius: 6px; }
-.card.small .card-art { font-size: 22px; }
-.card.small .card-name { font-size: 11px; }
-.card.small .card-top { font-size: 10px; }
+/* ---- 卡牌（docs/ART.md"卡面安全区"）----
+   基准 630 × 880。所有位置写成卡宽的百分比：1cqw = 卡宽的 1% = 基准图上 6.3 px，卡多大比例都不变。
+   外框带 24 px（3.81cqw）· 稀有度角标 (40,40) 120 × 120 · 序列号 右上 (430,48) 160 × 60 · 名牌条 y 704–856
+   · 风格标签 右下 (476,818) 114 × 30 · 主体安全区 x 60–570、y 176–690。改这里要同步改 ART.md。 */
+.card { --r1: #3a3f4d; --r2: #232733; --frame: #4a4f5c; aspect-ratio: 63 / 88; width: 100%; position: relative; overflow: hidden; border-radius: 4.44% / 3.18%; background: var(--frame); container-type: inline-size; }
+.card-body { position: absolute; inset: 0; container-type: inline-size; border-radius: 4.44% / 3.18%; background: var(--frame); overflow: hidden; }
+.card-face { position: absolute; inset: 3.81cqw; border-radius: 3.17cqw; background: linear-gradient(160deg, var(--r1), var(--r2)); overflow: hidden; }
+/* 卡面图画满 630 × 880：放在卡面窗口里时往外扩 24 px，外圈正好被窗口裁掉 */
+.card-art-img { position: absolute; left: -3.81cqw; top: -3.81cqw; width: calc(100% + 7.62cqw); height: calc(100% + 7.62cqw); object-fit: cover; }
+.card-frame-img { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 1; pointer-events: none; }
+/* 占位卡面：卡名第一个字放在主体安全区中间 */
+.card-art { position: absolute; left: 5.71cqw; top: 24.13cqw; width: 80.95cqw; height: 81.59cqw; display: grid; place-items: center; font-size: 24cqw; font-weight: 800; color: rgba(255, 255, 255, 0.85); text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5); }
+.card-badge { position: absolute; left: 6.35cqw; top: 6.35cqw; width: 19.05cqw; height: 19.05cqw; z-index: 2; display: grid; place-items: start; }
+.card-badge-img { width: 100%; height: 100%; }
+.card-rarity { background: rgba(0, 0, 0, 0.5); padding: 0 0.35em; border-radius: 0.4em; font-size: clamp(8px, 7cqw, 26px); font-weight: 800; line-height: 1.35; }
+.card-serial { position: absolute; right: 6.35cqw; top: 7.62cqw; height: 9.52cqw; z-index: 2; display: grid; place-items: center; padding: 0 0.4em; border-radius: 0.4em; background: rgba(0, 0, 0, 0.55); color: #e8e8f0; font-size: clamp(8px, 5.4cqw, 20px); font-weight: 700; }
+.card-plate { position: absolute; left: 3.81cqw; right: 3.81cqw; top: 111.75cqw; height: 24.13cqw; z-index: 2; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.6cqw; padding: 0 3cqw;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.5)); border-radius: 0 0 3.17cqw 3.17cqw; }
+.card-name { font-size: clamp(9px, 6.98cqw, 26px); font-weight: 700; text-align: center; line-height: 1.15; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card-tags { font-size: clamp(8px, 4.44cqw, 16px); color: rgba(255, 255, 255, 0.75); text-align: center; white-space: nowrap; }
+.card-style { position: absolute; right: 6.35cqw; top: 129.84cqw; height: 4.76cqw; z-index: 2; display: grid; place-items: center; padding: 0 0.5em; border-radius: 0.5em; background: rgba(0, 0, 0, 0.55); font-size: clamp(7px, 3.5cqw, 13px); }
 
 .rarity-N { --r1: #4b5160; --r2: #2c303a; }
 .rarity-R { --r1: #2f6b9a; --r2: #1c3550; }
@@ -105,18 +111,19 @@ h2 small { color: var(--muted); font-weight: normal; font-size: 13px; margin-lef
 }
 .style-holo .card-face::after { background: linear-gradient(115deg, transparent 30%, rgba(255, 255, 255, 0.35) 45%, rgba(120, 220, 255, 0.25) 55%, transparent 70%); background-size: 250% 100%; animation: sheen 3s linear infinite; }
 .style-ice .card-face::after { background: repeating-linear-gradient(60deg, rgba(255, 255, 255, 0.12) 0 2px, transparent 2px 9px), repeating-linear-gradient(-30deg, rgba(160, 220, 255, 0.12) 0 1px, transparent 1px 7px); }
-.style-gold { background: linear-gradient(135deg, #f7dc7a, #b8860b, #f7dc7a); }
+.style-gold { --frame: linear-gradient(135deg, #f7dc7a, #b8860b, #f7dc7a); }
 .style-gold .card-name { color: #ffe08a; }
-.style-dark { background: #050508; }
+.style-dark { --frame: #050508; }
 .style-dark .card-face { background: radial-gradient(circle at 30% 20%, var(--r1), #050508 70%); }
 .style-dark .card-face::after { background-image: radial-gradient(1px 1px at 20% 30%, #fff, transparent), radial-gradient(1px 1px at 70% 60%, #cfe, transparent), radial-gradient(1px 1px at 40% 80%, #fff, transparent); animation: twinkle 2.5s ease-in-out infinite alternate; }
-.style-serial { background: linear-gradient(135deg, #e6e8ee, #8a8f9c, #e6e8ee); }
+.style-serial { --frame: linear-gradient(135deg, #e6e8ee, #8a8f9c, #e6e8ee); }
 @keyframes sheen { from { background-position: 150% 0; } to { background-position: -100% 0; } }
 @keyframes twinkle { from { opacity: 0.4; } to { opacity: 1; } }
 
-.card-back { background: #1d2230; }
-.card-back .card-face { background: repeating-linear-gradient(45deg, #232a3c 0 8px, #1a2030 8px 16px); justify-content: center; align-items: center; }
-.card-back-logo { font-size: 20px; font-weight: 800; color: var(--accent); letter-spacing: 2px; }
+.card-back { --frame: #1d2230; }
+.card-back .card-face { background: repeating-linear-gradient(45deg, #232a3c 0 8px, #1a2030 8px 16px); display: grid; place-items: center; }
+.card-back-img { position: absolute; inset: 0; width: 100%; height: 100%; }
+.card-back-logo { font-size: clamp(12px, 16cqw, 40px); font-weight: 800; color: var(--accent); letter-spacing: 2px; }
 .silhouette { background: var(--panel); }
 .silhouette .card-face { background: var(--panel-2); display: grid; place-items: center; color: var(--muted); font-size: 22px; }
 
@@ -211,11 +218,11 @@ h2 small { color: var(--muted); font-weight: normal; font-size: 13px; margin-lef
 /* ---- 散放磨损（按散放天数画，不代表真实品相） ---- */
 .card[class*='wear-'] .card-face::before { content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 2; }
 .wear-1 .card-face { filter: saturate(0.85); }
-.wear-1 .card-face::before { background: radial-gradient(1px 1px at 12% 20%, #ffffff40, transparent), radial-gradient(1px 1px at 70% 35%, #ffffff30, transparent), radial-gradient(1px 1px at 40% 75%, #ffffff35, transparent), radial-gradient(1px 1px at 85% 80%, #ffffff30, transparent), linear-gradient(#80808018, #80808018); }
+.wear-1 .card-face::before { background: url(/art/wear/1.webp) center / 100% 100% no-repeat; }
 .wear-2 .card-face { filter: saturate(0.7) brightness(0.92); }
-.wear-2 .card-face::before { background: linear-gradient(115deg, transparent 30%, #ffffff40 31%, transparent 32%), linear-gradient(70deg, transparent 60%, #ffffff35 61%, transparent 62%), linear-gradient(160deg, transparent 45%, #ffffff30 46%, transparent 47%), linear-gradient(#80808025, #80808025); }
+.wear-2 .card-face::before { background: url(/art/wear/2.webp) center / 100% 100% no-repeat; }
 .wear-3 .card-face { filter: saturate(0.55) brightness(0.85) sepia(0.15); }
-.wear-3 .card-face::before { background: linear-gradient(115deg, transparent 30%, #ffffff50 31%, transparent 32%), linear-gradient(70deg, transparent 60%, #ffffff45 61%, transparent 62%), linear-gradient(20deg, transparent 20%, #ffffff40 21%, transparent 22%), linear-gradient(225deg, #d8d2c4 0 9%, #00000055 9% 11%, transparent 11%), linear-gradient(#80808030, #80808030); }
+.wear-3 .card-face::before { background: url(/art/wear/3.webp) center / 100% 100% no-repeat; }
 .wear-3 { clip-path: polygon(0 0, 88% 0, 100% 9%, 100% 100%, 0 100%); }
 .loose-note { color: #ffb86b; font-size: 13px; }
 
@@ -311,16 +318,15 @@ h2 small { color: var(--muted); font-weight: normal; font-size: 13px; margin-lef
 .picker-head { justify-content: space-between; }
 
 /* 鉴定的公开标记：封壳（卡外面套一层透明壳、顶上一条评分标签，错版加一个黄标）、拒评 */
-.card.slabbed { padding: 16px 5px 5px; background: linear-gradient(160deg, #d9dee8, #9aa3b5); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.6); }
-.slab-label { position: absolute; top: 2px; left: 4px; right: 4px; z-index: 3; height: 12px; border-radius: 3px; background: #b3202a; color: #fff; font-size: 8px; line-height: 12px; text-align: center; letter-spacing: 1px; }
-.slab-label b { font-size: 9px; }
+.card.slabbed { background: linear-gradient(160deg, #d9dee8, #9aa3b5); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.6); }
+.card.slabbed .card-body { inset: auto; left: 3%; top: 4.6%; width: 94%; height: 94%; }
+.slab-label { position: absolute; top: 0.8cqw; left: 3%; right: 3%; z-index: 3; height: 5.2cqw; border-radius: 1cqw; background: #b3202a; color: #fff; font-size: clamp(6px, 3.6cqw, 13px); line-height: 5.2cqw; text-align: center; letter-spacing: 0.08em; white-space: nowrap; overflow: hidden; }
+.slab-label b { font-size: 1.1em; }
 .slab-label.black { background: #111; color: #f5c542; }
-.card:not(.small) .slab-label { height: 16px; line-height: 16px; font-size: 11px; }
-.card:not(.small).slabbed { padding-top: 22px; }
-.rejected-mark { position: absolute; z-index: 3; right: 3px; bottom: 3px; padding: 0 4px; border-radius: 4px; background: #7f1d1d; color: #fecaca; font-size: 9px; font-weight: 700; }
+.rejected-mark { position: absolute; z-index: 3; right: 6.35cqw; top: 18.41cqw; height: 6.35cqw; display: grid; place-items: center; padding: 0 0.4em; border-radius: 0.4em; background: #7f1d1d; color: #fecaca; font-size: clamp(7px, 3.8cqw, 14px); font-weight: 700; }
 
 /* 电话批发来的卡 / 卡包（公开：批发商不保证正品） */
-.wholesale-mark { position: absolute; z-index: 3; left: 3px; bottom: 3px; width: 15px; height: 15px; border-radius: 4px; background: #9a3412; color: #ffedd5; font-size: 9px; font-weight: 800; display: grid; place-items: center; }
+.wholesale-mark { position: absolute; z-index: 3; left: 5.71cqw; top: 126.98cqw; width: 7.62cqw; height: 7.62cqw; min-width: 12px; min-height: 12px; border-radius: 1.2cqw; background: #9a3412; color: #ffedd5; font-size: clamp(7px, 4.8cqw, 16px); font-weight: 800; display: grid; place-items: center; }
 .wholesale-tag { margin-left: 6px; padding: 0 6px; border-radius: 4px; background: #9a3412; color: #ffedd5; font-size: 11px; font-weight: 700; vertical-align: middle; }
 .sealed.wholesale { border-color: #9a341288; }
 .wholesale-offers { display: grid; gap: 6px; }
@@ -359,20 +365,19 @@ h2 small { color: var(--muted); font-weight: normal; font-size: 13px; margin-lef
 .detail-layer { position: absolute; inset: 0; pointer-events: none; overflow: hidden; border-radius: 10px; }
 
 /* ===== 放大镜细节：美术接入点 =====
-   全部是通用贴图，所有卡共用（位置由卡的编号算）。美术到了以后，每一类换成一张透明 PNG：
-   background: url(/art/loupe/<名字>.png) center / contain no-repeat;  其余代码不用改。
-   halftone 正品网点（可平铺）· ink 油墨晕开 · misregister 套色错位 · holo 防伪闪光不对 · border 边框歪
-   scratch 划痕 · dust 灰尘 · corner 边角磨损（可和散放磨损共用）· gap 漏印（错版） */
-.detail-halftone { position: absolute; inset: 0; opacity: 0.45; background-image: radial-gradient(rgba(0, 0, 0, 0.35) 0.5px, transparent 0.6px); background-size: 2px 2px; }
-.detail { position: absolute; aspect-ratio: 1; }
-.detail-ink { background: radial-gradient(circle, rgba(25, 10, 35, 0.8) 0 30%, rgba(25, 10, 35, 0.4) 50%, transparent 70%); filter: blur(0.5px); }
-.detail-misregister { aspect-ratio: 2 / 1; background: linear-gradient(90deg, transparent 0 18%, rgba(0, 230, 255, 0.75) 18% 24%, transparent 24% 58%, rgba(255, 0, 170, 0.75) 58% 64%, transparent 64%); }
-.detail-holo { aspect-ratio: 3 / 2; border-radius: 3px; opacity: 0.8; background: linear-gradient(90deg, #ff004c, #ffb700, #3dff6b, #00b7ff, #b100ff); }
-.detail-border { aspect-ratio: 5 / 1; background: linear-gradient(transparent 38%, rgba(255, 255, 255, 0.9) 38% 62%, transparent 62%); }
-.detail-scratch { aspect-ratio: 12 / 1; background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.8) 30% 70%, transparent); }
-.detail-dust { background: radial-gradient(circle at 30% 30%, #fff8 0 8%, transparent 9%), radial-gradient(circle at 70% 60%, #fff6 0 6%, transparent 7%), radial-gradient(circle at 45% 80%, #fff7 0 7%, transparent 8%); }
+   全部是通用贴图，所有卡共用（位置由卡的编号算）。贴图在 art/loupe/（npm run art:build 生成，源码 scripts/art/build.mjs），
+   按格子拉伸。halftone 正品网点（平铺）· ink 油墨晕开 · misregister 套色错位 · holo 防伪闪光不对 · border 边框歪
+   scratch 划痕 · dust 灰尘 · corner 边角磨损（借散放磨损的卷角）· gap 漏印（错版） */
+.detail-halftone { position: absolute; inset: 0; opacity: 0.55; background: url(/art/loupe/halftone.webp) 0 0 / 24px 24px repeat; }
+.detail { position: absolute; aspect-ratio: 1; background-position: center; background-size: 100% 100%; background-repeat: no-repeat; }
+.detail-ink { background-image: url(/art/loupe/ink.webp); }
+.detail-misregister { aspect-ratio: 2 / 1; background-image: url(/art/loupe/misregister.webp); }
+.detail-holo { aspect-ratio: 3 / 2; background-image: url(/art/loupe/holo.webp); }
+.detail-border { aspect-ratio: 5 / 1; background-image: url(/art/loupe/border.webp); }
+.detail-scratch { aspect-ratio: 12 / 1; background-image: url(/art/loupe/scratch.webp); }
+.detail-dust { background-image: url(/art/loupe/dust.webp); }
 .detail-corner { background: radial-gradient(circle, rgba(240, 235, 220, 0.85) 0 30%, transparent 60%); }
-.detail-gap { aspect-ratio: 3 / 2; border-radius: 30% 10% 40% 20%; background: rgba(245, 240, 228, 0.9); }
+.detail-gap { aspect-ratio: 3 / 2; background-image: url(/art/loupe/gap.webp); }
 
 /* 假卡识别手册（道具浮窗） */
 .float-guide { width: min(440px, calc(100vw - 16px)); }
@@ -663,3 +668,7 @@ h2 small { color: var(--muted); font-weight: normal; font-size: 13px; margin-lef
 .tech-track-cond .quest-hint { grid-row: 1; }
 .tech-track-cond .quest-prog { grid-row: 2; }
 .tech-track-cond .quest-num { grid-row: 2; }
+
+/* 美术接入（art.tsx）：有图时的样子；缺图时还是上面代码画的占位 */
+img.pack-img { object-fit: contain; background: none; box-shadow: none; padding: 0; }
+img.avatar-img { width: 56px; height: 56px; border-radius: 12px; object-fit: cover; font-size: 0; }

@@ -5,6 +5,7 @@ import { COUNTER, CUSTOMER, type CustomerType } from '@kanu/shared/balance';
 import type { CardAppraisalResponse, CardView, InspectionView, CounterBinderPageResponse, CounterResponse, CustomerView, EligibleCardsResponse, EndDayResponse, MeResponse, OfferResponse, ReceiveResponse } from '@kanu/shared/types';
 import { api, newIdempotencyKey } from '../api.ts';
 import { Card, fmt } from '../Card.tsx';
+import { ART, ArtImg, CustomerAvatar, PackArt } from '../art.tsx';
 import { DragGhost, FloatWindow, useDrag } from '../drag.tsx';
 import { inspectionText } from '../appraisalText.ts';
 import { FakeGuide, LoupeLens } from '../Loupe.tsx';
@@ -88,7 +89,7 @@ export function Counter({ onChange }: { onChange: (patch: Partial<MeResponse>) =
           <summary>今天接待过的 {data.served.length} 位</summary>
           {[...data.served].reverse().map((c) => (
             <div key={c.id} className="served-row">
-              <span aria-hidden>{AVATAR[c.type] ?? '🙂'}</span>
+              <CustomerAvatar type={c.type} id={c.id} emoji={AVATAR[c.type] ?? '🙂'} className="served-avatar" />
               <span>{c.typeName}</span>
               <span className="badge">{STATUS[c.status]}</span>
             </div>
@@ -128,7 +129,7 @@ function Delivery({ customer, onChange, onDone }: { customer: CustomerView; onCh
     <div className="visitor delivery">
       <div className="deal-main">
         <div className="visitor-head">
-          <span className="visitor-avatar" aria-hidden>{AVATAR.courier}</span>
+          <CustomerAvatar type="courier" id={customer.id} emoji={AVATAR.courier!} />
           <div>
             <b>{customer.typeName}</b>
             <p className="bubble">{customer.line}</p>
@@ -139,7 +140,7 @@ function Delivery({ customer, onChange, onDone }: { customer: CustomerView; onCh
           <div className="counter-side customer-side delivery-side">
             {d && (
               <div className="delivery-box">
-                <div className="box-art" aria-hidden><span>{d.seriesName.slice(0, 2)}</span><small>× {d.packs}</small></div>
+                <ArtImg srcs={[ART.box(d.seriesId)]} className="box-art box-img" fallback={<div className="box-art" aria-hidden><span>{d.seriesName.slice(0, 2)}</span><small>× {d.packs}</small></div>} />
                 <div>
                   <b>「{d.seriesName}」一盒 {d.packs} 包</b>
                   <p className="hint">货款 <b className="price-strong">{fmt(d.price)}</b> 信用点</p>
@@ -167,7 +168,7 @@ type OpenBinder = { id: number | 'showcase'; name: string };
 /** 放上柜台台面的东西：一张卡或一包没拆的卡包 */
 type Item =
   | { kind: 'card'; id: number; name: string; price: number; quickPrice: number; card: CardView }
-  | { kind: 'pack'; id: number; name: string; price: number; quickPrice: number; packKind: string };
+  | { kind: 'pack'; id: number; name: string; price: number; quickPrice: number; packKind: string; seriesId: string };
 
 const cardItem = (card: CardView, quickPrice: number): Item => ({ kind: 'card', id: card.id, name: card.name, price: card.price, quickPrice, card });
 
@@ -175,7 +176,7 @@ const cardItem = (card: CardView, quickPrice: number): Item => ({ kind: 'card', 
 function ItemArt({ item }: { item: Item }) {
   return item.kind === 'card'
     ? <Card card={item.card} small />
-    : <div className={`pack-art kind-${item.packKind}`} aria-hidden>{item.name.slice(0, 2)}</div>;
+    : <PackArt seriesId={item.seriesId} name={item.name} kind={item.packKind} />;
 }
 
 /** "符合的排前面"开关记在本机，下次进柜台还是上次的选择 */
@@ -441,7 +442,7 @@ function Deal({ customer, onChange, onDone, onUpdate, openBinders, setOpenBinder
     <div className="visitor">
       <div className="deal-main">
         <div className="visitor-head">
-          <span className="visitor-avatar" aria-hidden>{AVATAR[customer.type] ?? '🙂'}</span>
+          <CustomerAvatar type={customer.type} id={customer.id} emoji={AVATAR[customer.type] ?? '🙂'} />
           <div>
             <b>{customer.typeName}</b> <Patience c={customer} />
             <p className="bubble">{customer.line}</p>
@@ -509,7 +510,7 @@ function Deal({ customer, onChange, onDone, onUpdate, openBinders, setOpenBinder
               <h3>没拆的卡包 <small>拖到柜台上</small></h3>
               <div className="grid">
                 {stock.packs.map((p) => {
-                  const item: Item = { kind: 'pack', id: p.id, name: p.name, price: p.quickPrice, quickPrice: p.quickPrice, packKind: p.kind };
+                  const item: Item = { kind: 'pack', id: p.id, name: p.name, price: p.quickPrice, quickPrice: p.quickPrice, packKind: p.kind, seriesId: p.seriesId };
                   return (
                     <button key={`p${p.id}`} className={draggingKey === keyOf(item) ? 'cell draggable dragging' : 'cell draggable'} onClick={() => place(item)} {...sourceBind(item)}>
                       <ItemArt item={item} />

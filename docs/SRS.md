@@ -223,10 +223,10 @@ kanu/
 
 | 编号 | 需求 | MVP |
 | --- | --- | --- |
-| FR-EXCH-1 | 兑换页显示汇率、本周剩余额度（含下次重置时间）、要扣的信用点，玩家确认后才兑 | MVP |
+| FR-EXCH-1 | 兑换页显示汇率、本周剩余额度（含下次重置时间）、要扣的信用点，玩家确认后才兑。实现：店铺页的"换旺财金币"面板（`GET /api/exchange`），二次确认后 `POST /api/exchange { coins }`（幂等），下面列最近的兑换单（已到账 / 正在到账 / 没换成已退回） | MVP |
 | FR-EXCH-2 | 只能信用点 → 金币；汇率和每周上限按 DESIGN 11；"一周"从悉尼时间周一 00:00 起算 | MVP |
-| FR-EXCH-3 | 宽限期内不能兑换；兑换只能动超过下次租金的那部分信用点（租金保证金，DESIGN 7），换蓝图同理 | MVP |
-| FR-EXCH-4 | 兑换流程按 6.3 节实现，保证不会"扣了信用点没到账"，也不会"两边都拿到" | MVP |
+| FR-EXCH-3 | 欠租中不能兑换；兑换只能动超过下次租金的那部分信用点（租金保证金，DESIGN 7），换蓝图同理。店主不用留 | MVP |
+| FR-EXCH-4 | 兑换流程按 6.3 节实现，保证不会"扣了信用点没到账"，也不会"两边都拿到"。实现：迁移 18 加 exchanges 表；旺财 key = `cardshop:<兑换单 id>-<建单时间>`；每周上限卡奴这边也查一遍（pending 和到账的都算）；pending 每 EXCHANGE.retryMinutes 分钟用同一个 key 重试，超过 EXCHANGE.alertHours 写 events_log（exchange_alert）和服务器错误日志、停止自动重试（管理员频道报警等 FR-ADMIN 做好后接上） | MVP |
 | FR-EXCH-5 | 资产榜把累计已兑出的信用点计入 | 第三阶段 |
 
 ### 4.8 管理（ADMIN）
@@ -329,6 +329,8 @@ MVP 需要的表（字段为主要字段，类型和索引在实现时定）：
 ### 6.3 卡奴服务器 ↔ 旺财钱包
 
 **旺财侧要做的改动**（在 oceania-bot 仓库里，单独提交）：
+
+> 2026-11-25：以下 1–4 条已在 oceania-bot 的 `feat/cardshop-redeem` 分支实现，PR BobZhu99/oceania-bot#6 等审核合并；第 5 条（总经济登记）写在 PR 说明里请服主那边登记。
 
 1. `src/wallet-core.js`：在 `WALLET` 里加 `cardshop: { rate: 10, weeklyCap: 2000 }`；新增 `cardshopRedeem(s, { key, uid, coins, week, now })`，`week` 由调用方传悉尼时间该周周一的日期（和 `day` 一样是 `YYYY-MM-DD`）：
     - 用现有的 `once(s, key, now, fn)` 做幂等；

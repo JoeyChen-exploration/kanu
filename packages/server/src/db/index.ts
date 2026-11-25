@@ -235,6 +235,23 @@ const MIGRATIONS: string[] = [
      created_at  INTEGER NOT NULL
    );
    CREATE INDEX pawns_owner ON pawns (owner_id, status);`,
+  // 18：金币兑换单（FR-EXCH-4）。先扣信用点、插 pending，再调旺财；status：pending 等结论、done 到账、failed 旺财拒绝（已退信用点）。
+  // week = 悉尼周一的日期（每周上限）；alerted = 超过 alertHours 还是 pending，已报警、停止自动重试
+  `CREATE TABLE exchanges (
+     id          INTEGER PRIMARY KEY AUTOINCREMENT,
+     owner_id    TEXT NOT NULL REFERENCES players(discord_id),
+     credits     INTEGER NOT NULL,
+     coins       INTEGER NOT NULL,
+     week        TEXT NOT NULL,
+     status      TEXT NOT NULL DEFAULT 'pending',
+     error       TEXT,
+     attempts    INTEGER NOT NULL DEFAULT 0,
+     alerted     INTEGER NOT NULL DEFAULT 0,
+     created_at  INTEGER NOT NULL,
+     updated_at  INTEGER NOT NULL
+   );
+   CREATE INDEX exchanges_owner ON exchanges (owner_id, week);
+   CREATE INDEX exchanges_status ON exchanges (status);`,
 ];
 
 /** 营业日在 customers、daily_usage 里的键 */
@@ -258,6 +275,20 @@ export interface CustomerRow {
   /** 进门时的耐心（含珍藏柜加成）；老数据为 0 */
   max_patience: number;
   created_at: number;
+}
+
+export interface ExchangeRow {
+  id: number;
+  owner_id: string;
+  credits: number;
+  coins: number;
+  week: string;
+  status: 'pending' | 'done' | 'failed';
+  error: string | null;
+  attempts: number;
+  alerted: number;
+  created_at: number;
+  updated_at: number;
 }
 
 export interface PlayerRow {
@@ -471,6 +502,19 @@ function createRepo(db: Database.Database) {
       db.prepare('INSERT INTO tech_owned (discord_id, node_id, bought_at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING').run(discordId, nodeId, now).changes > 0,
     setBlueprints: (discordId: string, n: number) => db.prepare('UPDATE players SET blueprints = ? WHERE discord_id = ?').run(n, discordId),
     setTechTracked: (discordId: string, nodeId: string | null) => db.prepare('UPDATE players SET tech_tracked = ? WHERE discord_id = ?').run(nodeId, discordId),
+    // ---- 金币兑换（FR-EXCH） ----
+    insertExchange: (e: { ownerId: string; credits: number; coins: number; week: string; now: number }) =>
+      Number(db.prepare('INSERT INTO exchanges (owner_id, credits, coins, week, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)').run(e.ownerId, e.credits, e.coins, e.week, e.now, e.now).lastInsertRowid),
+    getExchange: (id: number) => (db.prepare('SELECT * FROM exchanges WHERE id = ?').get(id) as ExchangeRow | undefined) ?? null,
+    /** 本周已兑（pending 和 done 都算，failed 已退回不算） */
+    weekCoins: (ownerId: string, week: string) =>
+      (db.prepare("SELECT COALESCE(SUM(coins), 0) AS n FROM exchanges WHERE owner_id = ? AND week = ? AND status IN ('pending', 'done')").get(ownerId, week) as { n: number }).n,
+    recentExchanges: (ownerId: string, limit = 10) =>
+      db.prepare('SELECT * FROM exchanges WHERE owner_id = ? ORDER BY id DESC LIMIT ?').all(ownerId, limit) as ExchangeRow[],
+    pendingExchanges: () => db.prepare("SELECT * FROM exchanges WHERE status = 'pending' AND alerted = 0 ORDER BY id").all() as ExchangeRow[],
+    setExchange: (id: number, e: { status: string; error: string | null; now: number; attempt?: boolean; alerted?: boolean }) =>
+      db.prepare('UPDATE exchanges SET status = ?, error = ?, updated_at = ?, attempts = attempts + ?, alerted = MAX(alerted, ?) WHERE id = ?')
+        .run(e.status, e.error, e.now, e.attempt ? 1 : 0, e.alerted ? 1 : 0, id),
     // ---- 房租、抵押、破产（FR-RENT） ----
     setArrears: (discordId: string, due: number, week: number) => db.prepare('UPDATE players SET rent_due = ?, rent_week = ? WHERE discord_id = ?').run(due, week, discordId),
     setShopOwned: (discordId: string, owned: boolean) => db.prepare('UPDATE players SET shop_owned = ? WHERE discord_id = ?').run(owned ? 1 : 0, discordId),

@@ -534,3 +534,37 @@ export interface ShowcaseUpgradeResponse {
   credits: number;
   status: ShowcaseStatus;
 }
+
+/** 金币兑换单（FR-EXCH）：pending = 正在到账（旺财那边还没给结论，会自动重试），done = 到账了，failed = 旺财拒绝、信用点已退回 */
+export interface ExchangeView {
+  id: number;
+  credits: number;
+  coins: number;
+  status: 'pending' | 'done' | 'failed';
+  error: string | null;
+  createdAt: number;
+}
+/** GET /api/exchange：兑换页（FR-EXCH-1） */
+export interface ExchangeResponse {
+  ok: true;
+  /** 多少信用点换 1 金币、每周上限、本周已兑、本周还能兑、下次重置（悉尼周一 00:00 的日期） */
+  rate: number;
+  weeklyCap: number;
+  weekUsed: number;
+  weekLeft: number;
+  resetDay: string;
+  credits: number;
+  /** 要留着交下次摊位费的信用点（租金保证金，FR-EXCH-3）；欠租时不能兑 */
+  reserve: number;
+  arrears: boolean;
+  /** 这次最多能兑多少金币（本周额度和可用信用点里取小的） */
+  maxCoins: number;
+  wallet: WalletView;
+  orders: ExchangeView[];
+}
+/** POST /api/exchange { coins }：兑换（幂等） */
+export interface ExchangeOrderResponse {
+  ok: true;
+  credits: number;
+  order: ExchangeView;
+}

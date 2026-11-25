@@ -90,6 +90,7 @@ AI 不擅长透明背景和成套统一的小图标，所以这些不交给它�
 - **模型**：先用 SDXL 类模型跑通，风格定下来后换成社区微调版（如 Juggernaut XL），之后不要中途换模型，否则风格会断。
 - **尺寸**：卡面用 832 × 1152 生成（导入时居中裁成 630 × 880）；头像、联系人用 1024 × 1024 生成（导入时缩到 256 × 256）；场景用 1344 × 768 生成，先用 Draw Things 自带的放大功能放大，导入时再缩放到 1920 × 1080（没放大也能导入，但会糊一些）。
 - **负面提示词**（所有图都加）：`photo, photorealistic, photograph, 3d render, text, letters, words, watermark, signature, logo, frame, border, card frame, blurry, lowres, extra fingers, deformed hands`
+  - **出 GNG（地下帮派）卡时**，负面提示词临时再加 `purple, violet, magenta`：风格基准里的紫色边缘光容易把帮派的红黄钨丝灯染紫。只加在负面提示词里，正面提示词不写"no purple"（2026-11-25 改）。
 - **画风锚点**：卡面提示词在主体描述后面紧跟 `painterly digital illustration`，防止出成照片或 3D 渲染。
 - **卡面构图**：每条卡面提示词都带"底部五分之一只放地面或背景"（`bottom fifth of the image is empty floor or background only, no figures near the bottom edge`），避开名牌条（y 704 以下）；主体居中，放在主体安全区里。
 - **记录**：每张原图的模型、提示词、负面提示词、种子、步数、尺寸由 `npm run art:import` 从 PNG 自带的元数据里自动读出，写进 `art-src/prompts.csv`，不用手记。以后要重画、补画同系列的卡，照着这张表就能对上风格。原图如果没有元数据（比如在别的软件里另存过），导入时会提示，在原图目录的 `prompts.csv` 里手动补一行。
@@ -108,7 +109,7 @@ cyberpunk trading card art, concept art, dystopian space station, subtle violet 
 | 系列编号 | 系列名 | 主题 | 系列风格补充 |
 | --- | --- | --- | --- |
 | NEO | 霓虹街头 | 下层区的夜街：路灯、积水街角、烤串摊、便利店夜班、雨夜侦探 | `rainy neon night street, hot pink and cyan neon signs, warm orange street food glow, wet reflections, drifting steam` |
-| GNG | 地下帮派 | 帮派、地下赌场、打手、黑市掮客 | `underground gangland, smoky back rooms, crimson and amber tungsten light, deep black shadows, gritty noir mood` |
+| GNG | 地下帮派 | 帮派、地下赌场、打手、黑市掮客 | `underground gangland, smoky back rooms, blood red and warm amber tungsten light only, deep black shadows, gritty noir mood` |
 | MEC | 机械义体 | 义体改造、维修铺、机械臂、电子脑、报废机器人 | `grimy cybernetic repair workshop, cold steel blue and electric cyan light, orange welding sparks, chrome and rust` |
 | SEA | 深海星港 | 水循环区和港口：码头、潜水员、水母灯、星港 | `flooded water-recycling docks of a space station, deep teal and aquamarine palette, bioluminescent cyan glow, thick mist` |
 | ELT | 上层区典藏 | 上层区的奢华：镀金请柬、香槟塔、天台花园、贵族、私人管家 | `opulent upper district, champagne gold and ivory palette, warm soft lighting, art deco elegance, city lights far below` |

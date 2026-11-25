@@ -101,15 +101,15 @@ AI 不擅长透明背景和成套统一的小图标，所以这些不交给它�
 dystopian space station lower decks, cyberpunk junk shop atmosphere, deep purple and violet palette, magenta neon rim light, moody low-key lighting, detailed digital painting, trading card game illustration
 ```
 
-每个系列在这段后面再加一句系列风格。系列主题是从系列名和卡名归纳的（`art-src/HANDOFF.md`），"系列风格补充"等美术定了填进来：
+每个系列在这段后面再加一句系列风格（英文原样，是提示词的一部分）。100 张卡的完整提示词（主体 + 构图 + 系列风格 + 稀有度 + 通用风格，按出图优先级排好）在 `art-src/card-prompts.csv`，是卡面提示词的源头：
 
 | 系列编号 | 系列名 | 主题 | 系列风格补充 |
 | --- | --- | --- | --- |
-| NEO | 霓虹街头 | 下层区的夜街：路灯、积水街角、烤串摊、便利店夜班、雨夜侦探 | 待补 |
-| GNG | 地下帮派 | 帮派、地下赌场、打手、黑市掮客 | 待补 |
-| MEC | 机械义体 | 义体改造、维修铺、机械臂、电子脑、报废机器人 | 待补 |
-| SEA | 深海星港 | 水循环区和港口：码头、潜水员、水母灯、星港 | 待补 |
-| ELT | 上层区典藏 | 上层区的奢华：镀金请柬、香槟塔、天台花园、贵族、私人管家 | 待补 |
+| NEO | 霓虹街头 | 下层区的夜街：路灯、积水街角、烤串摊、便利店夜班、雨夜侦探 | `rainy neon night street, wet reflections, drifting steam` |
+| GNG | 地下帮派 | 帮派、地下赌场、打手、黑市掮客 | `underground gangland, smoky back alleys, gritty noir mood` |
+| MEC | 机械义体 | 义体改造、维修铺、机械臂、电子脑、报废机器人 | `cybernetic implants, grimy repair workshop, chrome and rust, electric blue sparks` |
+| SEA | 深海星港 | 水循环区和港口：码头、潜水员、水母灯、星港 | `flooded water-recycling docks of a space station, bioluminescent teal accents, mist` |
+| ELT | 上层区典藏 | 上层区的奢华：镀金请柬、香槟塔、天台花园、贵族、私人管家 | `opulent upper district, gold and ivory luxury, art deco elegance, city lights far below` |
 
 ### 头像规范
 
@@ -144,7 +144,7 @@ dystopian space station lower decks, cyberpunk junk shop atmosphere, deep purple
 | 放大镜细节 | `art/loupe/<名字>.webp`：`halftone` `ink` `misregister` `holo` `border` `scratch` `dust` `gap` |
 | 磨损 | `art/wear/<档位>.webp`：`1`（落灰）`2`（划痕）`3`（卷角） |
 | 封壳 | `art/slab/<名字>.webp`：`case`（透明壳 + 顶部标签）`case-black`（黑标）`tag-error`（错版小标签）`stamp-reject`（拒评印章） |
-| Activity 图标和封面 | `art/brand/icon-1024.png`、`art/brand/cover.png`（只用于上传 Developer Portal，游戏里不加载） |
+| Activity 图标和封面 | `art/brand/icon-1024.png`（已放）、`art/brand/cover.png`（只用于上传 Developer Portal，游戏里不加载；PNG、不限体积，`art:check` 跳过这个目录） |
 | 其他 | `art/scenes/` `art/ui/` `art/items/` `art/binders/` `art/collection/` `art/showcase/` `art/tech/` `art/logos/`，文件名用小写英文、数字、短横线 |
 
 **源文件**放在仓库根目录的 `art-src/`，不进前端构建：
@@ -152,13 +152,14 @@ dystopian space station lower decks, cyberpunk junk shop atmosphere, deep purple
 | 内容 | 位置 | 进 git |
 | --- | --- | --- |
 | AI 原图（PNG，不裁剪不压缩）、放大前的大图、带图层的后期文件 | 网盘的原图目录（`ART_RAW_DIR`），目录结构和 `art/` 一一对应 | 不进（太大），网盘就是备份 |
-| 每张 AI 图的生成参数 | `art-src/prompts.csv`（`art:import` 自动写） | 进 |
+| 卡面提示词的源头（100 张，按出图优先级） | `art-src/card-prompts.csv`（美术维护，改了从网盘根目录复制过来） | 进 |
+| 每张 AI 图实际用的生成参数 | `art-src/prompts.csv`（`art:import` 自动写） | 进 |
 | 代码图的 SVG 源码、配色和安全区 | `art-src/svg/`、`art-src/palette.json` | 进 |
 | 给美术的资料（世界观、系列、卡牌列表、顾客、联系人） | `art-src/HANDOFF.md`、`art-src/cards.json` | 进 |
 
 **AI 图的流程（Mac 出图 → Windows 接入）**：
 
-1. Joey 在 Mac 上用 Draw Things 出图，挑好的原图（PNG）放进网盘同步的原图目录。文件名和 `public/art/` 一一对应，只是扩展名是 `.png`：`cards/NEO-01.png` → `art/cards/NEO-01.webp`。
+1. Joey 在 Mac 上用 Draw Things 出图，挑好的原图（PNG）放进网盘同步的原图目录（各类别子目录）。原图目录**根目录**的文件（`prompts.csv`、`card-prompts.csv`、`README.txt`、`icon-1024.png` 等）不当原图处理，导入时忽略。文件名和 `public/art/` 一一对应，只是扩展名是 `.png`：`cards/NEO-01.png` → `art/cards/NEO-01.webp`。
 2. Windows 这边 `.env` 里写 `ART_RAW_DIR=<原图目录>`（见 `.env.example`），跑 `npm run art:import`：
    - 只处理新增或改过的原图（比较修改时间）；
    - 按规格处理：卡面居中裁成 63:88 再缩到 630 × 880，顾客头像、联系人缩到 256 × 256，场景缩放到 1920 × 1080，卡包包装等比缩到 630 × 880 以内；
@@ -179,5 +180,6 @@ dystopian space station lower decks, cyberpunk junk shop atmosphere, deep purple
 - 必须放在 `art/<类别>/` 下面一层，类别和文件名按上面的命名表：卡编号要在 `content/series/*.json`（`art-src/cards.json`）里，顾客类型要在 `CUSTOMER_TYPES` 里，风格、稀有度、放大镜细节、联系人、封壳只能是表里那几个名字。
 - 尺寸：卡面、卡背、卡框、磨损 630 × 880；稀有度角标正方形；顾客头像、联系人、放大镜细节 256 × 256；卡包包装竖版；场景横版、至少 1920 × 1080。
 - 透明通道：卡框、稀有度角标、放大镜细节、磨损、封壳、UI 图标、道具、科技树图标、Logo 必须带。
-- 体积：场景 ≤ 300 KB，其余 ≤ 150 KB；`art/brand/` 只用来上传 Developer Portal，不卡体积。
+- 体积：场景 ≤ 300 KB，其余 ≤ 150 KB。
+- `art/brand/` 只用来上传 Developer Portal，整个目录跳过不检查。
 - 最后打印 MVP 各类图的进度（比如"卡面 12 / 100"）。

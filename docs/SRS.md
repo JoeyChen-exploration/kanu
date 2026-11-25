@@ -399,7 +399,7 @@ Authorization: Bearer ${WANGCAI_CONTROL_SECRET}
 - **NFR-SEC-1** 服务器权威：所有规则判断、随机数、价格计算都在服务器做，前端只负责显示和发请求。
 - **NFR-SEC-2** 隐藏属性（真伪、真实品相、来源、心理价位、便衣身份）永远不出现在给玩家的响应里，包括错误信息和调试字段。
 - **NFR-SEC-3** 密钥（client secret、bot token、会话密钥、旺财 secret）只放服务器 `.env`，不进 git，不发给前端。
-- **NFR-SEC-4** 每个玩家的写接口限流：每秒最多 5 次，超过返回 429。
+- **NFR-SEC-4** 每个玩家的写接口限流：每秒最多 5 次（balance.RATE_LIMIT），超过返回 429（code = rate_limited）。按真实时钟算，内存计数，重启清零。
 - **NFR-SEC-5** 所有写接口必须带幂等 key，防止连点和网络重试造成重复扣款或重复发卡。
 
 ### 8.2 性能
@@ -418,6 +418,7 @@ Authorization: Bearer ${WANGCAI_CONTROL_SECRET}
 - **NFR-MAINT-1** `game/` 里的纯逻辑单元测试覆盖率不低于 80%。
 - **NFR-MAINT-2** 改了 `balance.ts` 必须重跑模拟脚本，把结果贴进提交说明。
 - **NFR-MAINT-3** 和旺财一样，一键关闭开关：`KANU_DISABLED=1` 时所有写接口返回 503，Activity 显示维护中。
+- **NFR-MAINT-4** 数据库备份（M7）：服务器启动时备份一次，之后每 BACKUP.everyHours 小时一次，better-sqlite3 在线备份（不停服、不锁库），放 `BACKUP_DIR`（默认 data/backups），文件名带悉尼日期时间，只留最近 BACKUP.keep 份（只清自己生成的 kanu-*.sqlite）。恢复：停服，把备份复制成 DB_PATH 的文件（删掉旧的 -wal / -shm），再启动。
 
 ### 8.5 设计档案没给、需要在 balance.ts 里先填的数
 

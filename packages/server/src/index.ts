@@ -1,5 +1,5 @@
 // 卡奴服务器入口。
-import { EXCHANGE, IDEMPOTENCY } from '@kanu/shared/balance';
+import { BACKUP, EXCHANGE, IDEMPOTENCY } from '@kanu/shared/balance';
 import { loadConfig, loadEnvFile } from './config.ts';
 import { openDb } from './db/index.ts';
 import { createSessionCodec } from './auth/session.ts';
@@ -10,6 +10,7 @@ import { importAllSeries } from './content.ts';
 import { cryptoRng } from './rng.ts';
 import { buildApp } from './app.ts';
 import { retryPendingExchanges } from './routes/exchange.ts';
+import { runBackup } from './backup.ts';
 
 loadEnvFile();
 const config = loadConfig();
@@ -52,4 +53,12 @@ process.on('SIGTERM', shutdown);
 
 await app.listen({ port: config.port, host: config.host });
 void retryExchanges();
+
+// 数据库备份（M7）：启动时一次，之后每 BACKUP.everyHours 小时一次
+const backup = () => runBackup(repo, config.backupDir, Date.now())
+  .then((r) => app.log.info(`[backup] ${r.file}${r.removed.length ? `，清掉旧备份 ${r.removed.length} 份` : ''}`))
+  .catch((e: Error) => app.log.error(`[backup] 备份失败：${e.message}`));
+const backupTimer = setInterval(backup, BACKUP.everyHours * 3600e3);
+backupTimer.unref();
+void backup();
 app.log.info(`kanu listening on http://${config.host}:${config.port} wallet=${config.wallet.mode} devAuth=${config.devAuth} series=${series.join(',')}`);

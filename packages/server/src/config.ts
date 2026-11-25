@@ -1,4 +1,5 @@
 // 读环境变量（SRS 第 10 节）。根目录的 .env 在启动时加载，不进 git。
+import { RATE_LIMIT } from '@kanu/shared/balance';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -13,11 +14,15 @@ export interface Config {
   sessionSecret: string;
   devAuth: boolean;
   disabled: boolean;
+  /** 每个玩家每秒最多几次写请求（NFR-SEC-4）；0 = 不限 */
+  rateLimitPerSecond: number;
   /** 本机测试用：把服务器时钟往后拨多少毫秒（只在 DEV_AUTH=1 时生效，比如半夜测柜台） */
   devTimeOffsetMs: number;
   /** 本机测试用：这些 Discord ID 开包不扣信用点、不限购（只在 DEV_AUTH=1 时生效，正式环境不开 DEV_AUTH 就自动失效） */
   devUnlimitedIds: Set<string>;
   dbPath: string;
+  /** 数据库备份目录（M7） */
+  backupDir: string;
   wallet: { mode: 'mock' | 'live'; port: number | null; secret: string | null; mockCoins: number };
   clientDist: string;
   botToken: string | null;
@@ -40,9 +45,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     sessionSecret,
     devAuth,
     disabled: env.KANU_DISABLED === '1',
+    /** 每个玩家每秒最多几次写请求（NFR-SEC-4）；0 = 不限（只给测试用） */
+    rateLimitPerSecond: env.RATE_LIMIT_PER_SECOND !== undefined ? Number(env.RATE_LIMIT_PER_SECOND) : RATE_LIMIT.writesPerSecond,
     devTimeOffsetMs: devAuth ? Number(env.DEV_TIME_OFFSET_HOURS || 0) * 3600e3 : 0,
     devUnlimitedIds: new Set(devAuth ? String(env.DEV_UNLIMITED_IDS || '').split(',').map((s) => s.trim()).filter(Boolean) : []),
     dbPath: path.resolve(ROOT, env.DB_PATH || './data/kanu.sqlite'),
+    backupDir: path.resolve(ROOT, env.BACKUP_DIR || './data/backups'),
     wallet: {
       mode,
       port: env.WANGCAI_CONTROL_PORT ? Number(env.WANGCAI_CONTROL_PORT) : null,

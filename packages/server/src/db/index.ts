@@ -722,6 +722,8 @@ function createRepo(db: Database.Database) {
     },
 
     close: () => db.close(),
+    /** 在线备份到 file（better-sqlite3 的 backup，不停服、不锁库） */
+    backup: (file: string) => db.backup(file),
   };
   return repo;
 }

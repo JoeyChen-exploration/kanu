@@ -65,9 +65,10 @@ h2 small { color: var(--muted); font-weight: normal; font-size: 13px; margin-lef
 .pack-info { background: var(--panel); border-radius: 12px; padding: 12px 14px; display: grid; gap: 6px; font-size: 14px; color: var(--muted); }
 .pack-info b { color: var(--text); }
 .pity-hit { text-align: center; color: var(--accent); font-weight: 700; }
-.pack-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 14px; }
-.pack-cards > :nth-child(4) { grid-column: 1 / 2; margin-left: 50%; }
-.pack-cards > :nth-child(5) { margin-left: 50%; }
+/* 拆包翻牌：横屏 5 张一排，卡的大小按屏幕高度算，一屏放得下；竖屏一排 3 张 */
+.pack-cards { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 14px; }
+.pack-cards > .flip { width: clamp(84px, min(18.5%, calc((100cqh - 190px) * 0.716)), 230px); }
+@container app (aspect-ratio < 1.25) { .pack-cards > .flip { width: calc((100% - 20px) / 3); } }
 .flip { background: none; border: none; padding: 0; perspective: 800px; }
 .flip-inner { position: relative; transition: transform 0.55s cubic-bezier(0.2, 0.7, 0.2, 1); transform-style: preserve-3d; }
 .flip.flipped .flip-inner { transform: rotateY(180deg); }
@@ -672,3 +673,31 @@ h2 small { color: var(--muted); font-weight: normal; font-size: 13px; margin-lef
 /* 美术接入（art.tsx）：有图时的样子；缺图时还是上面代码画的占位 */
 img.pack-img { object-fit: contain; background: none; box-shadow: none; padding: 0; }
 img.avatar-img { width: 56px; height: 56px; border-radius: 12px; object-fit: cover; font-size: 0; }
+
+/* ---- 撕卡包（PackTear）：卡包放大，顶部锯齿封口，滑过去撕开 ---- */
+.tear-stage { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 8px 0 16px; }
+.tear-hint { margin: 0; color: var(--muted); font-size: 13px; }
+.tear-pack { position: relative; width: min(240px, 46cqh); aspect-ratio: 3 / 4; touch-action: none; user-select: none; cursor: crosshair; animation: tear-bob 2.4s ease-in-out infinite; }
+.tear-pack.torn { animation: tear-shake 0.35s ease-out 1; }
+.tear-body, .tear-strip { position: absolute; inset: 0; }
+.tear-art, img.tear-art { width: 100% !important; height: 100% !important; border-radius: 14px; font-size: 42px; display: grid; place-items: center; object-fit: cover; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5); }
+.tear-strip { transition: transform 0.65s cubic-bezier(0.2, 0.7, 0.3, 1), opacity 0.65s ease-in; transform-origin: calc(50% + var(--tear-dir, 1) * -50%) 20%; }
+.tear-pack.torn .tear-strip { transform: translate(calc(var(--tear-dir, 1) * 40%), -130%) rotate(calc(var(--tear-dir, 1) * 28deg)); opacity: 0; }
+.tear-line { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+.tear-dash { fill: none; stroke: rgba(255, 255, 255, 0.55); stroke-width: 0.6; stroke-dasharray: 1.6 1.4; vector-effect: non-scaling-stroke; }
+.tear-cut { fill: none; stroke: #fff3c4; stroke-width: 3; vector-effect: non-scaling-stroke; filter: drop-shadow(0 0 4px #ffd36a) drop-shadow(0 0 10px #b48cff); }
+.tear-pack.torn .tear-line { opacity: 0; transition: opacity 0.3s 0.2s; }
+.tear-spark { position: absolute; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 50%; pointer-events: none; background: radial-gradient(circle, #fff 0 18%, #ffe28a 30%, rgba(180, 140, 255, 0.6) 55%, transparent 70%); animation: tear-spark 0.3s ease-in-out infinite alternate; }
+.tear-glow { position: absolute; left: 4%; right: 4%; top: calc(18% - 6%); height: 24%; pointer-events: none; border-radius: 50%; background: radial-gradient(ellipse at 50% 40%, rgba(255, 243, 196, 0.95), rgba(180, 140, 255, 0.5) 45%, transparent 70%); animation: tear-glow 0.65s ease-out forwards; mix-blend-mode: screen; }
+.tear-progress { position: absolute; left: 10%; right: 10%; bottom: -14px; height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.12); overflow: hidden; }
+.tear-progress span { display: block; height: 100%; background: var(--accent); transition: width 0.08s; }
+.tear-pack.torn .tear-progress { opacity: 0; }
+.tear-actions { display: flex; gap: 16px; margin-top: 8px; }
+@keyframes tear-bob { 0%, 100% { transform: translateY(0) rotate(-0.6deg); } 50% { transform: translateY(-4px) rotate(0.6deg); } }
+@keyframes tear-shake { 0% { transform: translateX(0); } 25% { transform: translateX(-4px) rotate(-1deg); } 60% { transform: translateX(3px) rotate(0.8deg); } 100% { transform: none; } }
+@keyframes tear-spark { from { transform: scale(0.8); opacity: 0.8; } to { transform: scale(1.25); opacity: 1; } }
+@keyframes tear-glow { from { transform: scale(0.4); opacity: 0; } 40% { opacity: 1; } to { transform: scale(1.4) translateY(-20%); opacity: 0.85; } }
+/* 撕开后卡牌一张张从包里飞出来 */
+.flip.deal-in { animation: deal-in 0.45s cubic-bezier(0.2, 0.8, 0.3, 1.2) backwards; }
+@keyframes deal-in { from { transform: translateY(40px) scale(0.6); opacity: 0; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .tear-pack, .flip.deal-in, .tear-spark { animation: none; } .tear-strip { transition: none; } }

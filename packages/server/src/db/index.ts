@@ -502,6 +502,19 @@ function createRepo(db: Database.Database) {
       db.prepare('INSERT INTO tech_owned (discord_id, node_id, bought_at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING').run(discordId, nodeId, now).changes > 0,
     setBlueprints: (discordId: string, n: number) => db.prepare('UPDATE players SET blueprints = ? WHERE discord_id = ?').run(n, discordId),
     setTechTracked: (discordId: string, nodeId: string | null) => db.prepare('UPDATE players SET tech_tracked = ? WHERE discord_id = ?').run(nodeId, discordId),
+    // ---- 管理（FR-ADMIN）：只给管理接口用，这里会带隐藏属性，不能给玩家接口调 ----
+    adminSearchPlayers: (q: string, limit = 30) =>
+      db.prepare("SELECT discord_id, display_name, credits, game_day, rent_due, shop_owned FROM players WHERE discord_id = ? OR display_name LIKE ? ORDER BY created_at DESC LIMIT ?")
+        .all(q, `%${q}%`, limit) as Array<{ discord_id: string; display_name: string; credits: number; game_day: number; rent_due: number; shop_owned: number }>,
+    adminCards: (ownerId: string) =>
+      db.prepare(`SELECT i.id, i.template_id, t.name, t.rarity, i.style, i.serial_no, i.location, i.authenticity, i.grade, i.origin, i.misprint, i.slab_score, i.acquired
+                  FROM card_instances i JOIN card_templates t ON t.id = i.template_id WHERE i.owner_id = ? ORDER BY i.id DESC`).all(ownerId) as Array<Record<string, unknown>>,
+    adminEvents: (ownerId: string, limit = 100) =>
+      (db.prepare('SELECT id, at, kind, data FROM events_log WHERE discord_id = ? ORDER BY id DESC LIMIT ?').all(ownerId, limit) as Array<{ id: number; at: number; kind: string; data: string }>)
+        .map((e) => ({ ...e, data: JSON.parse(e.data) as Record<string, unknown> })),
+    adminExchanges: (status: string | null, limit = 100) =>
+      (status ? db.prepare('SELECT * FROM exchanges WHERE status = ? ORDER BY id DESC LIMIT ?').all(status, limit) : db.prepare('SELECT * FROM exchanges ORDER BY id DESC LIMIT ?').all(limit)) as ExchangeRow[],
+    adminSetDay: (discordId: string, day: number) => db.prepare('UPDATE players SET game_day = ?, day_customer_count = 0 WHERE discord_id = ?').run(day, discordId),
     // ---- 金币兑换（FR-EXCH） ----
     insertExchange: (e: { ownerId: string; credits: number; coins: number; week: string; now: number }) =>
       Number(db.prepare('INSERT INTO exchanges (owner_id, credits, coins, week, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)').run(e.ownerId, e.credits, e.coins, e.week, e.now, e.now).lastInsertRowid),

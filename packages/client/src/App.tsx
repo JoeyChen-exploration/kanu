@@ -9,6 +9,7 @@ import { Packs } from './pages/Packs.tsx';
 import { Inventory } from './pages/Inventory.tsx';
 import { Collection } from './pages/Collection.tsx';
 import { Counter } from './pages/Counter.tsx';
+import { Admin } from './pages/Admin.tsx';
 import { Phone } from './Phone.tsx';
 import { Booklet, bookletUnseen } from './Booklet.tsx';
 import { QuestBar } from './QuestBar.tsx';
@@ -22,7 +23,7 @@ type State =
   | { kind: 'ready'; me: MeResponse }
   | { kind: 'error'; text: string };
 
-type Tab = 'shop' | 'tech' | 'packs' | 'counter' | 'inventory' | 'collection';
+type Tab = 'shop' | 'tech' | 'packs' | 'counter' | 'inventory' | 'collection' | 'admin';
 const TABS: Array<[Tab, string]> = [['shop', '店铺'], ['tech', '科技'], ['packs', '进货'], ['counter', '柜台'], ['inventory', '库存'], ['collection', '图鉴']];
 
 export function App() {
@@ -84,9 +85,10 @@ export function App() {
         {tab === 'counter' && <Counter onChange={patchMe} onGo={(t) => setTab(t as Tab)} />}
         {tab === 'inventory' && <Inventory onChange={patchMe} />}
         {tab === 'collection' && <Collection />}
+        {tab === 'admin' && me.isAdmin && <Admin />}
       </main>
       <nav className="tabs">
-        {TABS.map(([k, label]) => (
+        {[...TABS, ...(me.isAdmin ? [['admin', '管理'] as [Tab, string]] : [])].map(([k, label]) => (
           <button key={k} className={tab === k ? 'on' : ''} onClick={() => { setTab(k); if (k === 'shop') loadMe().catch(() => {}); }}>{label}</button>
         ))}
       </nav>

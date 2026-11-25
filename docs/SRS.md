@@ -233,13 +233,13 @@ kanu/
 
 | 编号 | 需求 | MVP |
 | --- | --- | --- |
-| FR-ADMIN-1 | 管理员身份由 `ADMIN_USER_IDS` 或 `ADMIN_ROLE_ID` 判定，管理页对其他人不可见、接口返回 403 | MVP |
-| FR-ADMIN-2 | 给玩家发信用点或指定卡（带原因，写日志） | MVP |
-| FR-ADMIN-3 | 查玩家：信用点、库存（含真实隐藏属性）、最近 100 条日志 | MVP |
-| FR-ADMIN-4 | 导入和更新卡牌模板（从 JSON 文件） | MVP |
-| FR-ADMIN-5 | 开启、结束赛季；内测时可以把一周缩短成 1 天，方便快速测试 | MVP |
+| FR-ADMIN-1 | 管理员身份由 `ADMIN_USER_IDS` 或 `ADMIN_ROLE_ID` 判定，管理页对其他人不可见、接口返回 403。2026-11-26 实现：先只认 `ADMIN_USER_IDS`（登录时没申请读成员身份组的权限，`ADMIN_ROLE_ID` 要加 guilds.members.read 后再接）；`GET /api/me` 的 isAdmin 控制前端管理标签 | MVP |
+| FR-ADMIN-2 | 给玩家发信用点或指定卡（带原因，写日志）。`POST /api/admin/grant`（幂等）：信用点可正可负（不能扣成负数），卡可指定风格、品相、真伪、张数（1～50） | MVP |
+| FR-ADMIN-3 | 查玩家：信用点、库存（含真实隐藏属性）、最近 100 条日志。`GET /api/admin/players?q=`、`GET /api/admin/players/:id`；带隐藏属性的查询只在管理接口里用 | MVP |
+| FR-ADMIN-4 | 导入和更新卡牌模板（从 JSON 文件）。`POST /api/admin/reload-content` 重新导入 content/series/*.json（upsert，内容有错整批不导） | MVP |
+| FR-ADMIN-5 | 开启、结束赛季；内测时可以把一周缩短成 1 天，方便快速测试。2026-11-26：营业日由玩家打烊推进，内测改成跳到第几个营业日（`POST /api/admin/players/:id/day`）快速测房租；赛季系统是第三阶段，到时再做开启 / 结束 | MVP |
 | FR-ADMIN-6 | 手动发布新闻 | 第二阶段 |
-| FR-ADMIN-7 | 查看兑换单，手动重试或关闭卡住的单子 | MVP |
+| FR-ADMIN-7 | 查看兑换单，手动重试或关闭卡住的单子。`GET /api/admin/exchanges`、`POST /api/admin/exchanges/:id/retry`（同一个 key）、`POST /api/admin/exchanges/:id/close { outcome: done | refund, reason }`：先查旺财流水，有这笔标到账，没有才退信用点 | MVP |
 
 ### 4.9 通知（NOTIFY）
 

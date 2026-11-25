@@ -11,9 +11,9 @@ import type { Notifier } from '../src/notify/discord.ts';
 
 export const NOW = 1_800_000_000_000;
 
-export function setup(opts: { devAuth?: boolean; discord?: DiscordAuth; disabled?: boolean; rng?: Rng; now?: () => number; unlimited?: string; wallet?: WalletClient; rateLimit?: number } = {}) {
+export function setup(opts: { devAuth?: boolean; discord?: DiscordAuth; disabled?: boolean; rng?: Rng; now?: () => number; unlimited?: string; wallet?: WalletClient; rateLimit?: number; admin?: string } = {}) {
   const config = {
-    ...loadConfig({ DEV_AUTH: opts.devAuth ? '1' : '0', SESSION_SECRET: 'test-secret', KANU_DISABLED: opts.disabled ? '1' : '0', DEV_UNLIMITED_IDS: opts.unlimited ?? '', RATE_LIMIT_PER_SECOND: String(opts.rateLimit ?? 0) }),
+    ...loadConfig({ DEV_AUTH: opts.devAuth ? '1' : '0', SESSION_SECRET: 'test-secret', KANU_DISABLED: opts.disabled ? '1' : '0', DEV_UNLIMITED_IDS: opts.unlimited ?? '', RATE_LIMIT_PER_SECOND: String(opts.rateLimit ?? 0), ADMIN_USER_IDS: opts.admin ?? '' }),
     clientDist: '/nonexistent',
   };
   const repo = openDb(':memory:');

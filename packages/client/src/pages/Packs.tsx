@@ -1,16 +1,20 @@
 // 进货页（DESIGN 4）：上面是库存里没拆的卡包，点了拆开、逐张翻牌；下面是电脑订货（5 种卡包，按包买，正常价、保证正品）。
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { PITY } from '@kanu/shared/balance';
 import type { BindersResponse, BuyBinderResponse, BuyPacksResponse, MeResponse, OpenPackResponse, SealedPacksResponse, StoreResponse } from '@kanu/shared/types';
 import { api, newIdempotencyKey } from '../api.ts';
 import { Card, CardBack, fmt } from '../Card.tsx';
 import { PackArt } from '../art.tsx';
+import { PackTear, type TearPack } from '../PackTear.tsx';
 
 export function Packs({ me, onChange }: { me: MeResponse; onChange: (patch: Partial<MeResponse>) => void }) {
   const [store, setStore] = useState<StoreResponse | null>(null);
   const [sealed, setSealed] = useState<SealedPacksResponse | null>(null);
   const [binders, setBinders] = useState<BindersResponse | null>(null);
   const [opened, setOpened] = useState<OpenPackResponse | null>(null);
+  /** 正在撕的那一包（撕开动画放完才显示拆包结果） */
+  const [tearing, setTearing] = useState<TearPack | null>(null);
+  const torn = useRef<OpenPackResponse | null>(null);
   const [flipped, setFlipped] = useState<boolean[]>([]);
   const [busy, setBusy] = useState(false);
   const [showOdds, setShowOdds] = useState<string | null>(null);
@@ -46,13 +50,22 @@ export function Packs({ me, onChange }: { me: MeResponse; onChange: (patch: Part
     await load();
   });
 
-  const open = (packId: number) => run(async () => {
-    const r = await api<OpenPackResponse>(`/packs/${packId}/open`, { method: 'POST', body: {}, idempotencyKey: newIdempotencyKey() });
+  /** 撕开那一刻：请求服务器拆包（同一包只发一次，幂等 key 跟着这次撕） */
+  const tearOpen = async () => {
+    if (!tearing) return;
+    torn.current = await api<OpenPackResponse>(`/packs/${tearing.id}/open`, { method: 'POST', body: {}, idempotencyKey: newIdempotencyKey() });
+  };
+  /** 撕开动画放完：换成翻牌 */
+  const showTorn = () => {
+    const r = torn.current;
+    if (!r) return;
+    torn.current = null;
+    setTearing(null);
     setOpened(r);
     setFlipped(r.cards.map(() => false));
     onChange({ pityCount: r.pityCount });
-    await load();
-  });
+    void load().catch(() => {});
+  };
 
   const flip = (i: number) => setFlipped((f) => f.map((v, j) => (j === i ? true : v)));
   const allFlipped = flipped.length > 0 && flipped.every(Boolean);
@@ -63,6 +76,16 @@ export function Packs({ me, onChange }: { me: MeResponse; onChange: (patch: Part
   const canAdd = free || (left !== undefined && cartCount < left);
   const setQty = (id: string, n: number) => setCart((c) => ({ ...c, [id]: Math.max(0, n) }));
 
+  // 正在撕包时只显示这一包
+  if (tearing) {
+    return (
+      <section className="page">
+        <h2>{tearing.name}{tearing.wholesale && <span className="wholesale-tag">批发</span>}</h2>
+        <PackTear pack={tearing} onTear={tearOpen} onDone={showTorn} onCancel={() => setTearing(null)} />
+      </section>
+    );
+  }
+
   // 正在翻牌时只显示这一包
   if (opened) {
     return (
@@ -71,7 +94,7 @@ export function Packs({ me, onChange }: { me: MeResponse; onChange: (patch: Part
         {opened.pityTriggered && <p className="pity-hit">保底触发！</p>}
         <div className="pack-cards">
           {opened.cards.map((c, i) => (
-            <button key={c.id} className={`flip${flipped[i] ? ' flipped' : ''}`} onClick={() => flip(i)} aria-label={flipped[i] ? c.name : '翻开这张'}>
+            <button key={c.id} className={`flip deal-in${flipped[i] ? ' flipped' : ''}`} style={{ animationDelay: `${i * 90}ms` }} onClick={() => flip(i)} aria-label={flipped[i] ? c.name : '翻开这张'}>
               <div className="flip-inner">
                 <div className="flip-back"><CardBack /></div>
                 <div className="flip-front"><Card card={c} /></div>
@@ -98,7 +121,7 @@ export function Packs({ me, onChange }: { me: MeResponse; onChange: (patch: Part
               <b>{g.name}{g.wholesale && <span className="wholesale-tag">批发</span>}</b>
               <span className="hint">{g.ids.length} 包{g.wholesale ? ' · 批发商不保证正品，拆出来拿放大镜看看' : ''}</span>
             </div>
-            <button className="chip on" disabled={busy} onClick={() => open(g.ids[0]!)}>拆一包</button>
+            <button className="chip on" disabled={busy} onClick={() => setTearing({ id: g.ids[0]!, seriesId: g.seriesId, name: g.name, kind: g.kind, wholesale: g.wholesale })}>拆一包</button>
           </div>
         ))}
       </div>

@@ -496,6 +496,11 @@ export const NOTIFY = { perMinute: 5 };
 /** 幂等记录保留多久（SRS 第 5 节 idempotency） */
 export const IDEMPOTENCY = { ttlMs: 48 * 3600e3 };
 
+/** 写接口限流（NFR-SEC-4）：每个玩家每秒最多几次写请求，超过回 429 */
+export const RATE_LIMIT = { writesPerSecond: 5 };
+/** 数据库备份（M7）：启动时备份一次，之后每几小时一次，备份目录里留最近几份 */
+export const BACKUP = { everyHours: 24, keep: 14 };
+
 // ---------- 金币兑换（DESIGN 11） ----------
 export const EXCHANGE = {
   /** 多少信用点换 1 金币 */

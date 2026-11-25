@@ -81,6 +81,19 @@ export function buildApp(input: Deps) {
     }
   });
 
+  // 写接口限流（NFR-SEC-4）：每个玩家 1 秒内最多 rateLimitPerSecond 次写请求，超过回 429。按真实时钟算（不受开发时钟偏移影响）
+  const recent = new Map<string, number[]>();
+  app.addHook('preHandler', async (req, reply) => {
+    const limit = deps.config.rateLimitPerSecond;
+    if (!limit || !req.user || req.method === 'GET' || !req.url.startsWith('/api/')) return;
+    const t = Date.now();
+    const hits = (recent.get(req.user.id) ?? []).filter((x) => t - x < 1000);
+    if (hits.length >= limit) return fail(reply, 429, 'rate_limited', '点得太快了，歇一下再试');
+    hits.push(t);
+    recent.set(req.user.id, hits);
+    if (recent.size > 5000) for (const [k, v] of recent) if (!v.some((x) => t - x < 1000)) recent.delete(k);
+  });
+
   app.get('/api/config', async () => ({
     ok: true as const,
     clientId: deps.config.clientId,

@@ -7,6 +7,7 @@ import type { BuyPhoneResponse, CardAppraisalResponse, CardView, GradeBatchRespo
 import { WRITE_EVENT, api, newIdempotencyKey } from './api.ts';
 import { Card, fmt } from './Card.tsx';
 import { FloatWindow } from './drag.tsx';
+import { PackArt } from './art.tsx';
 
 /** 卡被拖到电话上：各页面广播这个事件，电话接住 */
 export const PHONE_DROP = 'kanu:phone-drop';
@@ -118,7 +119,7 @@ export function Phone({ onClose, onChange }: { onClose: () => void; onChange: (p
               <div className="wholesale-offers">
                 {data.wholesale.offers.map((o) => (
                   <div key={o.seriesId} className={`wholesale-offer kind-${o.kind}`}>
-                    <div className="pack-art" aria-hidden>{o.name.slice(0, 2)}</div>
+                    <PackArt seriesId={o.seriesId} name={o.name} kind={o.kind} box />
                     <div className="wholesale-offer-body">
                       <b>{o.name}</b>
                       <span>一盒 {o.packs} 包 · <b>{fmt(o.boxPrice)}</b> <s>{fmt(o.normalPrice)}</s></span>

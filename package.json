@@ -18,11 +18,17 @@
     "typecheck": "tsc -p packages/shared && tsc -p packages/server && tsc -p packages/client",
     "sim": "tsx scripts/sim.ts",
     "sim:collect": "tsx scripts/collect-sim.ts",
-    "shots": "node scripts/shots.cjs"
+    "shots": "node scripts/shots.cjs",
+    "art:check": "tsx scripts/art-check.ts",
+    "art:build": "node scripts/art/build.mjs",
+    "art:import": "node scripts/art/import.mjs"
   },
   "devDependencies": {
+    "@fontsource/unbounded": "^5.3.0",
     "@types/node": "^22.20.5",
     "concurrently": "^10.0.7",
+    "opentype.js": "^2.0.0",
+    "sharp": "^0.35.5",
     "typescript": "~6.0.3",
     "vitest": "^5.1.0"
   }

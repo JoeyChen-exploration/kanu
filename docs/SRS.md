@@ -403,7 +403,7 @@ Authorization: Bearer ${WANGCAI_CONTROL_SECRET}
 ### 8.2 性能
 
 - **NFR-PERF-1** 接口 p95 延迟小于 300 ms（不含调旺财的兑换接口）。
-- **NFR-PERF-2** 手机上从点开 Activity 到看到店铺首页小于 3 秒；卡面图用 WebP，单张不超过 150 KB。
+- **NFR-PERF-2** 手机上从点开 Activity 到看到店铺首页小于 3 秒；图片用 WebP，场景背景单张不超过 300 KB，其余不超过 150 KB（docs/ART.md）。
 
 ### 8.3 可用性
 

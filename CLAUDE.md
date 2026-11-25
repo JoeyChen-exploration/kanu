@@ -46,3 +46,6 @@ Discord Activity 卡牌经营游戏：玩家在 Discord 里打开网页小程序
 - `npm run build`：构建前端到 packages/client/dist，服务器启动时如果有就托管它
 - `npm run sim`：经济模拟（M1 加）
 - `npm run shots`：按横屏手机、16:9、3:2、方屏、竖屏、画中画六种比例截图（要先 `npm run dev`）
+- `npm run art:build`：生成代码类美术（卡框、角标、卡背、放大镜细节、磨损），源码在 scripts/art/build.mjs、art-src/
+- `npm run art:import`：把 ART_RAW_DIR 里的 AI 原图转成 WebP 放进 public/art/（docs/ART.md）
+- `npm run art:check`：按 docs/ART.md 验收 public/art/

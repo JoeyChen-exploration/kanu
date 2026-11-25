@@ -19,7 +19,7 @@ const STATUS: Record<string, string> = { sold: '成交', left: '走了', dismiss
 /** 开价时每次加减多少，玩家自己选 */
 const STEPS = [1, 10, 100, 1000];
 
-export function Counter({ onChange }: { onChange: (patch: Partial<MeResponse>) => void }) {
+export function Counter({ onChange, onGo }: { onChange: (patch: Partial<MeResponse>) => void; onGo?: (tab: string) => void }) {
   const [data, setData] = useState<CounterResponse | null>(null);
   const [msg, setMsg] = useState('');
   const [busy, setBusy] = useState(false);
@@ -46,13 +46,16 @@ export function Counter({ onChange }: { onChange: (patch: Partial<MeResponse>) =
     try {
       const r = await api<EndDayResponse>('/day/end', { method: 'POST', body: {}, idempotencyKey: newIdempotencyKey() });
       onChange({ gameDay: r.day });
-      // 今天还能订几包要算上科技树（批发证），从服务器重新拿
-      api<MeResponse>('/me').then((m) => onChange({ packsLeftToday: m.packsLeftToday })).catch(() => {});
+      // 今天还能订几包（算上科技树批发证）、交租后的信用点和下次房租，从服务器重新拿
+      api<MeResponse>('/me').then((m) => onChange({ packsLeftToday: m.packsLeftToday, credits: m.credits, rent: m.rent })).catch(() => {});
       // 鉴定机构 / 评级社在打烊时出结果
       // 星港评级社在打烊时出结果
-      setMsg(r.appraisals.map((a) => `「${a.name}」${a.outcome === 'slab'
+      const notes = r.appraisals.map((a) => `「${a.name}」${a.outcome === 'slab'
         ? `封壳了：${a.score === 'BL' ? '黑标' : `${a.score} 分`}${a.errata ? '，还是错版！' : ''}`
-        : '被评级社拒评（疑似假卡），信誉下降'}`).join('；'));
+        : '被评级社拒评（疑似假卡），信誉下降'}`);
+      if (r.rentPaid) notes.unshift(`交了第 ${r.rentPaid.week} 周摊位费 ${fmt(r.rentPaid.amount)}`);
+      if (r.forfeited) notes.push(`${r.forfeited} 张抵押的卡过了赎回期，归房东了`);
+      setMsg(notes.join('；'));
       await load();
     } catch (e) {
       setErr((e as Error).message);
@@ -77,7 +80,13 @@ export function Counter({ onChange }: { onChange: (patch: Partial<MeResponse>) =
           openBinders={openBinders} setOpenBinders={setOpenBinders} table={table} setTable={setTable} guide={guide} setGuide={setGuide} />
       )}
 
-      {data.done && (
+      {data.arrears && (
+        <div className="closing rent-arrears">
+          <p><b>交不起摊位费</b>：第 {data.arrears.week} 周 {fmt(data.arrears.amount)} 信用点。柜台先关门，交上之前不能进入下一天。去店铺页抵押卡牌凑钱，或者从头开始。</p>
+          <button className="primary" onClick={() => onGo?.('shop')}>去店铺页处理</button>
+        </div>
+      )}
+      {data.done && !data.arrears && (
         <div className="closing">
           <p>今天的客人都走了。</p>
           <button className="primary" disabled={busy} onClick={endDay}>{busy ? '打烊中…' : `打烊，进入第 ${data.day + 1} 天`}</button>

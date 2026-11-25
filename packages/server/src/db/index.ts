@@ -217,6 +217,24 @@ const MIGRATIONS: string[] = [
    );
    ALTER TABLE players ADD COLUMN blueprints INTEGER NOT NULL DEFAULT 0;
    ALTER TABLE players ADD COLUMN tech_tracked TEXT;`,
+  // 17：房租（DESIGN 7，FR-RENT）。run_start_day = 这一轮从哪个营业日开始（破产后重算）；shop_owned 买下店铺；
+  // rent_due > 0 表示欠租（交租日打烊时钱不够），rent_week 是欠的第几周。pawns：抵押给房东的卡（卡本身 location = 'pawned'）
+  `ALTER TABLE players ADD COLUMN run_start_day INTEGER NOT NULL DEFAULT 1;
+   ALTER TABLE players ADD COLUMN shop_owned INTEGER NOT NULL DEFAULT 0;
+   ALTER TABLE players ADD COLUMN rent_due INTEGER NOT NULL DEFAULT 0;
+   ALTER TABLE players ADD COLUMN rent_week INTEGER NOT NULL DEFAULT 0;
+   CREATE TABLE pawns (
+     id          INTEGER PRIMARY KEY AUTOINCREMENT,
+     owner_id    TEXT NOT NULL REFERENCES players(discord_id),
+     card_id     INTEGER NOT NULL,
+     loan        INTEGER NOT NULL,
+     redeem      INTEGER NOT NULL,
+     pawned_day  INTEGER NOT NULL,
+     due_day     INTEGER NOT NULL,
+     status      TEXT NOT NULL DEFAULT 'active',
+     created_at  INTEGER NOT NULL
+   );
+   CREATE INDEX pawns_owner ON pawns (owner_id, status);`,
 ];
 
 /** 营业日在 customers、daily_usage 里的键 */
@@ -259,6 +277,13 @@ export interface PlayerRow {
   blueprints: number;
   /** 任务栏里追踪的科技树节点 */
   tech_tracked: string | null;
+  /** 这一轮从哪个营业日开始（破产后重算周数） */
+  run_start_day: number;
+  /** 买下店铺没有（1 = 是店主，不再交租） */
+  shop_owned: number;
+  /** 欠租金额（0 = 没欠）；欠的是第几周 */
+  rent_due: number;
+  rent_week: number;
   created_at: number;
 }
 
@@ -446,6 +471,32 @@ function createRepo(db: Database.Database) {
       db.prepare('INSERT INTO tech_owned (discord_id, node_id, bought_at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING').run(discordId, nodeId, now).changes > 0,
     setBlueprints: (discordId: string, n: number) => db.prepare('UPDATE players SET blueprints = ? WHERE discord_id = ?').run(n, discordId),
     setTechTracked: (discordId: string, nodeId: string | null) => db.prepare('UPDATE players SET tech_tracked = ? WHERE discord_id = ?').run(nodeId, discordId),
+    // ---- 房租、抵押、破产（FR-RENT） ----
+    setArrears: (discordId: string, due: number, week: number) => db.prepare('UPDATE players SET rent_due = ?, rent_week = ? WHERE discord_id = ?').run(due, week, discordId),
+    setShopOwned: (discordId: string, owned: boolean) => db.prepare('UPDATE players SET shop_owned = ? WHERE discord_id = ?').run(owned ? 1 : 0, discordId),
+    /** 从头开始：信用点重置、新一轮从 day 开始、清掉欠租和店铺 */
+    restartRun: (discordId: string, credits: number, day: number) =>
+      db.prepare('UPDATE players SET credits = ?, run_start_day = ?, rent_due = 0, rent_week = 0, shop_owned = 0 WHERE discord_id = ?').run(credits, day, discordId),
+    insertPawn: (p: { ownerId: string; cardId: number; loan: number; redeem: number; day: number; dueDay: number; now: number }) =>
+      Number(db.prepare('INSERT INTO pawns (owner_id, card_id, loan, redeem, pawned_day, due_day, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(p.ownerId, p.cardId, p.loan, p.redeem, p.day, p.dueDay, p.now).lastInsertRowid),
+    activePawns: (ownerId: string) =>
+      db.prepare("SELECT * FROM pawns WHERE owner_id = ? AND status = 'active' ORDER BY due_day, id").all(ownerId) as Array<{ id: number; card_id: number; loan: number; redeem: number; pawned_day: number; due_day: number }>,
+    getPawn: (ownerId: string, id: number) =>
+      (db.prepare('SELECT * FROM pawns WHERE id = ? AND owner_id = ?').get(id, ownerId) as { id: number; card_id: number; loan: number; redeem: number; due_day: number; status: string } | undefined) ?? null,
+    setPawnStatus: (id: number, status: string) => db.prepare('UPDATE pawns SET status = ? WHERE id = ?').run(status, id),
+    /** 抵押中的卡（公开信息），按 id 给 */
+    pawnedCards(ownerId: string): CardView[] {
+      const rows = db.prepare(`${q.cardsWithTemplate} WHERE i.owner_id = ? AND i.location = 'pawned'`).all(ownerId) as CardViewRow[];
+      return rows.map(toCardView);
+    },
+    /** 破产清空：珍藏柜以外的卡（库存、抵押中、送评中）、没拆的卡包、没送到的批发订单 */
+    wipeForRestart(ownerId: string) {
+      const cards = db.prepare("DELETE FROM card_instances WHERE owner_id = ? AND location <> 'showcase'").run(ownerId).changes;
+      const packs = db.prepare('DELETE FROM sealed_packs WHERE owner_id = ?').run(ownerId).changes;
+      db.prepare("UPDATE pawns SET status = 'forfeited' WHERE owner_id = ? AND status = 'active'").run(ownerId);
+      db.prepare("UPDATE wholesale_orders SET status = 'refused' WHERE owner_id = ? AND status = 'pending'").run(ownerId);
+      return { cards, packs };
+    },
     /** 这个营业日已经打电话订过几次批发（不管后来收没收） */
     wholesaleToday: (discordId: string, gameDay: number) =>
       (db.prepare('SELECT COUNT(*) AS n FROM wholesale_orders WHERE owner_id = ? AND ordered_day = ?').get(discordId, gameDay) as { n: number }).n,

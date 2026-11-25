@@ -7,6 +7,7 @@ import { BLUEPRINT, TECH_BRANCHES, TECH_NODES, type TechBranch, type TechNode } 
 import type { TechBuyResponse, TechNodeView, TechResponse } from '@kanu/shared/types';
 import { ApiError, fail, idempotencyKey, type Deps } from '../app.ts';
 import { checkCondition, techBlock } from '../game/tech.ts';
+import { rentStatus } from '../day.ts';
 
 export function techNodeViews(repo: Deps['repo'], ownerId: string): TechNodeView[] {
   const player = repo.getPlayer(ownerId)!;
@@ -71,6 +72,11 @@ export function registerTechRoutes(app: FastifyInstance, deps: Deps, now: () => 
       const converted = node.price - fromBlueprints;
       const creditCost = free(userId) ? 0 : Math.ceil(converted / BLUEPRINT.perCredit);
       if (player.credits < creditCost) throw new ApiError(400, 'insufficient_credits', `信用点不够：要 ${creditCost}，你有 ${player.credits}`);
+      // 租金保证金（DESIGN 7、FR-EXCH-3）：换蓝图只能动超过下次租金的那部分信用点，欠租时不能换
+      const reserve = player.shop_owned === 1 ? 0 : player.rent_due > 0 ? Infinity : rentStatus(deps, userId).next!.amount;
+      if (creditCost > 0 && player.credits - creditCost < reserve) {
+        throw new ApiError(400, 'rent_reserve', player.rent_due > 0 ? '欠租中，先把摊位费交了' : `下次摊位费 ${reserve} 要留着：现在最多能拿 ${Math.max(0, player.credits - reserve)} 信用点换蓝图`);
+      }
       const credits = player.credits - creditCost;
       const blueprints = player.blueprints - fromBlueprints;
       repo.setCreditsPity(userId, credits, player.pity_count);

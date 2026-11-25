@@ -701,3 +701,21 @@ img.avatar-img { width: 56px; height: 56px; border-radius: 12px; object-fit: cov
 .flip.deal-in { animation: deal-in 0.45s cubic-bezier(0.2, 0.8, 0.3, 1.2) backwards; }
 @keyframes deal-in { from { transform: translateY(40px) scale(0.6); opacity: 0; } to { transform: none; opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .tear-pack, .flip.deal-in, .tear-spark { animation: none; } .tear-strip { transition: none; } }
+
+/* ---- 房租面板（店铺页，FR-RENT） ---- */
+.rent-panel { margin-top: 14px; padding: 12px; border-radius: 12px; background: var(--panel); border: 1px solid var(--line); display: flex; flex-direction: column; gap: 10px; }
+.rent-panel.arrears { border-color: #b3202a; box-shadow: 0 0 0 1px #b3202a55 inset; }
+.rent-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+.rent-head h2 { margin: 0; font-size: 16px; }
+.rent-owner { color: #6fcf8f; font-weight: 700; }
+.rent-arrears p { margin: 0 0 8px; }
+.closing.rent-arrears { border: 1px solid #b3202a; border-radius: 12px; padding: 10px 12px; background: #2a0f14; }
+.rent-actions, .rent-shop { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.rent-pawns h3 { margin: 0 0 6px; font-size: 14px; }
+.rent-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: 8px; margin-top: 6px; }
+.rent-cell { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.rent-cell .chip { width: 100%; white-space: nowrap; font-size: 12px; }
+.rent-pawnable summary, .rent-bankrupt summary { cursor: pointer; }
+.rent-bankrupt p { margin: 6px 0; }
+button.danger { border-color: #b3202a; color: #fecaca; }
+button.primary.danger { background: #b3202a; color: #fff; }

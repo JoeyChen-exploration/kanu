@@ -10,8 +10,8 @@
 // 心理价位、个人浮动、今天还剩几位都不出现在响应里。
 import { techEffects } from '../game/tech.ts';
 import type { FastifyInstance } from 'fastify';
-import { BINDER_PAGE_SIZE, BINDERS, CUSTOMER, PACKS, RARITIES, RARITY, RENT, REPUTATION, COUNTER, WHOLESALE, type BinderKind, type CustomerType, type Rarity } from '@kanu/shared/balance';
-import type { CardView, CounterBinderPageResponse, CounterResponse, CustomerView, EligibleCardsResponse, EndDayResponse, OfferResponse, ReceiveResponse } from '@kanu/shared/types';
+import { BINDER_PAGE_SIZE, BINDERS, CUSTOMER, PACKS, RARITIES, RARITY, RENT, REPUTATION, COUNTER, WHOLESALE, DEALER, type BinderKind, type CustomerType, type Rarity } from '@kanu/shared/balance';
+import type { CardView, DealerBuyResponse, CounterBinderPageResponse, CounterResponse, CustomerView, EligibleCardsResponse, EndDayResponse, OfferResponse, ReceiveResponse } from '@kanu/shared/types';
 import { ApiError, fail, idempotencyKey, type Deps } from '../app.ts';
 import { dayKey, type CustomerRow } from '../db/index.ts';
 import {
@@ -21,6 +21,7 @@ import {
 import { loadLines, type LineEvent } from '../content.ts';
 import { grandChancePpm, showcaseEffects, showcaseScore } from '../game/showcase.ts';
 import { finishDay } from '../day.ts';
+import { dealerAsk, evaluateDealerOffer, rollDealerCards } from '../game/dealer.ts';
 import { rentDueToday, runDay } from '../game/rent.ts';
 import { rentForWeek } from '../game/price.ts';
 import { chance } from '../game/rng.ts';
@@ -35,6 +36,7 @@ function typicalPrice(rarities: Rarity[]): number {
 }
 
 function demandText(type: string, d: Demand): string {
+  if (d.kind === 'sell') return `急着出手 ${d.offers.length} 张卡，你出价收`;
   if (d.kind === 'delivery') return `送来「${d.seriesName}」一盒 ${d.packs} 包，货到付款 ${d.price.toLocaleString('zh-CN')} 信用点`;
   if (d.kind === 'pack') return d.seriesName ? `没拆的「${d.seriesName}」卡包` : '没拆的卡包，哪种都行';
   if (d.templateName) return `「${d.templateName}」这张卡`;
@@ -45,7 +47,8 @@ function demandText(type: string, d: Demand): string {
 
 const toSellable = (c: CardView): SellableCard => ({ id: c.id, templateId: c.templateId, rarity: c.rarity as Rarity, tags: c.tags, style: c.style, price: c.price });
 
-export function toCustomerView(row: CustomerRow): CustomerView {
+/** card：按 id 取卡的公开信息（卡贩摆上台面的卡要用）；卡贩心里的底价 ask 绝不放进来 */
+export function toCustomerView(row: CustomerRow, card: (id: number) => CardView | null = () => null): CustomerView {
   const demand = JSON.parse(row.demand) as Demand;
   const type = row.type as CustomerType;
   return {
@@ -56,6 +59,7 @@ export function toCustomerView(row: CustomerRow): CustomerView {
     demand: {
       kind: demand.kind, text: demandText(type, demand),
       ...(demand.kind === 'delivery' ? { delivery: { orderId: demand.orderId, seriesId: demand.seriesId, seriesName: demand.seriesName, packs: demand.packs, price: demand.price } } : {}),
+      ...(demand.kind === 'sell' ? { offers: demand.offers.flatMap((o) => { const c = card(o.cardId); return c ? [{ card: c, status: o.status, counterPrice: o.counter }] : []; }) } : {}),
     },
     budgetLow: row.budget_low,
     budgetHigh: row.budget_high,
@@ -68,6 +72,13 @@ export function toCustomerView(row: CustomerRow): CustomerView {
 
 export function registerCounterRoutes(app: FastifyInstance, deps: Deps, now: () => number) {
   const { repo, rng } = deps;
+  const view = (row: CustomerRow) => toCustomerView(row, (id) => repo.cardView(id));
+
+  /** 卡贩走了（请走、耐心用完、收完）：没收下的卡从玩家名下删掉 */
+  const releaseOffers = (demand: Demand) => {
+    if (demand.kind !== 'sell') return;
+    for (const o of demand.offers) if (o.status === 'open') repo.deleteCard(o.cardId);
+  };
   const pick = (arr: string[]) => arr[rng.int(arr.length)] ?? '';
   const say = (type: string, ev: LineEvent, vars: Record<string, string> = {}) =>
     pick(lines.byType[type]?.[ev] ?? ['……']).replace(/\{(\w+)\}/g, (_, k: string) => vars[k] ?? '');
@@ -112,6 +123,24 @@ export function registerCounterRoutes(app: FastifyInstance, deps: Deps, now: () 
       const showcase = showcaseEffects(score);
       const forceType: CustomerType | undefined = rows.length >= player.day_customer_count - extra ? 'collector'
         : grandChancePpm(score) > 0 && chance(rng, grandChancePpm(score)) ? 'grand' : undefined;
+      // 科技树 G2 卡贩门路：这一位有 dealerPpm 的概率是卡贩，带 1–3 张卡来卖（DESIGN 4 柜台收卡）
+      if (!forceType && tech.dealerPpm > 0 && chance(rng, tech.dealerPpm)) {
+        const byRarity: Partial<Record<Rarity, string[]>> = {};
+        for (const x of templates) (byRarity[x.rarity as Rarity] ||= []).push(x.id);
+        const offers = rollDealerCards(rng, byRarity).map((dc) => {
+          const cardId = repo.insertCard({ templateId: dc.templateId, ownerId, authenticity: dc.authenticity, grade: String(dc.grade), origin: dc.origin, style: dc.style, serialNo: null, now: t, collect: false, acquired: 'dealer', location: 'offered' });
+          return { cardId, ask: dealerAsk(rng, repo.cardView(cardId)!.price), counter: null, status: 'open' as const };
+        });
+        const demand: Demand = { kind: 'sell', offers };
+        const patience = DEALER.patience + tech.patience;
+        repo.insertCustomer({
+          owner_id: ownerId, day_key: day, slot: 0, seat: rows.length, type: 'dealer', demand: JSON.stringify(demand), float: 1,
+          patience, max_patience: patience, line: say('dealer', 'greet', { demand: demandText('dealer', demand) }), budget_low: 0, budget_high: 0, created_at: t,
+        });
+        rows = repo.customersFor(ownerId, day);
+        const cur = rows.find((c) => c.status === 'waiting') ?? null;
+        return { day: player.game_day, current: cur ? view(cur) : null, served: rows.filter((c) => c.status !== 'waiting').map(view), done: false, arrears: player.rent_due > 0 ? { amount: player.rent_due, week: player.rent_week } : null };
+      }
       // 科技树 C1 霓虹招牌：所有顾客耐心 +1
       const rolled = rollCustomer(rng, { inventory: repo.sellableCards(ownerId).map(toSellable), packs: sellablePacks(ownerId), templates, series, typicalPrice, forceType, showcase });
       const c = { ...rolled, patience: rolled.patience + tech.patience };
@@ -124,8 +153,8 @@ export function registerCounterRoutes(app: FastifyInstance, deps: Deps, now: () 
     const current = rows.find((c) => c.status === 'waiting') ?? null;
     return {
       day: player.game_day,
-      current: current ? toCustomerView(current) : null,
-      served: rows.filter((c) => c.status !== 'waiting').map(toCustomerView),
+      current: current ? view(current) : null,
+      served: rows.filter((c) => c.status !== 'waiting').map((r) => view(r)),
       done: !current && rows.length >= player.day_customer_count,
       arrears: player.rent_due > 0 ? { amount: player.rent_due, week: player.rent_week } : null,
     };
@@ -324,7 +353,7 @@ export function registerCounterRoutes(app: FastifyInstance, deps: Deps, now: () 
 
       const state = counterState(ownerId, t);
       const response: OfferResponse = {
-        ok: true, outcome: result, customer: toCustomerView(repo.getCustomer(ownerId, c.id)!),
+        ok: true, outcome: result, customer: view(repo.getCustomer(ownerId, c.id)!),
         next: result === 'counter' || result === 'too_high' ? null : state.current, done: state.done,
         price: dealPrice, credits, reputation,
       };
@@ -386,6 +415,64 @@ export function registerCounterRoutes(app: FastifyInstance, deps: Deps, now: () 
     })();
   });
 
+  // 卡贩：出价收台面上的一张卡（幂等）。够他的底价就成交（扣信用点、卡进卡册 / 桌面）；不够他还价，耐心减 1，用完就走（没收的卡删掉）
+  app.post<{ Params: { id: string }; Body: { cardId?: number; price?: number } }>('/api/counter/:id/buy', async (req, reply) => {
+    if (!req.user) return fail(reply, 401, 'unauthorized', '请重新打开卡奴登录');
+    const key = idempotencyKey(req);
+    if (!key) return fail(reply, 400, 'missing_idempotency_key', '请求缺少幂等 key，请刷新后再试');
+    const userId = req.user.id;
+    return repo.db.transaction((): DealerBuyResponse => {
+      const replay = repo.getIdempotent<DealerBuyResponse>(userId, key);
+      if (replay) return replay;
+      const t = now();
+      const c = waitingCustomer(userId, Number.parseInt(req.params.id, 10));
+      const demand = JSON.parse(c.demand) as Demand;
+      if (demand.kind !== 'sell') throw new ApiError(400, 'not_dealer', '这位不是来卖卡的');
+      const offer = demand.offers.find((o) => o.cardId === req.body?.cardId);
+      if (!offer || offer.status !== 'open') throw new ApiError(400, 'not_offered', '这张卡不在台面上了');
+      const price = req.body?.price;
+      if (typeof price !== 'number' || !Number.isInteger(price) || price <= 0) throw new ApiError(400, 'bad_price', '出价要是正整数');
+      const player = repo.getPlayer(userId)!;
+      if (player.credits < price) throw new ApiError(400, 'insufficient_credits', `信用点不够：出价 ${price}，你有 ${player.credits}`);
+      const outcome = evaluateDealerOffer(rng, { price, ask: offer.ask, patience: c.patience });
+      let credits = player.credits;
+      let status = c.status;
+      let patience = c.patience;
+      let line = c.line;
+      if (outcome.kind === 'deal') {
+        if (deps.binders!.space(userId).total < 1) throw new ApiError(400, 'no_space', '卡册和桌面都满了，先腾个位置再收');
+        credits -= price;
+        repo.setCreditsPity(userId, credits, player.pity_count);
+        repo.setLocation(offer.cardId, 'inventory');
+        deps.binders!.placeNew(userId, [offer.cardId], player.game_day);
+        offer.status = 'bought';
+        offer.counter = null;
+        repo.logCredits(userId, t, -price, 'dealer_buy', credits, { customer: c.id, card: offer.cardId });
+        line = say('dealer', 'deal');
+        if (demand.offers.every((o) => o.status === 'bought')) status = 'sold';
+      } else if (outcome.kind === 'counter') {
+        offer.counter = outcome.counterPrice;
+        patience = outcome.patience;
+        line = say('dealer', 'counter', { price: outcome.counterPrice.toLocaleString('zh-CN') });
+      } else {
+        patience = 0;
+        status = 'left';
+        line = say('dealer', 'left');
+        releaseOffers(demand);
+      }
+      repo.db.prepare('UPDATE customers SET demand = ? WHERE id = ?').run(JSON.stringify(demand), c.id);
+      repo.updateCustomer(c.id, { patience, status, line, counter_price: null });
+      repo.logEvent(userId, t, 'dealer_offer', { customer: c.id, card: offer.cardId, price, outcome: outcome.kind });
+      const state = counterState(userId, t);
+      const response: DealerBuyResponse = {
+        ok: true, outcome: outcome.kind, credits, customer: view(repo.getCustomer(userId, c.id)!),
+        card: outcome.kind === 'deal' ? repo.cardView(offer.cardId) : null, next: state.current, done: state.done,
+      };
+      repo.putIdempotent(userId, key, response, t);
+      return response;
+    })();
+  });
+
   app.post<{ Params: { id: string } }>('/api/counter/:id/dismiss', async (req, reply) => {
     if (!req.user) return fail(reply, 401, 'unauthorized', '请重新打开卡奴登录');
     const userId = req.user.id;
@@ -398,9 +485,10 @@ export function registerCounterRoutes(app: FastifyInstance, deps: Deps, now: () 
         if (order?.status === 'pending') repo.setOrderStatus(order.id, 'refused');
         repo.logEvent(userId, now(), 'wholesale_refused', { order: demand.orderId });
       }
+      releaseOffers(demand);
       repo.updateCustomer(c.id, { patience: c.patience, status: 'dismissed', line: c.line, counter_price: c.counter_price });
       const state = counterState(userId, now());
-      return { ok: true, customer: toCustomerView(repo.getCustomer(userId, c.id)!), next: state.current, done: state.done };
+      return { ok: true, customer: view(repo.getCustomer(userId, c.id)!), next: state.current, done: state.done };
     })();
   });
 }

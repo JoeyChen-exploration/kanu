@@ -40,7 +40,8 @@ export interface WalletView {
 // 只放玩家能知道的信息（FR-INV-2、NFR-SEC-2）：真伪、真实品相、来源永远不出现在这里。
 
 /** inventory 库存（卡册或桌面）、showcase 珍藏柜、grading 送评中（在星港评级社） */
-export type CardLocation = 'inventory' | 'showcase' | 'grading' | 'pawned';
+/** offered：卡贩摆在柜台上、还没收下的卡（挂在玩家名下好让放大镜能看，卡贩走了就删） */
+export type CardLocation = 'inventory' | 'showcase' | 'grading' | 'pawned' | 'offered';
 
 export interface CardView {
   id: number;
@@ -70,7 +71,7 @@ export interface CardView {
   /** 送评中时，第几个营业日出结果 */
   readyDay: number | null;
   /** 从哪来的（公开）：store 电脑订货（保证正品）、wholesale 电话批发（不保证，可能混着假卡） */
-  acquired: 'store' | 'wholesale';
+  acquired: 'store' | 'wholesale' | 'dealer';
 }
 
 // ---------- 鉴定（M3，DESIGN 5，2026-11-17 用户重定） ----------
@@ -261,7 +262,11 @@ export interface CustomerView {
   line: string;
   /** 想要什么：card 要卡（text 是"火属性的 SR 以上的卡"或"「霓虹龙·影」"），pack 要没拆的卡包；
    *  delivery 是送货员（送电话批发的货，货到付款），delivery 字段给出这盒货 */
-  demand: { kind: 'card' | 'pack' | 'delivery'; text: string; delivery?: { orderId: number; seriesId: string; seriesName: string; packs: number; price: number } };
+  demand: {
+    kind: 'card' | 'pack' | 'delivery' | 'sell'; text: string; delivery?: { orderId: number; seriesId: string; seriesName: string; packs: number; price: number };
+    /** 卡贩摆上台面的卡（只有公开信息；他心里的底价不发给玩家）：open 还在卖、bought 已收下；counterPrice 是他的还价 */
+    offers?: Array<{ card: CardView; status: 'open' | 'bought'; counterPrice: number | null }>;
+  };
   budgetLow: number;
   budgetHigh: number;
   patience: number;
@@ -569,4 +574,16 @@ export interface ExchangeOrderResponse {
   ok: true;
   credits: number;
   order: ExchangeView;
+}
+
+/** POST /api/counter/:id/buy { cardId, price }：出价收卡贩的一张卡（幂等）。deal 成交、counter 他还价、leave 他走了 */
+export interface DealerBuyResponse {
+  ok: true;
+  outcome: 'deal' | 'counter' | 'leave';
+  credits: number;
+  customer: CustomerView;
+  /** 成交时收下的卡 */
+  card: CardView | null;
+  next: CustomerView | null;
+  done: boolean;
 }

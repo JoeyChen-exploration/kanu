@@ -212,6 +212,7 @@ export const CUSTOMER: Record<CustomerType, {
   // 2026-11-18 用户定：电话批发的货由送货员送到柜台，占当天一个顾客名额，在柜台货到付款（收货 / 拒收）。
   // 不按出现率抽，只在有待送的订单时来；不买东西，wants 只是占位
   courier: { name: '货郎七号（送货）', ppm: 0, mvp: false, wants: { kind: 'pack' }, premium: [0, 0], patience: 3, detect: { low_fake: 0, high_fake: 0 } },
+  // 卡贩不按这里的 ppm 抽（mvp: false 不进抽签）：点了科技树 G2 才来，出现率是 TECH_NODES 里 G2 的 dealerPpm。ppm 留着让这张表合计 100%，wants 只是占位
   dealer: { name: '卡贩', ppm: 30_000, mvp: false, wants: { kind: 'card', rarities: ALL, tagChance: 0 }, premium: [0, 0.1], patience: 3, detect: { low_fake: 0, high_fake: 0 } },
   undercover: { name: '便衣治安员', ppm: 20_000, mvp: false, wants: { kind: 'card', rarities: ALL, tagChance: 0 }, premium: [0, 0.1], patience: 3, detect: { low_fake: 0, high_fake: 0 } },
 };
@@ -394,7 +395,8 @@ export type TechEffect =
   | { kind: 'errataDetectPpm'; value: number }
   | { kind: 'storePacksPerDay'; delta: number }
   | { kind: 'showcaseSlots'; delta: number }
-  | { kind: 'wholesaleDiscount'; value: number };
+  | { kind: 'wholesaleDiscount'; value: number }
+  | { kind: 'dealerPpm'; value: number };
 export type TechCondition = { kind: 'metric'; metric: QuestMetric; target: number } | { kind: 'reputation'; min: number };
 export interface TechNode {
   id: string; branch: TechBranch; tier: number; name: string;
@@ -447,7 +449,7 @@ export const TECH_NODES: TechNode[] = [
   // ---- 进货（货郎七号） ----
   { id: 'G1', branch: 'goods', tier: 1, name: '批发证', requires: [], price: 1500, conditions: [], effects: [{ kind: 'storePacksPerDay', delta: 1 }],
     effect: '电脑订货每天限购 5 → 6 包', flavor: '七号说：一张证，多一箱。' },
-  { id: 'G2', branch: 'goods', tier: 2, name: '卡贩门路', requires: ['G1'], price: 4000, conditions: [], effects: [], soon: 2, conditionText: '成交 15 笔',
+  { id: 'G2', branch: 'goods', tier: 2, name: '卡贩门路', requires: ['G1'], price: 4000, conditions: [{ kind: 'metric', metric: 'sales', target: 15 }], effects: [{ kind: 'dealerPpm', value: 180_000 }],
     effect: '解锁卡贩：有人来柜台卖卡给你（出现率 18%）', flavor: '有人急着出手，就有人收。' },
   { id: 'G3', branch: 'goods', tier: 3, name: '会员价', requires: ['G2'], price: 7000, conditions: [], effects: [], soon: 2, conditionText: '开包 40 包',
     effect: '正规卡包 9 折', flavor: '老客户，抹个零。' },
@@ -495,6 +497,15 @@ export const NOTIFY = { perMinute: 5 };
 
 /** 幂等记录保留多久（SRS 第 5 节 idempotency） */
 export const IDEMPOTENCY = { ttlMs: 48 * 3600e3 };
+
+/**
+ * 卡贩（柜台收卡，DESIGN 4 / 6，2026-11-26 上线）：点了科技树 G2 卡贩门路才来，每位客人有 G2 的 dealerPpm 概率换成卡贩。
+ * 每位带 cards 张（随机）摆上台面客人那一侧，卡按 packType 的稀有度概率随机抽（所有系列里抽）、风格和品相照开包；
+ * 属性全未知：fakePpm 是假卡（低仿高仿各半）、stolenPpm 是赃物（赃物要等便衣和巡查才有后果）。
+ * 卡贩心里的底价 = 市场价（未评级）× askPct 之间随机（急着脱手）；出价够底价就卖，不够就还价（底价 × counterUp 之间随机），
+ * 耐心 patience 次用完就走。买来的卡带公开的"收"字（acquired = dealer），图鉴要送评封壳后才点亮。
+ */
+export const DEALER = { cards: [1, 3] as [number, number], packType: 'premium' as PackType, fakePpm: 250_000, stolenPpm: 400_000, askPct: [0.4, 0.8] as [number, number], counterUp: [1, 1.15] as [number, number], patience: 3 };
 
 /** 写接口限流（NFR-SEC-4）：每个玩家每秒最多几次写请求，超过回 429 */
 export const RATE_LIMIT = { writesPerSecond: 5 };

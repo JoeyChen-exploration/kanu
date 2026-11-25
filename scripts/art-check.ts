@@ -73,9 +73,6 @@ function ruleFor(dir: string, name: string): { rule: Rule; key: string } | strin
     case 'loupe': return LOUPE.includes(base) ? { key: `loupe/${base}`, rule: { dims: [256, 256], alpha: true } } : `放大镜细节只能是 ${LOUPE.join(' ')}`;
     case 'wear': return ['1', '2', '3'].includes(base) ? { key: `wear/${base}`, rule: { dims: [630, 880], alpha: true } } : '磨损只能是 1 2 3';
     case 'scenes': return /^[a-z0-9-]+$/.test(base) ? { key: `scenes/${base}`, rule: { landscape: true, minDims: [1920, 1080], limit: LIMIT.scene } } : '文件名用小写英文、数字、短横线';
-    case 'brand':
-      // 品牌图只用来上传 Developer Portal，游戏里不加载，不卡体积
-      return /^[a-z0-9-]+$/.test(base) ? { key: `brand/${base}`, rule: { limit: Infinity } } : '文件名用小写英文、数字、短横线';
     case 'slab': return SLAB.includes(base) ? { key: `slab/${base}`, rule: { alpha: true } } : `封壳只能是 ${SLAB.join(' ')}`;
     case 'ui': case 'items': case 'binders': case 'collection': case 'showcase': case 'tech': case 'logos':
       return /^[a-z0-9-]+$/.test(base) ? { key: `${dir}/${base}`, rule: { alpha: dir === 'ui' || dir === 'items' || dir === 'tech' || dir === 'logos' } } : '文件名用小写英文、数字、短横线';
@@ -95,6 +92,8 @@ function main() {
     const rel = path.relative(ART, file).replace(/\\/g, '/');
     const parts = rel.split('/');
     if (parts[parts.length - 1]!.startsWith('.')) continue;
+    // art/brand/ 只用来上传 Developer Portal，游戏里不加载，不检查
+    if (parts[0] === 'brand') continue;
     if (parts.length !== 2) { errors.push(`${rel}：要放在 art/<类别>/ 下面一层`); continue; }
     const [dir, name] = parts as [string, string];
     if (!/\.(webp|png)$/.test(name)) { errors.push(`${rel}：只收 .webp 和 .png`); continue; }

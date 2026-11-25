@@ -719,3 +719,14 @@ img.avatar-img { width: 56px; height: 56px; border-radius: 12px; object-fit: cov
 .rent-bankrupt p { margin: 6px 0; }
 button.danger { border-color: #b3202a; color: #fecaca; }
 button.primary.danger { background: #b3202a; color: #fff; }
+
+/* ---- 金币兑换（店铺页，FR-EXCH） ---- */
+.exchange-panel { margin-top: 14px; padding: 12px; border-radius: 12px; background: var(--panel); border: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
+.exchange-panel .hint { margin: 0; }
+.exchange-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.exchange-form .price-input { display: flex; gap: 6px; align-items: center; }
+.exchange-form .price-input input { width: 90px; }
+.exchange-confirm { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.exchange-order { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; font-size: 13px; padding: 4px 0; border-top: 1px solid var(--line); }
+.exchange-order.pending .badge { background: #6b4d0b; }
+.exchange-order.failed .badge { background: #7f1d1d; }

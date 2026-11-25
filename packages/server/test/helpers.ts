@@ -4,14 +4,14 @@ import { loadConfig } from '../src/config.ts';
 import { openDb } from '../src/db/index.ts';
 import { createSessionCodec } from '../src/auth/session.ts';
 import { AuthError, type DiscordAuth } from '../src/auth/discord.ts';
-import { createWalletClient } from '../src/wallet/client.ts';
+import { createWalletClient, type WalletClient } from '../src/wallet/client.ts';
 import { importAllSeries } from '../src/content.ts';
 import { seeded, type Rng } from '../src/game/rng.ts';
 import type { Notifier } from '../src/notify/discord.ts';
 
 export const NOW = 1_800_000_000_000;
 
-export function setup(opts: { devAuth?: boolean; discord?: DiscordAuth; disabled?: boolean; rng?: Rng; now?: () => number; unlimited?: string } = {}) {
+export function setup(opts: { devAuth?: boolean; discord?: DiscordAuth; disabled?: boolean; rng?: Rng; now?: () => number; unlimited?: string; wallet?: WalletClient } = {}) {
   const config = {
     ...loadConfig({ DEV_AUTH: opts.devAuth ? '1' : '0', SESSION_SECRET: 'test-secret', KANU_DISABLED: opts.disabled ? '1' : '0', DEV_UNLIMITED_IDS: opts.unlimited ?? '' }),
     clientDist: '/nonexistent',
@@ -32,7 +32,7 @@ export function setup(opts: { devAuth?: boolean; discord?: DiscordAuth; disabled
     repo,
     sessions: createSessionCodec('test-secret'),
     discord,
-    wallet: createWalletClient({ mode: 'mock', port: null, secret: null, mockCoins: 321 }),
+    wallet: opts.wallet ?? createWalletClient({ mode: 'mock', port: null, secret: null, mockCoins: 321 }),
     rng: opts.rng ?? seeded(1),
     notifier,
     currentSeries: 'NEO',

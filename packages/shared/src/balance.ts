@@ -502,6 +502,9 @@ export const EXCHANGE = {
   creditsPerCoin: 10,
   /** 每人每周最多兑多少金币（悉尼时间周一 00:00 重置） */
   weeklyCapCoins: 2000,
+  /** pending 的兑换单每几分钟用同一个 key 重试一次；超过几小时还没结论就报警、停止自动重试（旺财只记得幂等 key 48 小时，SRS 6.3） */
+  retryMinutes: 10,
+  alertHours: 24,
 };
 
 // ---------- 科技树（TECH-TREE 7） ----------

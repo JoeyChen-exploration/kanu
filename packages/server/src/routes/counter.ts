@@ -10,8 +10,8 @@
 // 心理价位、个人浮动、今天还剩几位都不出现在响应里。
 import { techEffects } from '../game/tech.ts';
 import type { FastifyInstance } from 'fastify';
-import { BINDER_PAGE_SIZE, BINDERS, CUSTOMER, PACKS, RARITIES, RARITY, RENT, REPUTATION, COUNTER, WHOLESALE, DEALER, type BinderKind, type CustomerType, type Rarity } from '@kanu/shared/balance';
-import type { CardView, DealerBuyResponse, CounterBinderPageResponse, CounterResponse, CustomerView, EligibleCardsResponse, EndDayResponse, OfferResponse, ReceiveResponse } from '@kanu/shared/types';
+import { BINDER_PAGE_SIZE, BINDERS, CUSTOMER, PACKS, RARITIES, RARITY, RENT, REPUTATION, COUNTER, WHOLESALE, DEALER, POLICE, type BinderKind, type CustomerType, type Rarity } from '@kanu/shared/balance';
+import type { CardView, DealerBuyResponse, ReportResponse, CounterBinderPageResponse, CounterResponse, CustomerView, EligibleCardsResponse, EndDayResponse, OfferResponse, ReceiveResponse } from '@kanu/shared/types';
 import { ApiError, fail, idempotencyKey, type Deps } from '../app.ts';
 import { dayKey, type CustomerRow } from '../db/index.ts';
 import {
@@ -20,7 +20,8 @@ import {
 } from '../game/customers.ts';
 import { loadLines, type LineEvent } from '../content.ts';
 import { grandChancePpm, showcaseEffects, showcaseScore } from '../game/showcase.ts';
-import { finishDay } from '../day.ts';
+import { finishDay, patrolView } from '../day.ts';
+import { reportBonus, undercoverFine } from '../game/police.ts';
 import { dealerAsk, evaluateDealerOffer, rollDealerCards } from '../game/dealer.ts';
 import { rentDueToday, runDay } from '../game/rent.ts';
 import { rentForWeek } from '../game/price.ts';
@@ -115,7 +116,8 @@ export function registerCounterRoutes(app: FastifyInstance, deps: Deps, now: () 
       });
       rows = repo.customersFor(ownerId, day);
     }
-    if (!rows.some((c) => c.status === 'waiting') && rows.length < player.day_customer_count) {
+    const patrolNow = patrolView(deps, ownerId);
+    if (!patrolNow && !rows.some((c) => c.status === 'waiting') && rows.length < player.day_customer_count) {
       const series = repo.allSeries().map((s) => ({ id: s.id, name: s.name, price: PACKS[s.kind].price }));
       const templates = repo.allTemplates().map((x) => ({ id: x.id, name: x.name, rarity: x.rarity, tags: JSON.parse(x.tags) as string[] }));
       // 珍藏柜是门面：按顾客进门那一刻柜里的卡算展示分，抬高预算、心理价位和耐心；分够高还可能引来大藏家
@@ -144,10 +146,14 @@ export function registerCounterRoutes(app: FastifyInstance, deps: Deps, now: () 
       // 科技树 C1 霓虹招牌：所有顾客耐心 +1
       const rolled = rollCustomer(rng, { inventory: repo.sellableCards(ownerId).map(toSellable), packs: sellablePacks(ownerId), templates, series, typicalPrice, forceType, showcase });
       const c = { ...rolled, patience: rolled.patience + tech.patience };
-      repo.insertCustomer({
+      // 便衣（DESIGN 6）：伪装成这一类普通客人，玩家看不出类型；开口有一半概率露破绽（台词表 undercover）
+      const undercover = !forceType && CUSTOMER[c.type].mvp && c.type !== 'middleman' && chance(rng, POLICE.undercoverPpm);
+      const greetType = undercover && chance(rng, POLICE.tellPpm) ? 'undercover' : c.type;
+      const newId = repo.insertCustomer({
         owner_id: ownerId, day_key: day, slot: 0, seat: rows.length, type: c.type, demand: JSON.stringify(c.demand), float: c.float,
-        patience: c.patience, max_patience: c.patience, line: say(c.type, 'greet', { demand: demandText(c.type, c.demand) }), budget_low: c.budgetLow, budget_high: c.budgetHigh, created_at: t,
+        patience: c.patience, max_patience: c.patience, line: say(greetType, 'greet', { demand: demandText(c.type, c.demand) }), budget_low: c.budgetLow, budget_high: c.budgetHigh, created_at: t,
       });
+      if (undercover) repo.markUndercover(newId);
       rows = repo.customersFor(ownerId, day);
     }
     const current = rows.find((c) => c.status === 'waiting') ?? null;
@@ -155,8 +161,9 @@ export function registerCounterRoutes(app: FastifyInstance, deps: Deps, now: () 
       day: player.game_day,
       current: current ? view(current) : null,
       served: rows.filter((c) => c.status !== 'waiting').map((r) => view(r)),
-      done: !current && rows.length >= player.day_customer_count,
+      done: !current && !patrolNow && rows.length >= player.day_customer_count,
       arrears: player.rent_due > 0 ? { amount: player.rent_due, week: player.rent_week } : null,
+      patrol: patrolNow,
     };
   };
   const counterTx = repo.db.transaction(counterState);
@@ -204,8 +211,8 @@ export function registerCounterRoutes(app: FastifyInstance, deps: Deps, now: () 
         rentPaid = { amount, week };
       }
       // 打烊结算：散卡磨损、进入下一天、过期抵押归房东、评级社出结果
-      const { day, appraisals, forfeited } = finishDay(deps, userId, t, { customers: today.length });
-      const response: EndDayResponse = { ok: true, day, appraisals, rentPaid, forfeited };
+      const { day, appraisals, forfeited, patrol, patrolClean } = finishDay(deps, userId, t, { customers: today.length });
+      const response: EndDayResponse = { ok: true, day, appraisals, rentPaid, forfeited, patrol, patrolClean };
       repo.putIdempotent(userId, key, response, now());
       return response;
     })();
@@ -293,6 +300,9 @@ export function registerCounterRoutes(app: FastifyInstance, deps: Deps, now: () 
       let mind: number;
       let ask: number;
       let authenticity = 'real';
+      let stolen = false;
+      let marketPrice = 0;
+      let cardId: number | null = null;
       let finish: () => Record<string, unknown>;
       if (item.packId !== undefined) {
         const sealed = repo.getSealed(ownerId, item.packId);
@@ -315,6 +325,9 @@ export function registerCounterRoutes(app: FastifyInstance, deps: Deps, now: () 
         mind = Math.round(mindPrice(type, c.float, card) * mult);
         ask = price === 'quick' ? Math.round(quickPrice(type, card) * mult) : price;
         authenticity = inst.authenticity;
+        stolen = inst.origin === 'stolen';
+        marketPrice = view.price;
+        cardId = instanceId;
         finish = () => { repo.deleteCard(instanceId); return { card: instanceId, template: view.templateId, style: view.style }; };
       }
 
@@ -323,8 +336,19 @@ export function registerCounterRoutes(app: FastifyInstance, deps: Deps, now: () 
       let reputation = player.reputation;
       let result: OfferResponse['outcome'];
       let dealPrice: number | null = null;
+      let fine = 0;
 
-      if (outcome.kind === 'deal') {
+      if (outcome.kind === 'deal' && stolen && c.undercover === 1 && cardId !== null) {
+        // 卖赃卡给了便衣（DESIGN 6）：卡没收、不给钱、罚款、扣信誉
+        fine = undercoverFine(marketPrice, credits);
+        credits -= fine;
+        reputation = Math.max(REPUTATION.min, reputation - POLICE.bustRepLoss);
+        repo.deleteCard(cardId);
+        repo.updateCustomer(c.id, { patience: 0, status: 'busted', line: say('undercover', 'bust'), counter_price: null });
+        if (fine) repo.logCredits(ownerId, t, -fine, 'undercover_fine', credits, { customer: c.id, card: cardId });
+        repo.logEvent(ownerId, t, 'undercover_bust', { customer: c.id, card: cardId, fine, repLoss: POLICE.bustRepLoss });
+        result = 'busted';
+      } else if (outcome.kind === 'deal') {
         if (detectFake(rng, type, authenticity, false)) {
           // 被识破：退款、卡退回、扣信誉（FR-CTR-5）
           reputation = Math.max(REPUTATION.min, reputation - COUNTER.fakeCaughtRepLoss);
@@ -355,7 +379,7 @@ export function registerCounterRoutes(app: FastifyInstance, deps: Deps, now: () 
       const response: OfferResponse = {
         ok: true, outcome: result, customer: view(repo.getCustomer(ownerId, c.id)!),
         next: result === 'counter' || result === 'too_high' ? null : state.current, done: state.done,
-        price: dealPrice, credits, reputation,
+        price: dealPrice, credits, reputation, ...(result === 'busted' ? { fine } : {}),
       };
       repo.putIdempotent(ownerId, key, response, t);
       return response;
@@ -468,6 +492,38 @@ export function registerCounterRoutes(app: FastifyInstance, deps: Deps, now: () 
         ok: true, outcome: outcome.kind, credits, customer: view(repo.getCustomer(userId, c.id)!),
         card: outcome.kind === 'deal' ? repo.cardView(offer.cardId) : null, next: state.current, done: state.done,
       };
+      repo.putIdempotent(userId, key, response, t);
+      return response;
+    })();
+  });
+
+  // 举报卡贩（DESIGN 6）：他台面上的货里有赃物就对了（奖金、信誉 +，赃卡没收），没有就是错举（信誉 −）。举报完他都会走，没收的卡带走
+  app.post<{ Params: { id: string } }>('/api/counter/:id/report', async (req, reply) => {
+    if (!req.user) return fail(reply, 401, 'unauthorized', '请重新打开卡奴登录');
+    const key = idempotencyKey(req);
+    if (!key) return fail(reply, 400, 'missing_idempotency_key', '请求缺少幂等 key，请刷新后再试');
+    const userId = req.user.id;
+    return repo.db.transaction((): ReportResponse => {
+      const replay = repo.getIdempotent<ReportResponse>(userId, key);
+      if (replay) return replay;
+      const t = now();
+      const c = waitingCustomer(userId, Number.parseInt(req.params.id, 10));
+      const demand = JSON.parse(c.demand) as Demand;
+      if (demand.kind !== 'sell') throw new ApiError(400, 'not_dealer', '只能举报来卖卡的卡贩');
+      const open = demand.offers.filter((o) => o.status === 'open');
+      const stolen = open.filter((o) => repo.ownedInstance(userId, o.cardId)?.origin === 'stolen');
+      const player = repo.getPlayer(userId)!;
+      const correct = stolen.length > 0;
+      const bonus = correct ? reportBonus(stolen.map((o) => repo.cardView(o.cardId)?.price ?? 0)) : 0;
+      const credits = player.credits + bonus;
+      const reputation = correct ? Math.min(REPUTATION.max, player.reputation + POLICE.reportRepGain) : Math.max(REPUTATION.min, player.reputation - POLICE.falseReportRepLoss);
+      repo.setCreditsReputation(userId, credits, reputation);
+      if (bonus) repo.logCredits(userId, t, bonus, 'report_bonus', credits, { customer: c.id, cards: stolen.map((o) => o.cardId) });
+      releaseOffers(demand);
+      repo.updateCustomer(c.id, { patience: 0, status: 'reported', line: say('dealer', correct ? 'busted' : 'false_report'), counter_price: null });
+      repo.logEvent(userId, t, 'report_dealer', { customer: c.id, correct, bonus, stolen: stolen.length });
+      const state = counterState(userId, t);
+      const response: ReportResponse = { ok: true, correct, bonus, credits, reputation, next: state.current, done: state.done };
       repo.putIdempotent(userId, key, response, t);
       return response;
     })();

@@ -1,7 +1,7 @@
 // 新手手册：一本可以左右翻页的小册子（顶栏 📖 打开，第一次进游戏自动打开）。
 // 数字全部从 balance.ts 读，调了数值手册跟着变。只讲公开规则，不写顾客心理价位怎么算、品相掉没掉这类隐藏信息。
 import { useRef, useState, type ReactNode } from 'react';
-import { DEALER,
+import { POLICE, DEALER,
   ANNOUNCE, APPRAISAL, BINDER_KINDS, ERRATA, PHONE, GRAND_COLLECTOR, BINDERS, COUNTER, CUSTOMER, CUSTOMER_TYPES, EXCHANGE, LOOSE, PACKS, PITY, RARITIES, RARITY,
   RENT, SERIAL_LIMIT, SHOP_PRICE, SHOWCASE, STARTER_BINDER, STORE, STYLE, STYLES, UNGRADED_MULT, WHOLESALE, PAWN, type CustomerWants, } from '@kanu/shared/balance';
 import { Card, GameDayContext, fmt } from './Card.tsx';
@@ -229,6 +229,19 @@ const PAGES: Array<{ title: string; body: ReactNode }> = [
           <li><b>电话 📞</b>：花 {fmt(PHONE.price)} 信用点买一部。打给<b>星港评级社</b>送评：把卡拖到电话上，按"送评"。下次打烊出结果。</li>
           <li><b>送评结果</b>：真卡封壳出分（1–10 分、四个分项，还有比 10 分更稀有的<b>黑标</b>），卡价按分数算，10 分是未评级的好几倍；错版会被公开认定，价格再 ×{ERRATA.mult}。送了假卡会被拒评，信誉 −{APPRAISAL.gradeRejectRepLoss}。</li>
           <li>窍门：先用放大镜挑出品相 9–10、或者错版的卡，再送评。</li>
+        </ul>
+      </>
+    ),
+  },
+  {
+    title: '赃物、便衣和巡查',
+    body: (
+      <>
+        <p>卡贩的货来路不明，大约 {Math.round(DEALER.stolenPpm / 10_000)}% 是赃物。赃物看不出来，放大镜只能看真假和品相。</p>
+        <ul>
+          <li><b>便衣</b>：{POLICE.undercoverPpm / 10_000}% 的客人是治安局的便衣，长得和普通客人一样，有时说话会露破绽（比如问"有没有来路特别一点的"）。把赃卡卖给他：卡没收、不给钱、罚款，信誉 −{POLICE.bustRepLoss}。卖别的卡给他没事。</li>
+          <li><b>巡查</b>：打烊后有时会来查店，库存和珍藏柜里的赃卡大概率被查出。选<b>交出</b>（没收，信誉 −{POLICE.surrenderRepLoss}）或<b>打点</b>（付这些卡市场价的 {POLICE.bribePct * 100}%，卡留下）。处理完才能开门。</li>
+          <li><b>举报</b>：觉得卡贩的货是赃物，可以举报他。对了有奖金、信誉 +{POLICE.reportRepGain}；他的货是干净的就是错举，信誉 −{POLICE.falseReportRepLoss}。</li>
         </ul>
       </>
     ),

@@ -252,7 +252,7 @@ export interface CollectionResponse {
 // 心理价位、个人浮动是隐藏的，不出现在这里（NFR-SEC-2）。
 
 /** received：送货员的货收下了（2026-11-18） */
-export type CustomerStatus = 'waiting' | 'sold' | 'left' | 'dismissed' | 'received';
+export type CustomerStatus = 'waiting' | 'sold' | 'left' | 'dismissed' | 'received' | 'reported' | 'busted';
 
 export interface CustomerView {
   id: number;
@@ -288,6 +288,8 @@ export interface CounterResponse {
   done: boolean;
   /** 欠租中：柜台关门，先去店铺页交租 / 抵押（FR-RENT-2） */
   arrears?: { amount: number; week: number } | null;
+  /** 巡查查出赃卡、等你选交出或打点：处理完才开门（DESIGN 8.3） */
+  patrol?: PatrolView | null;
 }
 
 export interface EndDayResponse {
@@ -302,6 +304,9 @@ export interface EndDayResponse {
   arrears?: { amount: number; week: number } | null;
   /** 过了赎回期、归房东的抵押卡张数 */
   forfeited?: number;
+  /** 打烊后巡查来了：查出赃卡要处理（patrol），没查出东西（patrolClean） */
+  patrol?: PatrolView | null;
+  patrolClean?: boolean;
 }
 
 /** 房租状态（FR-RENT-6）：首页、店铺页显示 */
@@ -369,7 +374,10 @@ export interface CounterBinderPageResponse {
 
 export interface OfferResponse {
   ok: true;
-  outcome: 'deal' | 'counter' | 'too_high' | 'left' | 'caught';
+  /** busted：卖赃卡给了便衣，卡没收、罚款、扣信誉 */
+  outcome: 'deal' | 'counter' | 'too_high' | 'left' | 'caught' | 'busted';
+  /** busted 时罚了多少 */
+  fine?: number;
   customer: CustomerView;
   /** 这位走了以后进门的下一位（没有了是 null） */
   next: CustomerView | null;
@@ -584,6 +592,31 @@ export interface DealerBuyResponse {
   customer: CustomerView;
   /** 成交时收下的卡 */
   card: CardView | null;
+  next: CustomerView | null;
+  done: boolean;
+}
+
+/** 巡查（DESIGN 8.3）：查出的赃卡、打点要付多少、交出扣多少信誉 */
+export interface PatrolView {
+  id: number;
+  cards: CardView[];
+  bribe: number;
+  surrenderRepLoss: number;
+}
+/** POST /api/patrol/:id/resolve { choice: 'surrender' | 'bribe' }（幂等） */
+export interface PatrolResolveResponse {
+  ok: true;
+  choice: 'surrender' | 'bribe';
+  credits: number;
+  reputation: number;
+}
+/** POST /api/counter/:id/report：举报卡贩（他的货里有赃物就对了） */
+export interface ReportResponse {
+  ok: true;
+  correct: boolean;
+  bonus: number;
+  credits: number;
+  reputation: number;
   next: CustomerView | null;
   done: boolean;
 }

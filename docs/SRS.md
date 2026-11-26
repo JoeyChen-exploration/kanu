@@ -207,6 +207,9 @@ kanu/
 | FR-CTR-6 | 便衣、举报、卖赃卡被抓 | 第二阶段 |
 | FR-CTR-7 | 顾客台词从台词表随机抽取，台词表是可编辑的 JSON 文件 | MVP |
 | FR-CTR-9 | 卡贩（柜台收卡，DESIGN 4 / 6，2026-11-26）：点了科技树 G2 卡贩门路后，每位客人有 G2 的 dealerPpm（18%）概率换成卡贩，带 DEALER.cards 张卡摆在台面客人那一侧（卡挂在玩家名下、location = offered，不算库存、不能卖 / 抵押 / 送评，放大镜能看；卡贩走了就删）。卡属性全未知（fakePpm 假卡、stolenPpm 赃物），每张显示市场价；他心里的底价是市场价 × askPct（隐藏，不发给玩家）。`POST /api/counter/:id/buy { cardId, price }`（幂等）：够底价成交（扣信用点、进卡册 / 桌面、acquired = dealer 公开标"收"、图鉴不点亮），不够他还价、耐心减 1，用完就走；请走卡贩没收的卡他带走 | 第二阶段 |
+| FR-CTR-10 | 便衣（DESIGN 6，2026-11-26）：每位普通客人有 POLICE.undercoverPpm 概率是便衣，伪装成那一类客人（customers.undercover 隐藏，绝不发给玩家），开口有 tellPpm 概率说露破绽的台词。赃卡卖给便衣：卡没收、不给钱、罚款 max(fineMin, 市场价 × fineMult)（最多罚到 0）、信誉 −bustRepLoss，offer 返回 outcome = busted；卖别的卡照常 | 第二阶段 |
+| FR-CTR-11 | 举报卡贩（`POST /api/counter/:id/report`，幂等）：他台面上的货里有赃物就对了（奖金 = 赃卡市场价合计 × reportBonusPct，信誉 +reportRepGain，赃卡没收），没有就是错举（信誉 −falseReportRepLoss）；举报完他都会走 | 第二阶段 |
+| FR-CTR-12 | 治安巡查（DESIGN 8.3）：每次打烊都掷一次（POLICE.patrolPpm，不管有没有赃卡，免得泄露），库存和珍藏柜里每张赃卡 detectPpm 被查出（抵押、送评、卡贩台面上的不查）。查出就建 patrols 记录，柜台不放客人进门，玩家 `POST /api/patrol/:id/resolve { choice }`（幂等）：surrender 没收、信誉 −surrenderRepLoss；bribe 付市场价合计 × bribePct、卡留下。迁移 19。藏匿室（S3b / S4b）、治安关系以后接 | 第二阶段 |
 | FR-CTR-8 | 大藏家（DESIGN 8.1）：珍藏柜展示分 ≥ GRAND_COLLECTOR.minScore 时，每位进门的顾客有 min(maxPpm, 展示分 × ppmPerPoint) 的几率换成大藏家；只要 UR 以上，价格系数 2.8（富人 2 倍），耐心 2，识假很强 | MVP |
 
 ### 4.6 房租、破产、买店（RENT）

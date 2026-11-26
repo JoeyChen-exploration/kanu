@@ -17,7 +17,7 @@ const KB = 1024;
 /** 认识的类别目录（和 scripts/art-check.ts 一致） */
 /** 代码生成的卡面（scripts/art/build.mjs），原图目录里就算有同名文件也不导入，免得覆盖 */
 const CODE_ONLY = new Set(['cards/GNG-01.png']);
-const DIRS = ['cards', 'frames', 'rarity', 'slab', 'packs', 'customers', 'contacts', 'loupe', 'wear', 'scenes', 'ui', 'items', 'binders', 'collection', 'showcase', 'tech', 'logos'];
+const DIRS = ['cards', 'frames', 'rarity', 'slab', 'factions', 'packs', 'customers', 'contacts', 'loupe', 'wear', 'scenes', 'ui', 'items', 'binders', 'collection', 'showcase', 'tech', 'logos'];
 
 /** 从环境变量或仓库根目录的 .env 读 ART_RAW_DIR */
 function rawDir() {

@@ -13,7 +13,11 @@ const LIMIT = { scene: 300 * KB, other: 150 * KB };
 const STYLES = ['standard', 'holo', 'ice', 'gold', 'dark', 'serial'];
 const RARITIES = ['N', 'R', 'SR', 'SSR', 'UR', 'LR', 'MR'];
 const LOUPE = ['halftone', 'ink', 'misregister', 'holo', 'border', 'scratch', 'dust', 'gap'];
-const CONTACTS = ['adeng', 'glasses', 'courier7', 'operator0', 'tam'];
+const CONTACTS = ['adeng', 'glasses', 'courier7', 'operator0', 'tam', 'guild-rep', 'black-fixer', 'collector-rep', 'patrol-officer'];
+/** 阵营徽记和关系等级（ART.md） */
+const FACTIONS = ['guild', 'black', 'collectors', 'police', 'tier-hostile', 'tier-stranger', 'tier-known', 'tier-ally'];
+/** 黑市卡包挂在没有卡的系列 BLK 下（BLACK_MARKET.seriesId），只有一种、没有整盒 */
+const BLACK_PACK = 'BLK';
 const SLAB = ['case', 'case-black', 'tag-error', 'stamp-reject'];
 
 const series = fs.readdirSync(SERIES_DIR).filter((f) => f.endsWith('.json')).map((f) => JSON.parse(fs.readFileSync(path.join(SERIES_DIR, f), 'utf8')) as { id: string; cards: Array<{ id: string }> });
@@ -63,12 +67,14 @@ function ruleFor(dir: string, name: string): { rule: Rule; key: string } | strin
     case 'rarity': return RARITIES.includes(base) ? { key: `rarity/${base}`, rule: { square: true, alpha: true } } : `稀有度只能是 ${RARITIES.join(' ')}`;
     case 'packs': {
       const m = /^([A-Z]+)(-box)?$/.exec(base);
+      if (base === BLACK_PACK) return { key: `packs/${base}`, rule: { portrait: true } };
       return m && seriesIds.includes(m[1]!) ? { key: `packs/${base}`, rule: { portrait: !m[2] } } : `卡包名要是 <系列编号> 或 <系列编号>-box，系列编号：${seriesIds.join(' ')}`;
     }
     case 'customers': {
       const m = /^([a-z]+)-([1-3])$/.exec(base);
       return m && (CUSTOMER_TYPES as readonly string[]).includes(m[1]!) ? { key: `customers/${base}`, rule: { dims: [256, 256] } } : `顾客头像要是 <类型>-<1~3>，类型：${CUSTOMER_TYPES.join(' ')}`;
     }
+    case 'factions': return FACTIONS.includes(base) ? { key: `factions/${base}`, rule: { square: true, alpha: true } } : `阵营徽记 / 关系等级只能是 ${FACTIONS.join(' ')}`;
     case 'contacts': return CONTACTS.includes(base) ? { key: `contacts/${base}`, rule: { dims: [256, 256] } } : `联系人 id 只能是 ${CONTACTS.join(' ')}`;
     case 'loupe': return LOUPE.includes(base) ? { key: `loupe/${base}`, rule: { dims: [256, 256], alpha: true } } : `放大镜细节只能是 ${LOUPE.join(' ')}`;
     case 'wear': return ['1', '2', '3'].includes(base) ? { key: `wear/${base}`, rule: { dims: [630, 880], alpha: true } } : '磨损只能是 1 2 3';
@@ -128,6 +134,8 @@ function main() {
   console.log(`  卡包包装    ${[...found].filter((k) => /^packs\/[A-Z]+$/.test(k)).length} / ${seriesIds.length}，整盒 ${[...found].filter((k) => k.endsWith('-box')).length} / ${seriesIds.length}`);
   console.log(`  顾客头像    ${count('customers/')}（${CUSTOMER_TYPES.length} 类，每类 1–3 个）`);
   console.log(`  联系人      ${count('contacts/')} / ${CONTACTS.length}`);
+  console.log(`  阵营 / 关系  ${count('factions/')} / ${FACTIONS.length}`);
+  console.log(`  黑市包装    ${found.has(`packs/${BLACK_PACK}`) ? 1 : 0} / 1`);
   console.log(`  放大镜细节  ${count('loupe/')} / ${LOUPE.length}`);
   console.log(`  磨损        ${count('wear/')} / 3`);
   console.log(`  封壳        ${count('slab/')} / ${SLAB.length}`);

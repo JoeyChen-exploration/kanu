@@ -18,7 +18,7 @@ const STRIP_CLIP = `polygon(0% 0%, 100% 0%, ${pts([...zigzag].reverse())})`;
 const BODY_CLIP = `polygon(${pts(zigzag)}, 100% 100%, 0% 100%)`;
 const LINE = zigzag.map(([x, y]) => `${x},${y}`).join(' ');
 
-export interface TearPack { id: number; seriesId: string; name: string; kind: string; wholesale?: boolean }
+export interface TearPack { id: number; seriesId: string; name: string; kind: string; wholesale?: boolean; black?: boolean }
 
 /** onTear：撕开那一刻去拆包（请求服务器）；onDone：动画放完、拆包也成功了，换成翻牌 */
 export function PackTear({ pack, onTear, onDone, onCancel }: { pack: TearPack; onTear: () => Promise<void>; onDone: () => void; onCancel: () => void }) {

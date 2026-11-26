@@ -265,6 +265,9 @@ const MIGRATIONS: string[] = [
      created_at  INTEGER NOT NULL
    );
    CREATE INDEX patrols_owner ON patrols (owner_id, status);`,
+  // 20：黑市（DESIGN 4）。黑市卡包挂在一个没有卡的系列 BLK 下（sealed_packs.source = 'black'），拆的时候从所有系列里抽卡。
+  // allSeries 只列有卡的系列，所以电脑订货和批发都看不到它
+  `INSERT OR IGNORE INTO series (id, name, kind) VALUES ('BLK', '黑市货', 'black');`,
 ];
 
 /** 营业日在 customers、daily_usage 里的键 */
@@ -501,11 +504,11 @@ function createRepo(db: Database.Database) {
      * 新卡入库。collect：要不要马上点亮图鉴——只能按公开信息决定（M3 修）：电脑订货保证正品，拆出来就点亮；
      * 以后电话批发、卡贩这些来路不明的卡传 false，等鉴定机构验真（或封壳）后再点亮。不能按隐藏的真伪决定，否则图鉴会泄露真伪
      */
-    insertCard(c: { templateId: string; ownerId: string; authenticity: string; grade: string; origin: string; style: Style; serialNo: number | null; now: number; collect?: boolean; misprint?: boolean; acquired?: 'store' | 'wholesale' | 'dealer'; location?: 'inventory' | 'offered' }): number {
+    insertCard(c: { templateId: string; ownerId: string; authenticity: string; grade: string; origin: string; style: Style; serialNo: number | null; now: number; collect?: boolean; misprint?: boolean; acquired?: 'store' | 'wholesale' | 'dealer' | 'black'; location?: 'inventory' | 'offered' }): number {
       const r = q.insertInstance.run(c.templateId, c.ownerId, c.authenticity, c.grade, c.origin, c.style, c.serialNo, c.now);
       const id = Number(r.lastInsertRowid);
       if (c.misprint) db.prepare('UPDATE card_instances SET misprint = 1 WHERE id = ?').run(id);
-      if (c.acquired === 'wholesale' || c.acquired === 'dealer') db.prepare('UPDATE card_instances SET acquired = ? WHERE id = ?').run(c.acquired, id);
+      if (c.acquired === 'wholesale' || c.acquired === 'dealer' || c.acquired === 'black') db.prepare('UPDATE card_instances SET acquired = ? WHERE id = ?').run(c.acquired, id);
       if (c.location === 'offered') db.prepare("UPDATE card_instances SET location = 'offered' WHERE id = ?").run(id);
       if (c.collect ?? true) repo.markCollected(c.ownerId, c.templateId, c.style, c.now);
       return id;
@@ -637,8 +640,11 @@ function createRepo(db: Database.Database) {
       (db.prepare('SELECT * FROM sealed_packs WHERE id = ? AND owner_id = ?').get(id, ownerId) as { id: number; owner_id: string; series_id: string; source: string; box_id: number | null; created_at: number } | undefined) ?? null,
     deleteSealed: (id: number) => db.prepare('DELETE FROM sealed_packs WHERE id = ?').run(id),
     sealedByOwner: (ownerId: string) =>
-      db.prepare('SELECT p.id, p.series_id, p.source, s.name, s.kind FROM sealed_packs p JOIN series s ON s.id = p.series_id WHERE p.owner_id = ? ORDER BY p.id').all(ownerId) as Array<{ id: number; series_id: string; source: string; name: string; kind: 'themed' | 'premium' }>,
-    seriesKind: (seriesId: string) => (db.prepare('SELECT kind FROM series WHERE id = ?').get(seriesId) as { kind: 'themed' | 'premium' } | undefined)?.kind ?? null,
+      db.prepare('SELECT p.id, p.series_id, p.source, s.name, s.kind FROM sealed_packs p JOIN series s ON s.id = p.series_id WHERE p.owner_id = ? ORDER BY p.id').all(ownerId) as Array<{ id: number; series_id: string; source: string; name: string; kind: 'themed' | 'premium' | 'black' }>,
+    seriesKind: (seriesId: string) => (db.prepare('SELECT kind FROM series WHERE id = ?').get(seriesId) as { kind: 'themed' | 'premium' | 'black' } | undefined)?.kind ?? null,
+    /** 这个营业日在黑市买了几包（流水里 why = black 的 count 加起来） */
+    blackBoughtToday: (ownerId: string, day: number) =>
+      (db.prepare("SELECT COALESCE(SUM(json_extract(data, '$.count')), 0) AS n FROM events_log WHERE discord_id = ? AND kind = 'credits' AND json_extract(data, '$.why') IN ('black', 'black_test_free') AND json_extract(data, '$.day') = ?").get(ownerId, day) as { n: number }).n,
 
     advanceDay: (discordId: string) => db.prepare('UPDATE players SET game_day = game_day + 1, day_customer_count = 0 WHERE discord_id = ?').run(discordId),
     setDayCustomerCount: (discordId: string, n: number) => db.prepare('UPDATE players SET day_customer_count = ? WHERE discord_id = ?').run(n, discordId),
@@ -824,7 +830,7 @@ function toCardView(r: CardViewRow): CardView {
     slab: r.slab_score ? { score: r.slab_score, subgrades: JSON.parse(r.slab_subgrades ?? '{}') as Record<string, number>, errata: r.slab_errata === 1 } : null,
     gradeRejected: r.grade_rejected === 1,
     readyDay: r.ready_day,
-    acquired: r.acquired === 'wholesale' ? 'wholesale' : r.acquired === 'dealer' ? 'dealer' : 'store',
+    acquired: r.acquired === 'wholesale' || r.acquired === 'dealer' || r.acquired === 'black' ? r.acquired : 'store',
   };
 }
 

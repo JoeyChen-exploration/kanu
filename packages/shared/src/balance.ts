@@ -67,13 +67,20 @@ export const PACKS: Record<PackType, {
     price: 200,
     cards: 5,
     odds: { N: 520_000, R: 270_000, SR: 120_000, SSR: 60_000, UR: 20_000, LR: 8_000, MR: 2_000 },
-    // 黑市包（第二阶段）开的是已有卡包里的卡，具体从哪几种里抽到时再定
+    // 黑市包（2026-11-26 上线）开的是所有系列里的卡：先按 odds 抽稀有度，再从所有系列这个稀有度的卡里随机抽一张
     composition: { N: 0, R: 0, SR: 0, SSR: 0, UR: 0, LR: 0, MR: 0 },
     fakePpm: 250_000,
     stolenPpm: 200_000,
     pity: false,
   },
 };
+
+/**
+ * 黑市（DESIGN 4，2026-11-26 上线）：黑市卡包 PACKS.black（200 / 包、约 25% 假卡、20% 赃物、不计保底），每个营业日最多 perDay 包（和电脑订货分开算）。
+ * 解锁：设计里是黑市派系关系到"熟脸"；派系还没做，先用"和黑市中间人成交 unlockMiddlemanSales 次"代替。
+ * 黑市包拆出来的卡带公开的"黑"字（acquired = black），来路不明，图鉴要送评封壳后才点亮。
+ */
+export const BLACK_MARKET = { seriesId: 'BLK', perDay: 3, unlockMiddlemanSales: 6 };
 
 /** 电脑订货（店里终端，DESIGN 4）：按包买、正常价、唯一保证正品；每个营业日限购（各种卡包合计） */
 export const STORE = { packsPerDay: 5 };

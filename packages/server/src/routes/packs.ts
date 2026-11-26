@@ -6,8 +6,8 @@
 // 写操作都在一个事务里、要求幂等 key，信用点变动写流水（DR-1、DR-2）。播报在事务提交之后再发。
 import { techEffects } from '../game/tech.ts';
 import type { FastifyInstance } from 'fastify';
-import { ANNOUNCE, PACKS, RARITIES, SERIAL_LIMIT, STORE, STYLE, WHOLESALE, atLeast, type PackType, type Rarity } from '@kanu/shared/balance';
-import type { BuyPacksResponse, CardView, OpenPackResponse, SealedPacksResponse, StoreResponse } from '@kanu/shared/types';
+import { ANNOUNCE, BLACK_MARKET, PACKS, RARITIES, SERIAL_LIMIT, STORE, STYLE, WHOLESALE, atLeast, type PackType, type Rarity } from '@kanu/shared/balance';
+import type { BlackBuyResponse, BlackMarketResponse, BuyPacksResponse, CardView, OpenPackResponse, SealedPacksResponse, StoreResponse } from '@kanu/shared/types';
 import { ApiError, fail, idempotencyKey, type Deps } from '../app.ts';
 import { dayKey } from '../db/index.ts';
 import { openPack } from '../game/cards.ts';
@@ -102,14 +102,63 @@ export function registerPackRoutes(app: FastifyInstance, deps: Deps, now: () => 
     })();
   });
 
+  // ---- 黑市（DESIGN 4）：解锁后每个营业日最多 BLACK_MARKET.perDay 包，和电脑订货分开算 ----
+  const blackStatus = (userId: string) => {
+    const player = repo.getPlayer(userId)!;
+    const current = repo.questStats(userId).middlemanSales;
+    const free = unlimited(userId);
+    const used = repo.blackBoughtToday(userId, player.game_day);
+    return { player, free, used, unlocked: free || current >= BLACK_MARKET.unlockMiddlemanSales, current };
+  };
+
+  app.get('/api/black', async (req, reply) => {
+    if (!req.user) return fail(reply, 401, 'unauthorized', '请重新打开卡奴登录');
+    const b = blackStatus(req.user.id);
+    const p = PACKS.black;
+    const response: BlackMarketResponse = {
+      ok: true, unlocked: b.unlocked, progress: { current: Math.min(b.current, BLACK_MARKET.unlockMiddlemanSales), target: BLACK_MARKET.unlockMiddlemanSales },
+      price: p.price, perDay: BLACK_MARKET.perDay, leftToday: b.free ? null : Math.max(0, BLACK_MARKET.perDay - b.used),
+      odds: RARITIES.filter((r) => p.odds[r] > 0).map((r) => ({ rarity: r, percent: p.odds[r] / 10_000 })),
+      fakePct: p.fakePpm / 10_000, stolenPct: p.stolenPpm / 10_000,
+    };
+    return response;
+  });
+
+  app.post<{ Body: { count?: unknown } }>('/api/black/buy', async (req, reply) => {
+    if (!req.user) return fail(reply, 401, 'unauthorized', '请重新打开卡奴登录');
+    const key = idempotencyKey(req);
+    if (!key) return fail(reply, 400, 'missing_idempotency_key', '请求缺少幂等 key，请刷新后再试');
+    const userId = req.user.id;
+    const count = Number(req.body?.count ?? 1);
+    if (!Number.isInteger(count) || count < 1 || count > 10) return fail(reply, 400, 'bad_count', '数量不对');
+    return repo.db.transaction((): BlackBuyResponse => {
+      const replay = repo.getIdempotent<BlackBuyResponse>(userId, key);
+      if (replay) return replay;
+      const t = now();
+      const b = blackStatus(userId);
+      if (!b.unlocked) throw new ApiError(400, 'locked', `黑市还不认识你：和黑市中间人成交 ${BLACK_MARKET.unlockMiddlemanSales} 次（现在 ${b.current} 次）`);
+      if (!b.free && b.used + count > BLACK_MARKET.perDay) throw new ApiError(400, 'daily_limit', `黑市每个营业日最多 ${BLACK_MARKET.perDay} 包，今天还能买 ${Math.max(0, BLACK_MARKET.perDay - b.used)} 包`);
+      const cost = b.free ? 0 : PACKS.black.price * count;
+      if (b.player.credits < cost) throw new ApiError(400, 'insufficient_credits', `信用点不够：要 ${cost}，你有 ${b.player.credits}`);
+      const packIds = Array.from({ length: count }, () => repo.insertSealed(userId, BLACK_MARKET.seriesId, 'black', t));
+      const credits = b.player.credits - cost;
+      repo.setCreditsPity(userId, credits, b.player.pity_count);
+      repo.logCredits(userId, t, -cost, b.free ? 'black_test_free' : 'black', credits, { day: b.player.game_day, count, packs: packIds });
+      const response: BlackBuyResponse = { ok: true, credits, packIds, leftToday: b.free ? null : BLACK_MARKET.perDay - b.used - count };
+      repo.putIdempotent(userId, key, response, t);
+      return response;
+    })();
+  });
+
   app.get('/api/packs', async (req, reply) => {
     if (!req.user) return fail(reply, 401, 'unauthorized', '请重新打开卡奴登录');
     const groups = new Map<string, SealedPacksResponse['groups'][number]>();
     // 电话批发来的卡包单独一组（公开：批发商不保证正品）
     for (const p of repo.sealedByOwner(req.user.id)) {
       const wholesale = p.source === 'phone';
-      const k = `${p.series_id}|${wholesale ? 'w' : 's'}`;
-      const g = groups.get(k) ?? { seriesId: p.series_id, name: p.name, kind: p.kind, ids: [], wholesale };
+      const black = p.source === 'black';
+      const k = `${p.series_id}|${wholesale ? 'w' : black ? 'b' : 's'}`;
+      const g = groups.get(k) ?? { seriesId: p.series_id, name: p.name, kind: p.kind, ids: [], wholesale, ...(black ? { black } : {}) };
       g.ids.push(p.id);
       groups.set(k, g);
     }
@@ -140,7 +189,9 @@ export function registerPackRoutes(app: FastifyInstance, deps: Deps, now: () => 
         throw new ApiError(400, 'no_space', `卡册和桌面都快满了（还能放 ${space.total} 张，一包 ${PACKS[kind].cards} 张）。先卖点卡、或者买本新卡册`);
       }
 
-      const byRarity = Object.fromEntries(RARITIES.map((r) => [r, repo.templatesFor(sealed.series_id, r)])) as Record<Rarity, ReturnType<typeof repo.templatesFor>>;
+      // 黑市包（DESIGN 4）：所有系列这个稀有度的卡一起抽
+      const all = kind === 'black' ? repo.allTemplates() : [];
+      const byRarity = Object.fromEntries(RARITIES.map((r) => [r, kind === 'black' ? all.filter((x) => x.rarity === r) : repo.templatesFor(sealed.series_id, r)])) as Record<Rarity, ReturnType<typeof repo.templatesFor>>;
       const counts = Object.fromEntries(RARITIES.map((r) => [r, byRarity[r].length])) as Record<Rarity, number>;
       const rolled = openPack(deps.rng, {
         packType: kind,
@@ -165,7 +216,7 @@ export function registerPackRoutes(app: FastifyInstance, deps: Deps, now: () => 
         return repo.insertCard({
           templateId: tpl.id, ownerId: userId, authenticity: c.authenticity, grade: String(c.grade), origin: c.origin, style, serialNo, now: t,
           collect: sealed.source === 'store', misprint: rollErrata(deps.rng),
-          acquired: sealed.source === 'phone' ? 'wholesale' : 'store',
+          acquired: sealed.source === 'phone' ? 'wholesale' : sealed.source === 'black' ? 'black' : 'store',
         });
       });
 

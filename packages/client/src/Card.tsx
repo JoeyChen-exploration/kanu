@@ -48,6 +48,7 @@ export function Card({ card, small }: { card: Pick<CardView, 'name' | 'rarity' |
         {!small && STYLE_NAME[card.style] && <div className="card-style">{STYLE_NAME[card.style]}</div>}
         {card.gradeRejected && <span className="rejected-mark" title="评级社拒评：疑似假卡">拒评</span>}
         {card.acquired === 'wholesale' && !slab && <span className="wholesale-mark" title="电话批发来的：批发商不保证正品">批</span>}
+        {card.acquired === 'black' && !slab && <span className="wholesale-mark black-mark" title="黑市卡包拆出来的：假卡、赃物都多">黑</span>}
         {card.acquired === 'dealer' && !slab && <span className="wholesale-mark dealer-mark" title="从卡贩手里收来的：来路不明">收</span>}
       </div>
     </div>

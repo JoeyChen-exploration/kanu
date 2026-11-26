@@ -72,7 +72,7 @@ export interface CardView {
   /** 送评中时，第几个营业日出结果 */
   readyDay: number | null;
   /** 从哪来的（公开）：store 电脑订货（保证正品）、wholesale 电话批发（不保证，可能混着假卡） */
-  acquired: 'store' | 'wholesale' | 'dealer';
+  acquired: 'store' | 'wholesale' | 'dealer' | 'black';
 }
 
 // ---------- 鉴定（M3，DESIGN 5，2026-11-17 用户重定） ----------
@@ -206,6 +206,8 @@ export interface SealedPackGroup {
   ids: number[];
   /** 电话批发来的（批发商不保证正品） */
   wholesale: boolean;
+  /** 黑市卡包（假卡、赃物都多） */
+  black?: boolean;
 }
 
 export interface SealedPacksResponse {
@@ -629,4 +631,25 @@ export interface HideoutResponse {
   /** 放在里面的赃卡被巡查查出的概率（%） */
   detectPct: number;
   cards: CardView[];
+}
+
+/** GET /api/black：黑市（DESIGN 4）。没解锁时 unlocked = false，进度看 progress */
+export interface BlackMarketResponse {
+  ok: true;
+  unlocked: boolean;
+  /** 解锁条件：和黑市中间人成交几次 */
+  progress: { current: number; target: number };
+  price: number;
+  perDay: number;
+  /** 今天还能买几包（测试账号 null = 不限） */
+  leftToday: number | null;
+  odds: Array<{ rarity: string; percent: number }>;
+  fakePct: number;
+  stolenPct: number;
+}
+export interface BlackBuyResponse {
+  ok: true;
+  credits: number;
+  packIds: number[];
+  leftToday: number | null;
 }

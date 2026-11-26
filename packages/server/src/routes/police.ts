@@ -6,6 +6,7 @@ import type { FastifyInstance } from 'fastify';
 import { POLICE, REPUTATION } from '@kanu/shared/balance';
 import type { PatrolResolveResponse } from '@kanu/shared/types';
 import { ApiError, fail, idempotencyKey, type Deps } from '../app.ts';
+import { patrolWaived } from '../day.ts';
 
 export function registerPoliceRoutes(app: FastifyInstance, deps: Deps, now: () => number) {
   const { repo } = deps;
@@ -30,7 +31,9 @@ export function registerPoliceRoutes(app: FastifyInstance, deps: Deps, now: () =
       let reputation = player.reputation;
       if (choice === 'surrender') {
         for (const id of cards) if (repo.ownedInstance(userId, id)) repo.deleteCard(id);
-        reputation = Math.max(REPUTATION.min, reputation - POLICE.surrenderRepLoss);
+        // 科技树 S4a 治安备案：每周第一次交出不扣信誉
+        if (patrolWaived(deps, userId, p.day)) repo.logEvent(userId, t, 'patrol_waived', { day: p.day, patrol: p.id });
+        else reputation = Math.max(REPUTATION.min, reputation - POLICE.surrenderRepLoss);
         repo.setPatrolStatus(p.id, 'surrendered');
       } else {
         if (credits < p.bribe) throw new ApiError(400, 'insufficient_credits', `打点要 ${p.bribe} 信用点，你有 ${credits}，只能交出`);

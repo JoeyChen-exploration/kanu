@@ -77,8 +77,9 @@ const styleMult = (type: CustomerType, style: string) => {
  * 心理价位 = 市场价（公开价）× 风格加成 × float，float ≥ 1 + premium 下限 ≥ 1。
  * 黑市中间人例外：不看市场价，只按基准价的 MIDDLEMAN.basePct 收。
  */
-export function mindPrice(type: CustomerType, float: number, card: SellableCard): number {
-  if (type === 'middleman') return Math.round(RARITY[card.rarity].basePrice * MIDDLEMAN.basePct);
+/** middlemanPct：中间人按基准价的多少收（科技树 S3b 后门生意会提高） */
+export function mindPrice(type: CustomerType, float: number, card: SellableCard, middlemanPct: number = MIDDLEMAN.basePct): number {
+  if (type === 'middleman') return Math.round(RARITY[card.rarity].basePrice * middlemanPct);
   return Math.round(card.price * styleMult(type, card.style) * float);
 }
 

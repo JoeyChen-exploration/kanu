@@ -241,6 +241,7 @@ const PAGES: Array<{ title: string; body: ReactNode }> = [
         <ul>
           <li><b>便衣</b>：{POLICE.undercoverPpm / 10_000}% 的客人是治安局的便衣，长得和普通客人一样，有时说话会露破绽（比如问"有没有来路特别一点的"）。把赃卡卖给他：卡没收、不给钱、罚款，信誉 −{POLICE.bustRepLoss}。卖别的卡给他没事。</li>
           <li><b>巡查</b>：打烊后有时会来查店，库存和珍藏柜里的赃卡大概率被查出。选<b>交出</b>（没收，信誉 −{POLICE.surrenderRepLoss}）或<b>打点</b>（付这些卡市场价的 {POLICE.bribePct * 100}%，卡留下）。处理完才能开门。</li>
+          <li><b>藏匿室</b>：科技树走"后门生意"路线才有，藏在里面的赃卡巡查不容易查出来（3 格，查出率 20%；地下仓 6 格、10%）。走"挂牌营业"正经路线的店，巡查来得少一半，卖真卡还涨信誉。</li>
           <li><b>举报</b>：觉得卡贩的货是赃物，可以举报他。对了有奖金、信誉 +{POLICE.reportRepGain}；他的货是干净的就是错举，信誉 −{POLICE.falseReportRepLoss}。</li>
         </ul>
       </>

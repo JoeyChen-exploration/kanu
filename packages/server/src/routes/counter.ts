@@ -322,7 +322,7 @@ export function registerCounterRoutes(app: FastifyInstance, deps: Deps, now: () 
         if (!matchesCard(card, demand)) throw new ApiError(400, 'not_wanted', '这位顾客不要这张卡');
         // 卡册效果：放在好卡册里的卡卖得贵一点（心理价位和快速出售价一起乘）
         const mult = deps.binders!.priceMultiplier(ownerId, view.binderId, type);
-        mind = Math.round(mindPrice(type, c.float, card) * mult);
+        mind = Math.round(mindPrice(type, c.float, card, techEffects(repo.techOwned(ownerId)).middlemanPct) * mult);
         ask = price === 'quick' ? Math.round(quickPrice(type, card) * mult) : price;
         authenticity = inst.authenticity;
         stolen = inst.origin === 'stolen';
@@ -362,6 +362,13 @@ export function registerCounterRoutes(app: FastifyInstance, deps: Deps, now: () 
           repo.updateCustomer(c.id, { patience: c.patience, status: 'sold', line: say(type, 'deal'), counter_price: null });
           repo.logCredits(ownerId, t, outcome.price, 'sale', credits, { customer: c.id, type, ...sold });
           result = 'deal';
+          // 科技树 S3a 挂牌营业：卖真卡给客人信誉 +honestRep，每个营业日最多 honestRepPerDay 次
+          const fx = techEffects(repo.techOwned(ownerId));
+          if (fx.honestRep && item.instanceId !== undefined && authenticity === 'real' && reputation < REPUTATION.max
+            && repo.countEventsInDays(ownerId, 'honest_rep', player.game_day, player.game_day) < fx.honestRepPerDay) {
+            reputation = Math.min(REPUTATION.max, reputation + fx.honestRep);
+            repo.logEvent(ownerId, t, 'honest_rep', { day: player.game_day, customer: c.id });
+          }
         }
       } else if (outcome.kind === 'counter') {
         repo.updateCustomer(c.id, { patience: outcome.patience, status: 'waiting', line: say(type, 'counter', { price: outcome.counterPrice.toLocaleString('zh-CN') }), counter_price: outcome.counterPrice });

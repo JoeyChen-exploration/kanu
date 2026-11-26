@@ -4,6 +4,7 @@ import type { FastifyInstance } from 'fastify';
 import { RARITIES, STYLE, stylesFor } from '@kanu/shared/balance';
 import { showcaseSlots } from '../game/showcase.ts';
 import type { CardLocation, CollectionResponse, InventoryResponse } from '@kanu/shared/types';
+import type { HideoutResponse } from '@kanu/shared/types';
 import { fail, type Deps } from '../app.ts';
 
 const PAGE_SIZE = 30;
@@ -45,6 +46,39 @@ export function registerInventoryRoutes(app: FastifyInstance, deps: Deps) {
         if (deps.binders!.space(req.user!.id).total === 0) return fail(reply, 400, 'no_space', '卡册和桌面都满了，先卖掉几张或买本新卡册');
         repo.setLocation(id, 'inventory');
         deps.binders!.placeNew(req.user!.id, [id], player.game_day);
+      }
+      return { ok: true, card: repo.cardView(id) };
+    })();
+  });
+
+  // 藏匿室（科技树 S3b 后门生意 / S4b 地下仓，DESIGN 8.3）：放在里面的卡巡查不容易查出来；不能卖、不能抵押、不能送评，要用先取出来
+  app.get('/api/hideout', async (req, reply) => {
+    if (!req.user) return fail(reply, 401, 'unauthorized', '请重新打开卡奴登录');
+    const fx = techEffects(repo.techOwned(req.user.id));
+    return { ok: true, slots: fx.hideoutSlots, detectPct: Math.round(fx.hideoutDetectPpm / 10_000), cards: repo.cardsAt(req.user.id, 'hideout') } satisfies HideoutResponse;
+  });
+
+  app.post<{ Params: { id: string }; Body: { on?: unknown } }>('/api/inventory/:id/hideout', async (req, reply) => {
+    if (!req.user) return fail(reply, 401, 'unauthorized', '请重新打开卡奴登录');
+    const userId = req.user.id;
+    const id = Number.parseInt(req.params.id, 10);
+    const on = req.body?.on === true;
+    return repo.db.transaction(() => {
+      const card = repo.ownedInstance(userId, id);
+      if (!card) return fail(reply, 404, 'not_found', '找不到这张卡');
+      if (on === (card.location === 'hideout')) return { ok: true, card: repo.cardView(id) };
+      const slots = techEffects(repo.techOwned(userId)).hideoutSlots;
+      if (on) {
+        if (slots === 0) return fail(reply, 400, 'hideout_locked', '还没有藏匿室（科技树：后门生意）');
+        if (card.location !== 'inventory') return fail(reply, 400, 'busy', '只能把卡册或桌面上的卡放进藏匿室');
+        if (repo.countLocation(userId, 'hideout') >= slots) return fail(reply, 400, 'hideout_full', `藏匿室只有 ${slots} 格`);
+        repo.placeCard(id, null, null);
+        repo.setLocation(id, 'hideout');
+      } else {
+        const player = repo.getPlayer(userId)!;
+        if (deps.binders!.space(userId).total === 0) return fail(reply, 400, 'no_space', '卡册和桌面都满了，先腾个位置再取');
+        repo.setLocation(id, 'inventory');
+        deps.binders!.placeNew(userId, [id], player.game_day);
       }
       return { ok: true, card: repo.cardView(id) };
     })();

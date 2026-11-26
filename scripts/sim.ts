@@ -165,7 +165,7 @@ function season(rng: Rng, packsPerDay: number, reserveFromDay: number, mode: Sho
   let grandVisits = 0, grandSales = 0, grandIncome = 0;
   // 新手任务（balance.QUESTS）：达到进度就领奖（一个赛季只领一次，破产重来也不再领）。
   // 图鉴点亮张数用单独的随机源模拟（不打乱主随机序列，和不开任务的结果可比）
-  const qstats: Record<QuestMetric, number> = { packsBought: 0, packsOpened: 0, sales: 0, daysEnded: 0, collected: 0, showcaseLevel: 0, showcaseCards: 0, binders: 1 };
+  const qstats: Record<QuestMetric, number> = { packsBought: 0, packsOpened: 0, sales: 0, daysEnded: 0, collected: 0, showcaseLevel: 0, showcaseCards: 0, binders: 1, rentPaid: 0, middlemanSales: 0, inspections: 0 };
   const claimed = new Set<string>();
   const seen = new Set<string>();
   let questIncome = 0;

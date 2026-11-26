@@ -27,7 +27,8 @@ describe('便衣和巡查（纯函数）', () => {
   it('巡查大约 patrolPpm 来一次，来了每张赃卡 detectPpm 被查出', () => {
     const rng = seeded(9);
     let visits = 0, found = 0;
-    for (let i = 0; i < 20000; i += 1) { const r = rollPatrol(rng, [1, 2]); if (r) { visits += 1; found += r.length; } }
+    const two = [{ id: 1, detectPpm: POLICE.detectPpm }, { id: 2, detectPpm: POLICE.detectPpm }];
+    for (let i = 0; i < 20000; i += 1) { const r = rollPatrol(rng, two); if (r) { visits += 1; found += r.length; } }
     expect(visits / 20000).toBeCloseTo(POLICE.patrolPpm / 1e6, 1);
     expect(found / (visits * 2)).toBeCloseTo(POLICE.detectPpm / 1e6, 1);
   });

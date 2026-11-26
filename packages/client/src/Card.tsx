@@ -22,19 +22,27 @@ const STYLE_NAME: Record<string, string> = {
 
 export const fmt = (n: number) => n.toLocaleString('zh-CN');
 
+/**
+ * 彩蛋卡（2026-11-26）：卡面是纯黑的，玩家凑近看时会在自己的屏幕上看到自己的倒影——这就是彩蛋本身。
+ * 卡面上不叠任何东西：没有占位字、没有磨损贴图；放大镜里也不画细节贴图（真伪、品相照常判定，结论照常给文字）。
+ * 卡框、稀有度角标、卡名照常叠在外面。
+ */
+export const VOID_CARDS = new Set(['GNG-01']);
+
 export function Card({ card, small }: { card: Pick<CardView, 'name' | 'rarity' | 'style' | 'tags' | 'serialNo'> & Partial<CardView>; small?: boolean }) {
   const day = useContext(GameDayContext);
   const looseDays = card.looseSinceDay != null ? day - card.looseSinceDay : null;
   const wear = wearLevel(looseDays);
   const slab = card.slab ?? null;
+  const isVoid = !!card.templateId && VOID_CARDS.has(card.templateId);
   return (
-    <div className={`card rarity-${card.rarity} style-${card.style}${small ? ' small' : ''}${wear ? ` wear-${wear}` : ''}${slab ? ' slabbed' : ''}`} title={looseDays !== null ? `散放 ${looseDays} 天` : undefined}>
+    <div className={`card rarity-${card.rarity} style-${card.style}${small ? ' small' : ''}${wear && !isVoid ? ` wear-${wear}` : ''}${slab ? ' slabbed' : ''}${isVoid ? ' card-void' : ''}`} title={looseDays !== null ? `散放 ${looseDays} 天` : undefined}>
       {/* 鉴定的公开标记（DESIGN 5）：封壳评分（含错版认定）在壳顶上 */}
       {slab && <div className={slab.score === 'BL' ? 'slab-label black' : 'slab-label'}>星港评级 <b>{slab.score === 'BL' ? '黑标' : slab.score}</b>{slab.errata && <span className="slab-errata">错版</span>}</div>}
       <div className="card-body">
         {/* 卡面窗口：卡面图画满 630 × 880，外圈 24 px 被卡框盖住 */}
         <div className="card-face">
-          <ArtImg srcs={card.templateId ? [ART.card(card.templateId)] : []} className="card-art-img" fallback={<div className="card-art" aria-hidden>{card.name.slice(0, 1)}</div>} />
+          <ArtImg srcs={card.templateId ? [ART.card(card.templateId)] : []} className="card-art-img" fallback={isVoid ? null : <div className="card-art" aria-hidden>{card.name.slice(0, 1)}</div>} />
         </div>
         <ArtImg srcs={[ART.frame(card.style)]} className="card-frame-img" fallback={null} />
         <div className="card-badge">

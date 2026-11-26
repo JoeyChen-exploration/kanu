@@ -5,7 +5,7 @@
 // 没查过的卡镜片里只有放大的卡面和正品网点。手册用同一套贴图拼示例，不另外画图。
 // 贴图现在是 CSS 占位（style.css 的"放大镜细节：美术接入点"），美术到了换成图片，这里的代码不用改。
 import type { CardView, InspectionView } from '@kanu/shared/types';
-import { Card } from './Card.tsx';
+import { Card, VOID_CARDS } from './Card.tsx';
 import { FloatWindow } from './drag.tsx';
 
 /** 一处细节：kind 是贴图种类，x / y 是在卡面上的位置（0–100%），rot 旋转、size 大小（卡宽的百分比） */
@@ -63,12 +63,14 @@ export function DetailLayer({ spots }: { spots: Spot[] }) {
 }
 
 /** 放大后的卡面 + 细节；errata 时再叠一层错开的重影（错版的"印了两次"，代码做，不用美术） */
-function Zoomed({ card, spots, errata }: { card: Pick<CardView, 'name' | 'rarity' | 'style' | 'tags' | 'serialNo'>; spots: Spot[]; errata: boolean }) {
+function Zoomed({ card, spots, errata }: { card: Pick<CardView, 'name' | 'rarity' | 'style' | 'tags' | 'serialNo'> & Partial<CardView>; spots: Spot[]; errata: boolean }) {
+  // 彩蛋卡（纯黑卡面）：镜片里也是纯黑，不画细节贴图和错版重影；真伪、品相的结论照常用文字给
+  const isVoid = !!card.templateId && VOID_CARDS.has(card.templateId);
   return (
     <div className="zoom-card">
       <Card card={card} small />
-      {errata && <div className="zoom-ghost"><Card card={card} small /></div>}
-      <DetailLayer spots={spots} />
+      {errata && !isVoid && <div className="zoom-ghost"><Card card={card} small /></div>}
+      {!isVoid && <DetailLayer spots={spots} />}
     </div>
   );
 }

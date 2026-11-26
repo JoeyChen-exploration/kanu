@@ -15,6 +15,8 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const OUT = path.join(ROOT, 'packages/client/public/art');
 const KB = 1024;
 /** 认识的类别目录（和 scripts/art-check.ts 一致） */
+/** 代码生成的卡面（scripts/art/build.mjs），原图目录里就算有同名文件也不导入，免得覆盖 */
+const CODE_ONLY = new Set(['cards/GNG-01.png']);
 const DIRS = ['cards', 'frames', 'rarity', 'slab', 'packs', 'customers', 'contacts', 'loupe', 'wear', 'scenes', 'ui', 'items', 'binders', 'collection', 'showcase', 'tech', 'logos'];
 
 /** 从环境变量或仓库根目录的 .env 读 ART_RAW_DIR */
@@ -172,6 +174,7 @@ async function main() {
     // 根目录的文件（prompts.csv、card-prompts.csv、README.txt、icon-1024.png……）不是要导入的原图，不处理也不报错
     if (rel.split('/').length === 1) continue;
     if (rel.split('/').length !== 2) { skipped.push(`${rel}（要放在 <类别>/ 下面一层）`); continue; }
+    if (CODE_ONLY.has(rel)) { skipped.push(`${rel}（这张卡面是代码生成的，见 scripts/art/build.mjs，不导入）`); continue; }
     if (!DIRS.includes(rel.split('/')[0])) { skipped.push(`${rel}（不认识的目录，类别见 docs/ART.md）`); continue; }
     const out = path.join(OUT, rel.replace(/\.png$/i, '.webp'));
     const exists = fs.existsSync(out);

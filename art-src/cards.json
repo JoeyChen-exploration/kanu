@@ -23,7 +23,7 @@
     { "id": "ELT-19", "name": "上层区议长", "rarity": "LR", "tags": [ "上层", "影" ], "flavor": "下层区的规矩，都是他定的。" },
     { "id": "ELT-20", "name": "霓虹龙皇·终焉", "rarity": "MR", "tags": [ "龙", "霓虹", "火" ], "flavor": "它睁眼时，整座空间站的灯同时亮起。" } ] },
   { "id": "GNG", "name": "地下帮派", "kind": "themed", "cards": [
-    { "id": "GNG-01", "name": "打工人", "rarity": "N", "tags": [ "帮派" ], "flavor": null },
+    { "id": "GNG-01", "name": "打工人", "rarity": "N", "tags": [ "帮派" ], "flavor": "屏幕熄了，你才看清是谁在加班。" },
     { "id": "GNG-02", "name": "天桥乞丐", "rarity": "N", "tags": [ "帮派" ], "flavor": null },
     { "id": "GNG-03", "name": "电线上的鸟巢", "rarity": "N", "tags": [ "电", "兽" ], "flavor": null },
     { "id": "GNG-04", "name": "失物招领箱", "rarity": "N", "tags": [ "灵" ], "flavor": null },

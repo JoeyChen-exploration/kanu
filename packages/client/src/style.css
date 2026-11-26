@@ -111,7 +111,8 @@ h2 small { color: var(--muted); font-weight: normal; font-size: 13px; margin-lef
   content: ''; position: absolute; inset: 0; pointer-events: none;
 }
 .style-holo .card-face::after { background: linear-gradient(115deg, transparent 30%, rgba(255, 255, 255, 0.35) 45%, rgba(120, 220, 255, 0.25) 55%, transparent 70%); background-size: 250% 100%; animation: sheen 3s linear infinite; }
-.style-ice .card-face::after { background: repeating-linear-gradient(60deg, rgba(255, 255, 255, 0.12) 0 2px, transparent 2px 9px), repeating-linear-gradient(-30deg, rgba(160, 220, 255, 0.12) 0 1px, transparent 1px 7px); }
+/* 镭射碎冰（2026-11-27 调淡：原来盖满卡面、和画抢）：线更淡更疏，中间主体区再淡一半，闪光主要在四周 */
+.style-ice .card-face::after { background: repeating-linear-gradient(60deg, rgba(255, 255, 255, 0.05) 0 1.5px, transparent 1.5px 14px), repeating-linear-gradient(-30deg, rgba(160, 220, 255, 0.05) 0 1px, transparent 1px 11px); -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 45%, rgba(0, 0, 0, 0.45) 35%, #000 90%); mask-image: radial-gradient(ellipse 70% 60% at 50% 45%, rgba(0, 0, 0, 0.45) 35%, #000 90%); }
 .style-gold { --frame: linear-gradient(135deg, #f7dc7a, #b8860b, #f7dc7a); }
 .style-gold .card-name { color: #ffe08a; }
 .style-dark { --frame: #050508; }

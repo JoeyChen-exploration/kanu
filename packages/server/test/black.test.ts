@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { BLACK_MARKET, PACKS } from '@kanu/shared/balance';
+import { BLACK_MARKET, FACTIONS, PACKS } from '@kanu/shared/balance';
 import type { BlackBuyResponse, BlackMarketResponse, OpenPackResponse, SealedPacksResponse } from '@kanu/shared/types';
 import { seeded } from '../src/game/rng.ts';
 import { HIDDEN_KEYS, NOW, findKeys, idem, login, setup } from './helpers.ts';
@@ -13,18 +13,20 @@ type Repo = ReturnType<typeof setup>['repo'];
 type H = Record<string, string>;
 const info = async (app: App, h: H) => (await app.inject({ method: 'GET', url: '/api/black', headers: h })).json() as BlackMarketResponse;
 const buy = (app: App, h: H, count: number, key = idem()) => app.inject({ method: 'POST', url: '/api/black/buy', headers: { ...h, ...key }, payload: { count } });
-/** 和中间人成交 n 次（往流水里记） */
-const middlemanSales = (repo: Repo, n: number) => { for (let i = 0; i < n; i += 1) repo.logCredits(UID, 1, 10, 'sale', 0, { type: 'middleman' }); };
+/** 直接设黑市关系值 */
+const setBlack = (repo: Repo, v: number) => repo.db.prepare('UPDATE players SET rep_black = ?').run(v);
 
 describe('黑市卡包（DESIGN 4）', () => {
-  it(`和中间人成交 ${BLACK_MARKET.unlockMiddlemanSales} 次才解锁`, async () => {
+  it(`黑市关系到熟脸（${FACTIONS.knownMin}）才解锁`, async () => {
     const { app, repo } = setup();
     cleanup = () => app.close();
     const h = await login(app);
     repo.db.prepare('UPDATE players SET credits = 100000').run();
-    expect(await info(app, h)).toMatchObject({ unlocked: false, progress: { current: 0, target: BLACK_MARKET.unlockMiddlemanSales }, price: PACKS.black.price, fakePct: 25, stolenPct: 20 });
+    expect(await info(app, h)).toMatchObject({ unlocked: false, progress: { current: 0, target: FACTIONS.knownMin }, price: PACKS.black.price, fakePct: 25, stolenPct: 20 });
     expect((await buy(app, h, 1)).json().code).toBe('locked');
-    middlemanSales(repo, BLACK_MARKET.unlockMiddlemanSales);
+    setBlack(repo, FACTIONS.knownMin - 1);
+    expect((await info(app, h)).unlocked).toBe(false);
+    setBlack(repo, FACTIONS.knownMin);
     expect((await info(app, h)).unlocked).toBe(true);
   });
 
@@ -33,7 +35,7 @@ describe('黑市卡包（DESIGN 4）', () => {
     cleanup = () => app.close();
     const h = await login(app);
     repo.db.prepare('UPDATE players SET credits = 100000').run();
-    middlemanSales(repo, BLACK_MARKET.unlockMiddlemanSales);
+    setBlack(repo, FACTIONS.knownMin);
     const key = idem();
     const r = (await buy(app, h, 2, key)).json() as BlackBuyResponse;
     expect((await buy(app, h, 2, key)).json()).toEqual(r);

@@ -2,7 +2,7 @@
 // 最下面保留按稀有度筛选的"全部卡"列表。点任何一张卡看详情、放进 / 取出珍藏柜。
 import { useContext, useEffect, useState } from 'react';
 import { LOOSE, RARITIES, SHOWCASE } from '@kanu/shared/balance';
-import type { HideoutResponse,
+import type { FactionsResponse, HideoutResponse, RegistryResponse,
   BinderPageResponse, BinderView, BindersResponse, CardAppraisalResponse, CardView, InventoryResponse, MeResponse, ShowcaseResponse, ShowcaseStatus, ShowcaseUpgradeResponse,
 } from '@kanu/shared/types';
 import { api, newIdempotencyKey } from '../api.ts';
@@ -19,6 +19,10 @@ export function Inventory({ onChange }: { onChange: (p: Partial<MeResponse>) => 
   const [sc, setSc] = useState<ShowcaseStatus | null>(null);
   /** 藏匿室（科技树 S3b 后门生意 / S4b 地下仓）；slots = 0 就不显示 */
   const [hideout, setHideout] = useState<HideoutResponse | null>(null);
+  /** 失窃登记表（黑市盟友，DESIGN 8.4）：null = 没有；拖卡上去等确认 */
+  const [registryLeft, setRegistryLeft] = useState<number | null>(null);
+  const [registryCard, setRegistryCard] = useState<CardView | null>(null);
+  const [registryResult, setRegistryResult] = useState<string>('');
   /** 同时打开的卡册浮窗（可以好几本） */
   const [openBinders, setOpenBinders] = useState<BinderView[]>([]);
   const isOpen = (id: number) => openBinders.some((b) => b.id === id);
@@ -32,7 +36,8 @@ export function Inventory({ onChange }: { onChange: (p: Partial<MeResponse>) => 
   const day = useContext(GameDayContext);
 
   const load = async () => {
-    const [b, s, hd] = await Promise.all([api<BindersResponse>('/binders'), api<ShowcaseResponse>('/showcase'), api<HideoutResponse>('/hideout')]);
+    const [b, s, hd, fa] = await Promise.all([api<BindersResponse>('/binders'), api<ShowcaseResponse>('/showcase'), api<HideoutResponse>('/hideout'), api<FactionsResponse>('/factions')]);
+    setRegistryLeft(fa.registryLeft);
     setHideout(hd);
     setData(b);
     setShowcase(s.cards);
@@ -82,12 +87,22 @@ export function Inventory({ onChange }: { onChange: (p: Partial<MeResponse>) => 
     } catch (e) { setErr((e as Error).message); }
   };
 
+  const checkRegistry = async (card: CardView) => {
+    setErr(''); setRegistryResult('');
+    try {
+      const r = await api<RegistryResponse>('/factions/registry', { method: 'POST', body: { cardId: card.id }, idempotencyKey: newIdempotencyKey() });
+      setRegistryLeft(r.registryLeft);
+      setRegistryResult(r.onRegistry ? `「${card.name}」在失窃登记表上：是赃物，小心便衣和巡查` : `「${card.name}」不在失窃登记表上`);
+    } catch (e) { setErr((e as Error).message); } finally { setRegistryCard(null); }
+  };
+
   // 拖卡：卡册 / 桌面 → 珍藏柜 = 放进去；珍藏柜 → 卡册浮窗 / 桌面 = 取出来
   const { drag, bind } = useDrag<CardView>((card, zone) => {
     if (zone === 'showcase' && card.location !== 'showcase' && card.location !== 'hideout') void setShowcaseOn(card, true);
     else if (zone === 'stash' && card.location === 'showcase') void setShowcaseOn(card, false);
     else if (zone === 'hideout' && card.location === 'inventory') void setHidden(card, true);
     else if (zone === 'stash' && card.location === 'hideout') void setHidden(card, false);
+    else if (zone === 'registry') { setRegistryCard(card); setRegistryResult(''); }
     else if (zone === PHONE_ZONE) dropOnPhone(card); // 拖到电话的评级社上送评
   });
   const dropping = (zone: string) => (drag ? (drag.zone === zone ? ' drop-target drop-over' : ' drop-target') : '');
@@ -110,6 +125,22 @@ export function Inventory({ onChange }: { onChange: (p: Partial<MeResponse>) => 
             ))}
             {Array.from({ length: Math.max(0, hideout.slots - hideout.cards.length) }, (_, i) => <div key={`e${i}`} className="cell empty-slot">空</div>)}
           </div>
+        </div>
+      )}
+
+      {registryLeft !== null && (
+        <div className={`registry${drag ? dropping('registry') : ''}`} data-drop="registry">
+          <h2>📋 失窃登记表 <small>黑市盟友给的副本 · 这周还能查 {registryLeft} 次</small></h2>
+          {registryCard
+            ? (
+              <div className="registry-confirm">
+                <Card card={registryCard} small />
+                <span>查「{registryCard.name}」？用掉 1 次</span>
+                <button disabled={registryLeft <= 0} onClick={() => void checkRegistry(registryCard)}>查</button>
+                <button className="secondary" onClick={() => setRegistryCard(null)}>算了</button>
+              </div>
+            )
+            : <p className="hint">{registryResult || '把卡拖到这里，查它是不是登记在案的赃物。'}</p>}
         </div>
       )}
 
@@ -168,7 +199,7 @@ export function Inventory({ onChange }: { onChange: (p: Partial<MeResponse>) => 
           <span className="ghost-hint">
             {drag.item.location === 'showcase' || drag.item.location === 'hideout'
               ? (drag.zone === 'stash' ? '松手取出' : '拖到卡册或桌面')
-              : drag.zone === 'showcase' ? '松手放进珍藏柜' : drag.zone === 'hideout' ? '松手藏进藏匿室' : '拖到珍藏柜'}
+              : drag.zone === 'showcase' ? '松手放进珍藏柜' : drag.zone === 'hideout' ? '松手藏进藏匿室' : drag.zone === 'registry' ? '松手查登记表' : '拖到珍藏柜'}
           </span>
         </DragGhost>
       )}

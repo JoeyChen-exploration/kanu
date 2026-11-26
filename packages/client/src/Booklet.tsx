@@ -1,7 +1,7 @@
 // 新手手册：一本可以左右翻页的小册子（顶栏 📖 打开，第一次进游戏自动打开）。
 // 数字全部从 balance.ts 读，调了数值手册跟着变。只讲公开规则，不写顾客心理价位怎么算、品相掉没掉这类隐藏信息。
 import { useRef, useState, type ReactNode } from 'react';
-import { BLACK_MARKET, POLICE, DEALER,
+import { BLACK_MARKET, FACTIONS, POLICE, DEALER,
   ANNOUNCE, APPRAISAL, BINDER_KINDS, ERRATA, PHONE, GRAND_COLLECTOR, BINDERS, COUNTER, CUSTOMER, CUSTOMER_TYPES, EXCHANGE, LOOSE, PACKS, PITY, RARITIES, RARITY,
   RENT, SERIAL_LIMIT, SHOP_PRICE, SHOWCASE, STARTER_BINDER, STORE, STYLE, STYLES, UNGRADED_MULT, WHOLESALE, PAWN, type CustomerWants, } from '@kanu/shared/balance';
 import { Card, GameDayContext, fmt } from './Card.tsx';
@@ -87,7 +87,7 @@ const PAGES: Array<{ title: string; body: ReactNode }> = [
           <li>每种卡包就是一个系列，进货页能看到各稀有度的出货率。</li>
           <li><b>保底</b>：连续 {PITY.packs - 1} 包都没开出 {PITY.rarity} 或以上，第 {PITY.packs} 包必出一张 {PITY.rarity}。</li>
           <li>没拆的卡包可以先放着，开箱主播会来收。</li>
-          <li><b>黑市</b>（在柜台和黑市中间人成交 {BLACK_MARKET.unlockMiddlemanSales} 次才有门路）：一包 {PACKS.black.price}，稀有卡更多，所有系列的卡都可能出，但每张约 {PACKS.black.fakePpm / 10_000}% 是假卡、{PACKS.black.stolenPpm / 10_000}% 是赃物，没有保底，每天最多 {BLACK_MARKET.perDay} 包。拆出来的卡带"黑"字。</li>
+          <li><b>黑市</b>（黑市关系到熟脸 {FACTIONS.knownMin} 才有门路）：一包 {PACKS.black.price}，稀有卡更多，所有系列的卡都可能出，但每张约 {PACKS.black.fakePpm / 10_000}% 是假卡、{PACKS.black.stolenPpm / 10_000}% 是赃物，没有保底，每天最多 {BLACK_MARKET.perDay} 包。拆出来的卡带"黑"字。</li>
           <li><b>电话批发</b>（买了电话 📞 才有）：一盒 {WHOLESALE.boxPacks} 包，每包打 {Math.round(WHOLESALE.discount * 10)} 折，每天只能订一盒。<b>隔日送达</b>：第二天送货员作为第一位客人来柜台，占一个客人名额，在柜台<b>收货付款</b>（不想要可以拒收，不扣钱）。便宜但<b>批发商不保证正品</b>，每张约 {WHOLESALE.fakePpm / 10_000}% 是假卡；拆出来的卡带"批"字，卖之前用放大镜看看。</li>
         </ul>
       </>
@@ -244,6 +244,21 @@ const PAGES: Array<{ title: string; body: ReactNode }> = [
           <li><b>巡查</b>：打烊后有时会来查店，库存和珍藏柜里的赃卡大概率被查出。选<b>交出</b>（没收，信誉 −{POLICE.surrenderRepLoss}）或<b>打点</b>（付这些卡市场价的 {POLICE.bribePct * 100}%，卡留下）。处理完才能开门。</li>
           <li><b>藏匿室</b>：科技树走"后门生意"路线才有，藏在里面的赃卡巡查不容易查出来（3 格，查出率 20%；地下仓 6 格、10%）。走"挂牌营业"正经路线的店，巡查来得少一半，卖真卡还涨信誉。</li>
           <li><b>举报</b>：觉得卡贩的货是赃物，可以举报他。对了有奖金、信誉 +{POLICE.reportRepGain}；他的货是干净的就是错举，信誉 −{POLICE.falseReportRepLoss}。</li>
+          <li>治安局记性很好：常打点、被便衣抓，巡查和便衣会来得更勤；老实交出、举报对了，他们就松一点。</li>
+        </ul>
+      </>
+    ),
+  },
+  {
+    title: '派系',
+    body: (
+      <>
+        <p>城里有三股势力，店铺页能看到你和他们的关系（{FACTIONS.min}～+{FACTIONS.max}，开局 0）。讨好一方，常常会得罪另一方。</p>
+        <ul>
+          <li>等级：<b>敌对</b>（≤ {FACTIONS.hostileMax}）、<b>陌生</b>、<b>熟脸</b>（≥ {FACTIONS.knownMin}）、<b>盟友</b>（≥ {FACTIONS.allyMin}）。</li>
+          {FACTIONS.list.map((f) => <li key={f.id}><b>{f.name}</b>：{f.gain}会涨；得罪：{f.rival}。</li>)}
+          <li>卖真卡给普通客人涨商会关系，每个营业日最多算 {FACTIONS.realSalePerDay} 次。</li>
+          <li><b>奖励</b>：黑市熟脸才卖你黑市卡包；黑市盟友给你一份失窃登记表副本，每周能查 {FACTIONS.registryPerWeek} 张卡是不是赃物（库存页，把卡拖上去）；正规商会盟友电脑订货 {FACTIONS.guildAlly.storeDiscount * 10} 折、每天多订 {FACTIONS.guildAlly.storePacks} 包。</li>
         </ul>
       </>
     ),

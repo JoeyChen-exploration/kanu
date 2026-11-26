@@ -6,7 +6,8 @@
 // 写操作都在一个事务里、要求幂等 key，信用点变动写流水（DR-1、DR-2）。播报在事务提交之后再发。
 import { techEffects } from '../game/tech.ts';
 import type { FastifyInstance } from 'fastify';
-import { ANNOUNCE, BLACK_MARKET, PACKS, RARITIES, SERIAL_LIMIT, STORE, STYLE, WHOLESALE, atLeast, type PackType, type Rarity } from '@kanu/shared/balance';
+import { bumpFaction, guildAlly } from '../factions.ts';
+import { ANNOUNCE, BLACK_MARKET, FACTIONS, PACKS, RARITIES, SERIAL_LIMIT, STORE, STYLE, WHOLESALE, atLeast, type PackType, type Rarity } from '@kanu/shared/balance';
 import type { BlackBuyResponse, BlackMarketResponse, BuyPacksResponse, CardView, OpenPackResponse, SealedPacksResponse, StoreResponse } from '@kanu/shared/types';
 import { ApiError, fail, idempotencyKey, type Deps } from '../app.ts';
 import { dayKey } from '../db/index.ts';
@@ -27,7 +28,9 @@ export function registerPackRoutes(app: FastifyInstance, deps: Deps, now: () => 
   const unlimited = (id: string) => deps.config.devUnlimitedIds.has(id);
 
   /** 电脑订货每天限购：基础值 + 科技树（G1 批发证） */
-  const packsPerDay = (userId: string) => STORE.packsPerDay + techEffects(repo.techOwned(userId)).storePacksPerDay;
+  const packsPerDay = (userId: string) => STORE.packsPerDay + techEffects(repo.techOwned(userId)).storePacksPerDay + (guildAlly(repo, userId) ? FACTIONS.guildAlly.storePacks : 0);
+  /** 正规商会盟友（DESIGN 8.4）电脑订货打折 */
+  const storePrice = (userId: string, price: number) => (guildAlly(repo, userId) ? Math.round(price * FACTIONS.guildAlly.storeDiscount) : price);
 
   const leftToday = (userId: string) => {
     if (unlimited(userId)) return null;
@@ -45,7 +48,7 @@ export function registerPackRoutes(app: FastifyInstance, deps: Deps, now: () => 
         name: s.name,
         kind: s.kind,
         kindName: p.name,
-        price: p.price,
+        price: storePrice(req.user!.id, p.price),
         cardCount: templates.filter((t) => t.series_id === s.id).length,
         odds: RARITIES.filter((r) => p.odds[r] > 0).map((r) => ({ rarity: r, percent: p.odds[r] / 10_000 })),
       };
@@ -73,7 +76,7 @@ export function registerPackRoutes(app: FastifyInstance, deps: Deps, now: () => 
       const priced = items.map((x) => {
         const kind = repo.seriesKind(x.seriesId);
         if (!kind || !known.has(x.seriesId)) throw new ApiError(400, 'bad_pack', '没有这种卡包');
-        return { ...x, price: PACKS[kind].price };
+        return { ...x, price: storePrice(userId, PACKS[kind].price) };
       });
       const player = repo.getPlayer(userId);
       if (!player) throw new ApiError(401, 'unauthorized', '请重新打开卡奴登录');
@@ -105,10 +108,10 @@ export function registerPackRoutes(app: FastifyInstance, deps: Deps, now: () => 
   // ---- 黑市（DESIGN 4）：解锁后每个营业日最多 BLACK_MARKET.perDay 包，和电脑订货分开算 ----
   const blackStatus = (userId: string) => {
     const player = repo.getPlayer(userId)!;
-    const current = repo.questStats(userId).middlemanSales;
+    const current = player.rep_black;
     const free = unlimited(userId);
     const used = repo.blackBoughtToday(userId, player.game_day);
-    return { player, free, used, unlocked: free || current >= BLACK_MARKET.unlockMiddlemanSales, current };
+    return { player, free, used, unlocked: free || current >= FACTIONS.knownMin, current };
   };
 
   app.get('/api/black', async (req, reply) => {
@@ -116,7 +119,7 @@ export function registerPackRoutes(app: FastifyInstance, deps: Deps, now: () => 
     const b = blackStatus(req.user.id);
     const p = PACKS.black;
     const response: BlackMarketResponse = {
-      ok: true, unlocked: b.unlocked, progress: { current: Math.min(b.current, BLACK_MARKET.unlockMiddlemanSales), target: BLACK_MARKET.unlockMiddlemanSales },
+      ok: true, unlocked: b.unlocked, progress: { current: Math.max(0, Math.min(b.current, FACTIONS.knownMin)), target: FACTIONS.knownMin },
       price: p.price, perDay: BLACK_MARKET.perDay, leftToday: b.free ? null : Math.max(0, BLACK_MARKET.perDay - b.used),
       odds: RARITIES.filter((r) => p.odds[r] > 0).map((r) => ({ rarity: r, percent: p.odds[r] / 10_000 })),
       fakePct: p.fakePpm / 10_000, stolenPct: p.stolenPpm / 10_000,
@@ -136,7 +139,7 @@ export function registerPackRoutes(app: FastifyInstance, deps: Deps, now: () => 
       if (replay) return replay;
       const t = now();
       const b = blackStatus(userId);
-      if (!b.unlocked) throw new ApiError(400, 'locked', `黑市还不认识你：和黑市中间人成交 ${BLACK_MARKET.unlockMiddlemanSales} 次（现在 ${b.current} 次）`);
+      if (!b.unlocked) throw new ApiError(400, 'locked', `黑市还不认识你：黑市关系要到熟脸（${FACTIONS.knownMin}，现在 ${b.current}）。多和黑市中间人做生意`);
       if (!b.free && b.used + count > BLACK_MARKET.perDay) throw new ApiError(400, 'daily_limit', `黑市每个营业日最多 ${BLACK_MARKET.perDay} 包，今天还能买 ${Math.max(0, BLACK_MARKET.perDay - b.used)} 包`);
       const cost = b.free ? 0 : PACKS.black.price * count;
       if (b.player.credits < cost) throw new ApiError(400, 'insufficient_credits', `信用点不够：要 ${cost}，你有 ${b.player.credits}`);
@@ -144,6 +147,7 @@ export function registerPackRoutes(app: FastifyInstance, deps: Deps, now: () => 
       const credits = b.player.credits - cost;
       repo.setCreditsPity(userId, credits, b.player.pity_count);
       repo.logCredits(userId, t, -cost, b.free ? 'black_test_free' : 'black', credits, { day: b.player.game_day, count, packs: packIds });
+      bumpFaction(repo, userId, 'blackPack', t, b.player.game_day, count);
       const response: BlackBuyResponse = { ok: true, credits, packIds, leftToday: b.free ? null : BLACK_MARKET.perDay - b.used - count };
       repo.putIdempotent(userId, key, response, t);
       return response;

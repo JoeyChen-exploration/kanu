@@ -653,3 +653,33 @@ export interface BlackBuyResponse {
   packIds: number[];
   leftToday: number | null;
 }
+
+/** 派系（DESIGN 8.4）。隐藏的治安关系不在这里 */
+export interface FactionView {
+  id: 'guild' | 'black' | 'collectors';
+  name: string;
+  contact: string;
+  contactName: string;
+  value: number;
+  tier: 'hostile' | 'stranger' | 'known' | 'ally';
+  tierName: string;
+  gain: string;
+  rival: string;
+  /** 各等级的门槛和奖励说明 */
+  perks: Array<{ tier: 'known' | 'ally'; text: string; active: boolean }>;
+}
+/** GET /api/factions */
+export interface FactionsResponse {
+  ok: true;
+  factions: FactionView[];
+  thresholds: { hostileMax: number; knownMin: number; allyMin: number; min: number; max: number };
+  /** 黑市盟友：这周还能查几次失窃登记表；没到盟友是 null */
+  registryLeft: number | null;
+}
+/** POST /api/factions/registry { cardId }（幂等）：黑市盟友查一张卡在不在失窃登记表上 */
+export interface RegistryResponse {
+  ok: true;
+  cardId: number;
+  onRegistry: boolean;
+  registryLeft: number;
+}

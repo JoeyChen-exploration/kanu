@@ -2,7 +2,7 @@
 // 不知道下一位是谁、今天还剩几位。挑卡（或卡包）→ 开价 / 接受还价 / 快速出售 / 请走。都接待完就能打烊。
 import { useEffect, useRef, useState } from 'react';
 import { COUNTER, CUSTOMER, type CustomerType } from '@kanu/shared/balance';
-import type { CardAppraisalResponse, CardView, InspectionView, CounterBinderPageResponse, CounterResponse, CustomerView, EligibleCardsResponse, EndDayResponse, MeResponse, OfferResponse, ReceiveResponse, DealerBuyResponse } from '@kanu/shared/types';
+import type { CardAppraisalResponse, CardView, InspectionView, CounterBinderPageResponse, CounterResponse, CustomerView, EligibleCardsResponse, EndDayResponse, MeResponse, OfferResponse, ReceiveResponse, DealerBuyResponse, PatrolResolveResponse, PatrolView, ReportResponse } from '@kanu/shared/types';
 import { api, newIdempotencyKey } from '../api.ts';
 import { Card, fmt } from '../Card.tsx';
 import { ART, ArtImg, CustomerAvatar, PackArt } from '../art.tsx';
@@ -15,7 +15,7 @@ export const AVATAR: Record<string, string> = {
   resident: '🧑‍🔧', student: '🧒', tourist: '🧳', collector: '🧐', nostalgic: '👴',
   rich: '🤵', speculator: '📈', streamer: '🎥', middleman: '🕶️', grand: '🎩', courier: '📦', dealer: '🧥',
 };
-const STATUS: Record<string, string> = { sold: '成交', left: '走了', dismissed: '请走', received: '收货' };
+const STATUS: Record<string, string> = { sold: '成交', left: '走了', dismissed: '请走', received: '收货', reported: '举报', busted: '被便衣抓了' };
 /** 开价时每次加减多少，玩家自己选 */
 const STEPS = [1, 10, 100, 1000];
 
@@ -55,6 +55,8 @@ export function Counter({ onChange, onGo }: { onChange: (patch: Partial<MeRespon
         : '被评级社拒评（疑似假卡），信誉下降'}`);
       if (r.rentPaid) notes.unshift(`交了第 ${r.rentPaid.week} 周摊位费 ${fmt(r.rentPaid.amount)}`);
       if (r.forfeited) notes.push(`${r.forfeited} 张抵押的卡过了赎回期，归房东了`);
+      if (r.patrol) notes.push(`治安巡查来了，查出 ${r.patrol.cards.length} 张赃卡`);
+      else if (r.patrolClean) notes.push('治安巡查来店里转了一圈，什么都没查出来');
       setMsg(notes.join('；'));
       await load();
     } catch (e) {
@@ -83,6 +85,7 @@ export function Counter({ onChange, onGo }: { onChange: (patch: Partial<MeRespon
           openBinders={openBinders} setOpenBinders={setOpenBinders} table={table} setTable={setTable} guide={guide} setGuide={setGuide} />
       )}
 
+      {data.patrol && <Patrol key={data.patrol.id} patrol={data.patrol} onChange={onChange} onDone={(t) => { setMsg(t); void load(); }} />}
       {data.arrears && (
         <div className="closing rent-arrears">
           <p><b>交不起摊位费</b>：第 {data.arrears.week} 周 {fmt(data.arrears.amount)} 信用点。柜台先关门，交上之前不能进入下一天。去店铺页抵押卡牌凑钱，或者从头开始。</p>
@@ -237,6 +240,16 @@ function DealerDeal({ customer, onChange, onDone, onUpdate }: { customer: Custom
     setBusy(true);
     try { await api(`/counter/${customer.id}/dismiss`, { method: 'POST', body: {} }); onDone('请卡贩离开了'); } catch (e) { setNote((e as Error).message); } finally { setBusy(false); }
   };
+  // 举报：觉得他的货是赃物（DESIGN 6）。对了有奖金、信誉 +，错了信誉 −
+  const [confirmReport, setConfirmReport] = useState(false);
+  const report = async () => {
+    setBusy(true);
+    try {
+      const r = await api<ReportResponse>(`/counter/${customer.id}/report`, { method: 'POST', body: {}, idempotencyKey: newIdempotencyKey() });
+      onChange({ credits: r.credits, reputation: r.reputation });
+      onDone(r.correct ? `举报对了！他的货里有赃物，治安局给了 ${fmt(r.bonus)} 信用点奖金，信誉上升` : '举报错了：他的货是干净的，信誉下降');
+    } catch (e) { setNote((e as Error).message); } finally { setBusy(false); setConfirmReport(false); }
+  };
 
   return (
     <div className="visitor dealer">
@@ -283,10 +296,40 @@ function DealerDeal({ customer, onChange, onDone, onUpdate }: { customer: Custom
           </>
         )}
         <button className="secondary" disabled={busy} onClick={dismiss}>请他离开（没收的卡他带走）</button>
+        {!confirmReport
+          ? <button className="secondary danger" disabled={busy} onClick={() => setConfirmReport(true)}>🚨 举报他卖赃物</button>
+          : <div className="exchange-confirm"><span>举报对了有奖金、信誉 +；他的货是干净的就是错举，信誉 −。确定？</span><button className="primary danger" disabled={busy} onClick={report}>确定举报</button><button className="link" onClick={() => setConfirmReport(false)}>算了</button></div>}
         {note && <p className="deal-msg">{note}</p>}
       </div>
       {loupe.drag && lensRect && lensCard && <LoupeLens x={loupe.drag.x} y={loupe.drag.y} rect={lensRect} card={lensCard} inspection={looks[lensCard.id] ?? null} />}
       {loupe.drag && <DragGhost x={loupe.drag.x} y={loupe.drag.y}><span className="loupe-ghost" aria-hidden>🔍</span></DragGhost>}
+    </div>
+  );
+}
+
+/** 治安巡查（DESIGN 8.3）：查出赃卡，二选一处理完柜台才开门 */
+function Patrol({ patrol, onChange, onDone }: { patrol: PatrolView; onChange: (p: Partial<MeResponse>) => void; onDone: (text: string) => void }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const resolve = async (choice: 'surrender' | 'bribe') => {
+    setBusy(true); setErr('');
+    try {
+      const r = await api<PatrolResolveResponse>(`/patrol/${patrol.id}/resolve`, { method: 'POST', body: { choice }, idempotencyKey: newIdempotencyKey() });
+      onChange({ credits: r.credits, reputation: r.reputation });
+      onDone(choice === 'surrender' ? `交出了 ${patrol.cards.length} 张赃卡，信誉下降` : `打点了 ${fmt(patrol.bribe)} 信用点，卡留下了`);
+    } catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
+  };
+  return (
+    <div className="closing patrol">
+      <p><b>🚨 治安巡查</b>：这几张卡在失窃登记表上。处理完才能开门。</p>
+      <div className="rent-grid">
+        {patrol.cards.map((c) => <div key={c.id} className="rent-cell"><Card card={c} small /><span className="cell-price">市场价 {fmt(c.price)}</span></div>)}
+      </div>
+      <div className="rent-actions">
+        <button className="secondary" disabled={busy} onClick={() => resolve('surrender')}>交出（没收，信誉 −{patrol.surrenderRepLoss}）</button>
+        <button className="primary" disabled={busy} onClick={() => resolve('bribe')}>打点 {fmt(patrol.bribe)} 信用点（卡留下）</button>
+      </div>
+      {err && <p className="error">{err}</p>}
     </div>
   );
 }
@@ -543,6 +586,7 @@ function Deal({ customer, onChange, onDone, onUpdate, openBinders, setOpenBinder
         takeBack(selected); // 卖掉了，从台面上拿走
         onDone(`成交！「${selected.name}」卖了 ${fmt(r.price ?? 0)} 信用点`);
       } else if (r.outcome === 'caught') onDone('被识破是假货！信誉下降');
+      else if (r.outcome === 'busted') { takeBack(selected); onDone(`对方是便衣！「${selected.name}」是赃卡，被没收，罚款 ${fmt(r.fine ?? 0)}，信誉下降`); }
       else onDone(`${customer.typeName}走了`);
     } catch (e) {
       setNote((e as Error).message);

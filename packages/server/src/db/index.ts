@@ -252,6 +252,19 @@ const MIGRATIONS: string[] = [
    );
    CREATE INDEX exchanges_owner ON exchanges (owner_id, week);
    CREATE INDEX exchanges_status ON exchanges (status);`,
+  // 19：便衣和巡查（DESIGN 6、8.3）。customers.undercover 是隐藏属性（玩家看到的类型是伪装的），绝不发给玩家；
+  // patrols：打烊后来查店，查出的赃卡等玩家选交出或打点（status pending / surrendered / bribed）
+  `ALTER TABLE customers ADD COLUMN undercover INTEGER NOT NULL DEFAULT 0;
+   CREATE TABLE patrols (
+     id          INTEGER PRIMARY KEY AUTOINCREMENT,
+     owner_id    TEXT NOT NULL REFERENCES players(discord_id),
+     day         INTEGER NOT NULL,
+     cards       TEXT NOT NULL,
+     bribe       INTEGER NOT NULL,
+     status      TEXT NOT NULL DEFAULT 'pending',
+     created_at  INTEGER NOT NULL
+   );
+   CREATE INDEX patrols_owner ON patrols (owner_id, status);`,
 ];
 
 /** 营业日在 customers、daily_usage 里的键 */
@@ -274,6 +287,8 @@ export interface CustomerRow {
   counter_price: number | null;
   /** 进门时的耐心（含珍藏柜加成）；老数据为 0 */
   max_patience: number;
+  /** 便衣（隐藏，绝不发给玩家） */
+  undercover?: number;
   created_at: number;
 }
 
@@ -516,6 +531,18 @@ function createRepo(db: Database.Database) {
     adminExchanges: (status: string | null, limit = 100) =>
       (status ? db.prepare('SELECT * FROM exchanges WHERE status = ? ORDER BY id DESC LIMIT ?').all(status, limit) : db.prepare('SELECT * FROM exchanges ORDER BY id DESC LIMIT ?').all(limit)) as ExchangeRow[],
     adminSetDay: (discordId: string, day: number) => db.prepare('UPDATE players SET game_day = ?, day_customer_count = 0 WHERE discord_id = ?').run(day, discordId),
+    // ---- 便衣和巡查（DESIGN 6、8.3） ----
+    markUndercover: (customerId: number) => db.prepare('UPDATE customers SET undercover = 1 WHERE id = ?').run(customerId),
+    /** 库存和珍藏柜里的赃卡（巡查用；抵押、送评、卡贩台面上的不算） */
+    stolenCards: (ownerId: string) =>
+      (db.prepare("SELECT id FROM card_instances WHERE owner_id = ? AND origin = 'stolen' AND location IN ('inventory', 'showcase') ORDER BY id").all(ownerId) as Array<{ id: number }>).map((r) => r.id),
+    insertPatrol: (p: { ownerId: string; day: number; cards: number[]; bribe: number; now: number }) =>
+      Number(db.prepare('INSERT INTO patrols (owner_id, day, cards, bribe, created_at) VALUES (?, ?, ?, ?, ?)').run(p.ownerId, p.day, JSON.stringify(p.cards), p.bribe, p.now).lastInsertRowid),
+    pendingPatrol: (ownerId: string) =>
+      (db.prepare("SELECT * FROM patrols WHERE owner_id = ? AND status = 'pending' ORDER BY id LIMIT 1").get(ownerId) as { id: number; day: number; cards: string; bribe: number; status: string } | undefined) ?? null,
+    getPatrol: (ownerId: string, id: number) =>
+      (db.prepare('SELECT * FROM patrols WHERE id = ? AND owner_id = ?').get(id, ownerId) as { id: number; day: number; cards: string; bribe: number; status: string } | undefined) ?? null,
+    setPatrolStatus: (id: number, status: string) => db.prepare('UPDATE patrols SET status = ? WHERE id = ?').run(status, id),
     // ---- 金币兑换（FR-EXCH） ----
     insertExchange: (e: { ownerId: string; credits: number; coins: number; week: string; now: number }) =>
       Number(db.prepare('INSERT INTO exchanges (owner_id, credits, coins, week, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)').run(e.ownerId, e.credits, e.coins, e.week, e.now, e.now).lastInsertRowid),

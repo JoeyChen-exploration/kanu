@@ -507,6 +507,21 @@ export const IDEMPOTENCY = { ttlMs: 48 * 3600e3 };
  */
 export const DEALER = { cards: [1, 3] as [number, number], packType: 'premium' as PackType, fakePpm: 250_000, stolenPpm: 400_000, askPct: [0.4, 0.8] as [number, number], counterUp: [1, 1.15] as [number, number], patience: 3 };
 
+/**
+ * 便衣和巡查（DESIGN 6、8.3，2026-11-26 上线）：让赃物有风险。
+ * 便衣：每位普通客人有 undercoverPpm 概率是便衣，伪装成那一类客人（玩家看不出类型），开口有 tellPpm 概率露破绽。
+ *   把赃卡卖给便衣：卡没收、不给钱，罚款 = max(fineMin, 市场价 × fineMult)（最多罚到 0），信誉 −bustRepLoss。卖别的卡给他照常成交。
+ * 巡查：每次打烊后有 patrolPpm 概率来查店，库存和珍藏柜里每张赃卡有 detectPpm 概率被查出（抵押在房东那里、送评中的不查）。
+ *   查出来二选一：交出（没收，信誉 −surrenderRepLoss）或打点（付这些卡市场价 × bribePct，卡留下）。处理完才能开门。
+ * 举报卡贩：他的货里有赃物就对了，奖金 = 赃卡市场价合计 × reportBonusPct，信誉 +reportRepGain，赃卡没收；举报错了信誉 −falseReportRepLoss。
+ * 藏匿室（科技树 S3b / S4b）以后接。
+ */
+export const POLICE = {
+  undercoverPpm: 20_000, tellPpm: 500_000, fineMult: 1, fineMin: 100, bustRepLoss: 10,
+  patrolPpm: 100_000, detectPpm: 700_000, surrenderRepLoss: 5, bribePct: 0.6,
+  reportBonusPct: 0.3, reportRepGain: 3, falseReportRepLoss: 2,
+};
+
 /** 写接口限流（NFR-SEC-4）：每个玩家每秒最多几次写请求，超过回 429 */
 export const RATE_LIMIT = { writesPerSecond: 5 };
 /** 数据库备份（M7）：启动时备份一次，之后每几小时一次，备份目录里留最近几份 */

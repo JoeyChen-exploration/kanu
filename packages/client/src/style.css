@@ -763,3 +763,6 @@ button.primary.danger { background: #b3202a; color: #fff; }
 .dealer-bid .price-input { display: flex; gap: 6px; align-items: center; }
 .dealer-bid .price-input input { width: 90px; text-align: center; }
 .dealer-mark { background: #1e3a8a; color: #dbeafe; }
+
+/* ---- 治安巡查（DESIGN 8.3） ---- */
+.closing.patrol { border: 1px solid #1d4ed8; border-radius: 12px; padding: 10px 12px; background: #0f1a33; display: flex; flex-direction: column; gap: 8px; }

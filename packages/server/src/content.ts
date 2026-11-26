@@ -31,7 +31,8 @@ export function checkSeries(s: SeriesContent): string[] {
 }
 
 /** 顾客台词（FR-CTR-7）：content/lines.json，按"顾客类型 → 场景"分组 */
-export type LineEvent = 'greet' | 'counter' | 'too_high' | 'deal' | 'left';
+/** bust：便衣抓人；busted / false_report：举报卡贩对了 / 错了（卡贩的台词） */
+export type LineEvent = 'greet' | 'counter' | 'too_high' | 'deal' | 'left' | 'bust' | 'busted' | 'false_report';
 export interface Lines {
   byType: Record<string, Record<LineEvent, string[]>>;
   caught: string[];

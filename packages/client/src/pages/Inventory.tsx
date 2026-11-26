@@ -2,7 +2,7 @@
 // 最下面保留按稀有度筛选的"全部卡"列表。点任何一张卡看详情、放进 / 取出珍藏柜。
 import { useContext, useEffect, useState } from 'react';
 import { LOOSE, RARITIES, SHOWCASE } from '@kanu/shared/balance';
-import type {
+import type { HideoutResponse,
   BinderPageResponse, BinderView, BindersResponse, CardAppraisalResponse, CardView, InventoryResponse, MeResponse, ShowcaseResponse, ShowcaseStatus, ShowcaseUpgradeResponse,
 } from '@kanu/shared/types';
 import { api, newIdempotencyKey } from '../api.ts';
@@ -17,6 +17,8 @@ export function Inventory({ onChange }: { onChange: (p: Partial<MeResponse>) => 
   const [data, setData] = useState<BindersResponse | null>(null);
   const [showcase, setShowcase] = useState<CardView[]>([]);
   const [sc, setSc] = useState<ShowcaseStatus | null>(null);
+  /** 藏匿室（科技树 S3b 后门生意 / S4b 地下仓）；slots = 0 就不显示 */
+  const [hideout, setHideout] = useState<HideoutResponse | null>(null);
   /** 同时打开的卡册浮窗（可以好几本） */
   const [openBinders, setOpenBinders] = useState<BinderView[]>([]);
   const isOpen = (id: number) => openBinders.some((b) => b.id === id);
@@ -30,7 +32,8 @@ export function Inventory({ onChange }: { onChange: (p: Partial<MeResponse>) => 
   const day = useContext(GameDayContext);
 
   const load = async () => {
-    const [b, s] = await Promise.all([api<BindersResponse>('/binders'), api<ShowcaseResponse>('/showcase')]);
+    const [b, s, hd] = await Promise.all([api<BindersResponse>('/binders'), api<ShowcaseResponse>('/showcase'), api<HideoutResponse>('/hideout')]);
+    setHideout(hd);
     setData(b);
     setShowcase(s.cards);
     setSc(s.status);
@@ -68,11 +71,23 @@ export function Inventory({ onChange }: { onChange: (p: Partial<MeResponse>) => 
     }
   };
   const toggleShowcase = (card: CardView) => setShowcaseOn(card, card.location !== 'showcase');
+  const setHidden = async (card: CardView, on: boolean) => {
+    setErr(''); setMsg('');
+    try {
+      await api(`/inventory/${card.id}/hideout`, { method: 'POST', body: { on } });
+      setSelected(null);
+      setMsg(on ? `「${card.name}」藏进了藏匿室` : `「${card.name}」从藏匿室取出来了`);
+      await load();
+      setVersion((v) => v + 1);
+    } catch (e) { setErr((e as Error).message); }
+  };
 
   // 拖卡：卡册 / 桌面 → 珍藏柜 = 放进去；珍藏柜 → 卡册浮窗 / 桌面 = 取出来
   const { drag, bind } = useDrag<CardView>((card, zone) => {
-    if (zone === 'showcase' && card.location !== 'showcase') void setShowcaseOn(card, true);
+    if (zone === 'showcase' && card.location !== 'showcase' && card.location !== 'hideout') void setShowcaseOn(card, true);
     else if (zone === 'stash' && card.location === 'showcase') void setShowcaseOn(card, false);
+    else if (zone === 'hideout' && card.location === 'inventory') void setHidden(card, true);
+    else if (zone === 'stash' && card.location === 'hideout') void setHidden(card, false);
     else if (zone === PHONE_ZONE) dropOnPhone(card); // 拖到电话的评级社上送评
   });
   const dropping = (zone: string) => (drag ? (drag.zone === zone ? ' drop-target drop-over' : ' drop-target') : '');
@@ -83,6 +98,20 @@ export function Inventory({ onChange }: { onChange: (p: Partial<MeResponse>) => 
       <div className="inv-col">
       <ShowcasePanel status={sc} cards={showcase} onPick={setSelected} onUpgrade={upgradeShowcase} bind={bind} dropClass={drag && drag.item.location !== 'showcase' ? dropping('showcase') : ''} />
       {!drag && <p className="hint drag-tip">按住卡牌（手机上长按）拖到珍藏柜就能放进去，拖回卡册或桌面就是取出来。</p>}
+      {hideout && hideout.slots > 0 && (
+        <div className={`hideout${drag && drag.item.location === 'inventory' ? dropping('hideout') : ''}`} data-drop="hideout">
+          <h2>🕳️ 藏匿室 <small>{hideout.cards.length} / {hideout.slots} 格 · 巡查查出率 {hideout.detectPct}%</small></h2>
+          <p className="hint">来路不明的卡藏这里，巡查不容易查出来。藏着的卡不能卖、不能抵押、不能送评，要用先拖回卡册或桌面。</p>
+          <div className="grid">
+            {hideout.cards.map((c) => (
+              <button key={c.id} className={drag?.item.id === c.id ? 'cell draggable dragging' : 'cell draggable'} onClick={() => void setHidden(c, false)} title="点一下取出" {...bind(c)}>
+                <Card card={c} small />
+              </button>
+            ))}
+            {Array.from({ length: Math.max(0, hideout.slots - hideout.cards.length) }, (_, i) => <div key={`e${i}`} className="cell empty-slot">空</div>)}
+          </div>
+        </div>
+      )}
 
       <h2>我的卡册</h2>
       <div className="binder-list">
@@ -100,7 +129,7 @@ export function Inventory({ onChange }: { onChange: (p: Partial<MeResponse>) => 
       </div>
 
       <div className="inv-col">
-      <div className={`stash-zone${drag && drag.item.location === 'showcase' ? dropping('stash') : ''}`} data-drop="stash">
+      <div className={`stash-zone${drag && (drag.item.location === 'showcase' || drag.item.location === 'hideout') ? dropping('stash') : ''}`} data-drop="stash">
         <h2>桌面散放 <small>{loose.length} / {LOOSE.slots}</small></h2>
         {loose.length === 0
           ? <p className="hint">桌面上没有散卡。卡册满了的时候，新开的卡会先放在这里。</p>
@@ -128,7 +157,7 @@ export function Inventory({ onChange }: { onChange: (p: Partial<MeResponse>) => 
       {openBinders.map((b, i) => (
         <FloatWindow key={b.id} id={`binder-${b.id}`} cascade={i} className="float-binder" title={b.name}
           onClose={() => { setOpenBinders((xs) => xs.filter((x) => x.id !== b.id)); void load(); }} dropZone="stash">
-          <div className={drag && drag.item.location === 'showcase' ? `float-drop${dropping('stash')}` : 'float-drop'}>
+          <div className={drag && (drag.item.location === 'showcase' || drag.item.location === 'hideout') ? `float-drop${dropping('stash')}` : 'float-drop'}>
             <BinderPages binder={b} version={version} onPick={setSelected} bind={bind} draggingId={drag?.item.id ?? null} />
           </div>
         </FloatWindow>
@@ -137,9 +166,9 @@ export function Inventory({ onChange }: { onChange: (p: Partial<MeResponse>) => 
         <DragGhost x={drag.x} y={drag.y}>
           <Card card={drag.item} small />
           <span className="ghost-hint">
-            {drag.item.location === 'showcase'
+            {drag.item.location === 'showcase' || drag.item.location === 'hideout'
               ? (drag.zone === 'stash' ? '松手取出' : '拖到卡册或桌面')
-              : (drag.zone === 'showcase' ? '松手放进珍藏柜' : '拖到珍藏柜')}
+              : drag.zone === 'showcase' ? '松手放进珍藏柜' : drag.zone === 'hideout' ? '松手藏进藏匿室' : '拖到珍藏柜'}
           </span>
         </DragGhost>
       )}

@@ -41,7 +41,8 @@ export interface WalletView {
 
 /** inventory 库存（卡册或桌面）、showcase 珍藏柜、grading 送评中（在星港评级社） */
 /** offered：卡贩摆在柜台上、还没收下的卡（挂在玩家名下好让放大镜能看，卡贩走了就删） */
-export type CardLocation = 'inventory' | 'showcase' | 'grading' | 'pawned' | 'offered';
+/** hideout：藏匿室（科技树 S3b / S4b，巡查不容易查出） */
+export type CardLocation = 'inventory' | 'showcase' | 'grading' | 'pawned' | 'offered' | 'hideout';
 
 export interface CardView {
   id: number;
@@ -619,4 +620,13 @@ export interface ReportResponse {
   reputation: number;
   next: CustomerView | null;
   done: boolean;
+}
+
+/** GET /api/hideout：藏匿室（科技树 S3b / S4b）。slots = 0 表示还没有 */
+export interface HideoutResponse {
+  ok: true;
+  slots: number;
+  /** 放在里面的赃卡被巡查查出的概率（%） */
+  detectPct: number;
+  cards: CardView[];
 }

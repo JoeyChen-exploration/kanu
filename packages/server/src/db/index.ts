@@ -535,7 +535,10 @@ function createRepo(db: Database.Database) {
     markUndercover: (customerId: number) => db.prepare('UPDATE customers SET undercover = 1 WHERE id = ?').run(customerId),
     /** 库存和珍藏柜里的赃卡（巡查用；抵押、送评、卡贩台面上的不算） */
     stolenCards: (ownerId: string) =>
-      (db.prepare("SELECT id FROM card_instances WHERE owner_id = ? AND origin = 'stolen' AND location IN ('inventory', 'showcase') ORDER BY id").all(ownerId) as Array<{ id: number }>).map((r) => r.id),
+      db.prepare("SELECT id, location FROM card_instances WHERE owner_id = ? AND origin = 'stolen' AND location IN ('inventory', 'showcase', 'hideout') ORDER BY id").all(ownerId) as Array<{ id: number; location: string }>,
+    /** 这个营业日 / 这几个营业日里某种事件发生了几次（data.day 在 [fromDay, toDay]） */
+    countEventsInDays: (ownerId: string, kind: string, fromDay: number, toDay: number) =>
+      (db.prepare("SELECT COUNT(*) AS n FROM events_log WHERE discord_id = ? AND kind = ? AND json_extract(data, '$.day') BETWEEN ? AND ?").get(ownerId, kind, fromDay, toDay) as { n: number }).n,
     insertPatrol: (p: { ownerId: string; day: number; cards: number[]; bribe: number; now: number }) =>
       Number(db.prepare('INSERT INTO patrols (owner_id, day, cards, bribe, created_at) VALUES (?, ?, ?, ?, ?)').run(p.ownerId, p.day, JSON.stringify(p.cards), p.bribe, p.now).lastInsertRowid),
     pendingPatrol: (ownerId: string) =>
@@ -697,6 +700,10 @@ function createRepo(db: Database.Database) {
     },
     setShowcaseLevel: (discordId: string, level: number) => db.prepare('UPDATE players SET showcase_level = ? WHERE discord_id = ?').run(level, discordId),
     /** 珍藏柜里的卡（公开信息），最值钱的在前 */
+    /** 某个位置上的卡（公开信息），比如藏匿室 */
+    cardsAt(ownerId: string, location: CardLocation): CardView[] {
+      return (db.prepare(`${q.cardsWithTemplate} WHERE i.owner_id = ? AND i.location = ? ORDER BY i.id`).all(ownerId, location) as CardViewRow[]).map(toCardView);
+    },
     showcaseCards(ownerId: string): CardView[] {
       const rows = db.prepare(`${q.cardsWithTemplate} WHERE i.owner_id = ? AND i.location = 'showcase' ORDER BY i.id`).all(ownerId) as CardViewRow[];
       return rows.map(toCardView).sort((a, b) => b.price - a.price);
@@ -746,6 +753,9 @@ function createRepo(db: Database.Database) {
         showcaseLevel: player?.showcase_level ?? 0,
         showcaseCards: count("SELECT COUNT(*) AS n FROM card_instances WHERE owner_id = ? AND location = 'showcase'"),
         binders: count('SELECT COUNT(*) AS n FROM binders WHERE owner_id = ?'),
+        rentPaid: count("SELECT COUNT(*) AS n FROM events_log WHERE discord_id = ? AND kind = 'credits' AND json_extract(data, '$.why') = 'rent' AND json_extract(data, '$.late') IS NULL"),
+        middlemanSales: count("SELECT COUNT(*) AS n FROM events_log WHERE discord_id = ? AND kind = 'credits' AND json_extract(data, '$.why') = 'sale' AND json_extract(data, '$.type') = 'middleman'"),
+        inspections: count("SELECT COUNT(*) AS n FROM events_log WHERE discord_id = ? AND kind = 'inspect'"),
       };
     },
     questClaims: (ownerId: string) =>

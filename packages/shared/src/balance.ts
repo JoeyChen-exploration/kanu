@@ -355,7 +355,8 @@ export const LOOSE = {
 // ---------- 任务栏 / 新手指引（2026-11-17 用户定） ----------
 // 右上角的任务栏：一条一条带新玩家上手，做完点"领取"拿信用点。进度从已有的流水和库存里数，不另记计数。
 // 以后科技树上线，玩家可以在任务栏里追踪节点的解锁条件。
-export type QuestMetric = 'packsBought' | 'packsOpened' | 'sales' | 'daysEnded' | 'collected' | 'showcaseLevel' | 'showcaseCards' | 'binders';
+/** rentPaid 按时交租次数、middlemanSales 和中间人成交次数、inspections 放大镜查验次数（科技树里程碑，TECH-TREE 3.0） */
+export type QuestMetric = 'packsBought' | 'packsOpened' | 'sales' | 'daysEnded' | 'collected' | 'showcaseLevel' | 'showcaseCards' | 'binders' | 'rentPaid' | 'middlemanSales' | 'inspections';
 /** tab：点任务时跳到哪一页 */
 export type QuestTab = 'shop' | 'packs' | 'counter' | 'inventory' | 'collection';
 
@@ -396,7 +397,19 @@ export type TechEffect =
   | { kind: 'storePacksPerDay'; delta: number }
   | { kind: 'showcaseSlots'; delta: number }
   | { kind: 'wholesaleDiscount'; value: number }
-  | { kind: 'dealerPpm'; value: number };
+  | { kind: 'dealerPpm'; value: number }
+  /** S2：每 7 个营业日信誉 +delta，涨到 cap 为止 */
+  | { kind: 'weeklyRep'; delta: number; cap: number }
+  /** S3a：巡查来的概率 × value */
+  | { kind: 'patrolMult'; value: number }
+  /** S3a：卖真卡给客人信誉 +delta，每个营业日最多 perDay 次 */
+  | { kind: 'honestRep'; delta: number; perDay: number }
+  /** S3b / S4b：藏匿室格数、放在里面的赃卡被查出的概率（取最好的） */
+  | { kind: 'hideout'; slots: number; detectPpm: number }
+  /** S3b：中间人按基准价的 value 收 */
+  | { kind: 'middlemanPct'; value: number }
+  /** S4a：每周（这一轮第 1–7、8–14……天）第一次被巡查查出赃卡，交出不扣信誉 */
+  | { kind: 'patrolWaiver' };
 export type TechCondition = { kind: 'metric'; metric: QuestMetric; target: number } | { kind: 'reputation'; min: number };
 export interface TechNode {
   id: string; branch: TechBranch; tier: number; name: string;
@@ -475,16 +488,16 @@ export const TECH_NODES: TechNode[] = [
   // ---- 店面（房东塔姆先生） ----
   { id: 'S1', branch: 'store', tier: 1, name: '保险柜', requires: [], price: 1500, conditions: [], effects: [{ kind: 'showcaseSlots', delta: 2 }],
     effect: '珍藏柜额外 +2 格（要先解锁珍藏柜）', flavor: '塔姆先生对有保险柜的租客客气一点。' },
-  { id: 'S2', branch: 'store', tier: 2, name: '装修', requires: ['S1'], price: 5000, conditions: [], effects: [], soon: 2, conditionText: '按时交租 1 次',
+  { id: 'S2', branch: 'store', tier: 2, name: '装修', requires: ['S1'], price: 5000, conditions: [{ kind: 'metric', metric: 'rentPaid', target: 1 }], effects: [{ kind: 'weeklyRep', delta: 2, cap: 80 }],
     effect: '信誉每周自动 +2（最高 80）', flavor: '墙刷白了，客人也敢多待一会儿。' },
-  { id: 'S3a', branch: 'store', tier: 3, name: '挂牌营业', requires: ['S2'], anyOf: ['C2', 'A2', 'G2', 'P2'], exclusive: 'S3b', price: 8000, conditions: [], effects: [], soon: 2, conditionText: '信誉 ≥ 55，成交 30 笔',
-    effect: '路线：正经店。巡查少，卖真卡涨信誉', flavor: '牌子挂出去，就得守规矩。' },
-  { id: 'S3b', branch: 'store', tier: 3, name: '后门生意', requires: ['S2'], anyOf: ['C2', 'A2', 'G2', 'P2'], exclusive: 'S3a', price: 8000, conditions: [], effects: [], soon: 2, conditionText: '中间人成交 5 次',
-    effect: '路线：销赃窝点。藏匿室 3 格，中间人出价更高', flavor: '后门不挂牌，熟人敲三下。' },
-  { id: 'S4a', branch: 'store', tier: 4, name: '治安备案', requires: ['S3a'], price: 14000, conditions: [], effects: [], soon: 2, conditionText: '信誉 ≥ 65，按时交租 3 次，验真 5 张',
-    effect: '每周第一次被查出赃卡只没收，不罚款', flavor: '备过案的店，治安局给一次面子。' },
-  { id: 'S4b', branch: 'store', tier: 4, name: '地下仓', requires: ['S3b'], price: 14000, conditions: [], effects: [], soon: 2, conditionText: '中间人成交 15 次',
-    effect: '藏匿室 3 → 6 格，查出率更低', flavor: '地板下面还有一层地板。' },
+  { id: 'S3a', branch: 'store', tier: 3, name: '挂牌营业', requires: ['S2'], anyOf: ['C2', 'A2', 'G2', 'P2'], exclusive: 'S3b', price: 8000, conditions: [{ kind: 'reputation', min: 55 }, { kind: 'metric', metric: 'sales', target: 30 }], effects: [{ kind: 'patrolMult', value: 0.5 }, { kind: 'honestRep', delta: 1, perDay: 3 }],
+    effect: '路线：正经店。巡查来的概率减半；卖真卡给客人信誉 +1（每天最多 +3）', flavor: '牌子挂出去，就得守规矩。' },
+  { id: 'S3b', branch: 'store', tier: 3, name: '后门生意', requires: ['S2'], anyOf: ['C2', 'A2', 'G2', 'P2'], exclusive: 'S3a', price: 8000, conditions: [{ kind: 'metric', metric: 'middlemanSales', target: 5 }], effects: [{ kind: 'hideout', slots: 3, detectPpm: 200_000 }, { kind: 'middlemanPct', value: 0.5 }],
+    effect: '路线：销赃窝点。藏匿室 3 格（里面的赃卡被巡查查出 70% → 20%）；中间人出价 40% → 50% 基准价', flavor: '后门不挂牌，熟人敲三下。' },
+  { id: 'S4a', branch: 'store', tier: 4, name: '治安备案', requires: ['S3a'], price: 14000, conditions: [{ kind: 'reputation', min: 65 }, { kind: 'metric', metric: 'rentPaid', target: 3 }, { kind: 'metric', metric: 'inspections', target: 5 }], effects: [{ kind: 'patrolWaiver' }],
+    effect: '每周第一次被巡查查出赃卡，交出不扣信誉', flavor: '备过案的店，治安局给一次面子。' },
+  { id: 'S4b', branch: 'store', tier: 4, name: '地下仓', requires: ['S3b'], price: 14000, conditions: [{ kind: 'metric', metric: 'middlemanSales', target: 15 }], effects: [{ kind: 'hideout', slots: 6, detectPpm: 100_000 }],
+    effect: '藏匿室 3 → 6 格，查出率 20% → 10%', flavor: '地板下面还有一层地板。' },
   { id: 'S5', branch: 'store', tier: 5, name: '隔壁铺面', requires: [], anyOf: ['S4a', 'S4b'], price: 24000, conditions: [], effects: [], soon: 3, conditionText: '已买下店铺',
     effect: '每天顾客 +3，橱窗格 +2', flavor: '塔姆先生把隔壁也租给你了。' },
 ];

@@ -766,3 +766,8 @@ button.primary.danger { background: #b3202a; color: #fff; }
 
 /* ---- 治安巡查（DESIGN 8.3） ---- */
 .closing.patrol { border: 1px solid #1d4ed8; border-radius: 12px; padding: 10px 12px; background: #0f1a33; display: flex; flex-direction: column; gap: 8px; }
+
+/* ---- 藏匿室（科技树 S3b / S4b） ---- */
+.hideout { margin-top: 12px; padding: 10px; border-radius: 12px; border: 1px dashed #4b5563; background: repeating-linear-gradient(135deg, #111318 0 10px, #15181f 10px 20px); }
+.hideout h2 { margin-top: 0; }
+.hideout .empty-slot { aspect-ratio: 63 / 88; display: grid; place-items: center; border-radius: 8px; border: 1px dashed #374151; color: var(--muted); font-size: 12px; }

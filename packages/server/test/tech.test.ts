@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { APPRAISAL, PACKS, PLAYER, SHOWCASE, STORE, TECH_NODES, WHOLESALE } from '@kanu/shared/balance';
+import { APPRAISAL, MIDDLEMAN, POLICE, PACKS, PLAYER, SHOWCASE, STORE, TECH_NODES, WHOLESALE } from '@kanu/shared/balance';
 import type { MeResponse, PhoneResponse, QuestsResponse, ShowcaseResponse, TechBuyResponse, TechResponse } from '@kanu/shared/types';
 import { techBlock, techEffects } from '../src/game/tech.ts';
 import { inspect } from '../src/game/appraisal.ts';
@@ -18,9 +18,11 @@ const price = (id: string) => TECH_NODES.find((n) => n.id === id)!.price;
 
 describe('科技树效果（纯函数）', () => {
   it('没点任何节点时是基础值；点了按表加', () => {
-    expect(techEffects([])).toEqual({ patience: 0, customersPerDay: 0, errataDetectPpm: APPRAISAL.errataDetect, storePacksPerDay: 0, showcaseSlots: 0, wholesaleDiscount: WHOLESALE.discount, dealerPpm: 0 });
+    expect(techEffects([])).toEqual({ patience: 0, customersPerDay: 0, errataDetectPpm: APPRAISAL.errataDetect, storePacksPerDay: 0, showcaseSlots: 0, wholesaleDiscount: WHOLESALE.discount, dealerPpm: 0,
+      weeklyRep: 0, weeklyRepCap: 0, patrolMult: 1, honestRep: 0, honestRepPerDay: 0, hideoutSlots: 0, hideoutDetectPpm: POLICE.detectPpm, middlemanPct: MIDDLEMAN.basePct, patrolWaiver: false });
     const all = techEffects(TECH_NODES.map((n) => n.id));
-    expect(all).toEqual({ patience: 1, customersPerDay: 1, errataDetectPpm: 900_000, storePacksPerDay: 1, showcaseSlots: 2, wholesaleDiscount: 0.75, dealerPpm: 180_000 });
+    expect(all).toEqual({ patience: 1, customersPerDay: 1, errataDetectPpm: 900_000, storePacksPerDay: 1, showcaseSlots: 2, wholesaleDiscount: 0.75, dealerPpm: 180_000,
+      weeklyRep: 2, weeklyRepCap: 80, patrolMult: 0.5, honestRep: 1, honestRepPerDay: 3, hideoutSlots: 6, hideoutDetectPpm: 100_000, middlemanPct: 0.5, patrolWaiver: true });
   });
 
   it('放大镜认错版的概率可以传进去', () => {
@@ -33,7 +35,7 @@ describe('科技树效果（纯函数）', () => {
 
 describe('科技树规则（纯函数）', () => {
   it('二选一、任一前置', () => {
-    const ctx = { stats: { packsBought: 0, packsOpened: 0, sales: 0, daysEnded: 0, collected: 0, showcaseLevel: 0, showcaseCards: 0, binders: 0 }, reputation: 50 };
+    const ctx = { stats: { packsBought: 0, packsOpened: 0, sales: 0, daysEnded: 0, collected: 0, showcaseLevel: 0, showcaseCards: 0, binders: 0, rentPaid: 0, middlemanSales: 0, inspections: 0 }, reputation: 50 };
     const a = { ...TECH_NODES.find((n) => n.id === 'C4a')!, soon: undefined, requires: [] };
     expect(techBlock(a, new Set(), ctx)).toBeNull();
     expect(techBlock(a, new Set(['C4b']), ctx)).toBe('exclusive');
@@ -52,7 +54,7 @@ describe('科技树接口（docs/TECH-TREE.md MVP）', () => {
     expect(t.branches.map((b) => b.id)).toEqual(['counter', 'appraisal', 'goods', 'phone', 'store']);
     const nodes = t.branches.flatMap((b) => b.nodes);
     expect(nodes).toHaveLength(32);
-    expect(nodes.filter((n) => !n.soon).map((n) => n.id).sort()).toEqual(['A1', 'C1', 'C2', 'G1', 'G2', 'P1', 'S1']);
+    expect(nodes.filter((n) => !n.soon).map((n) => n.id).sort()).toEqual(['A1', 'C1', 'C2', 'G1', 'G2', 'P1', 'S1', 'S2', 'S3a', 'S3b', 'S4a', 'S4b']);
     expect(nodes.find((n) => n.id === 'C4a')).toMatchObject({ soon: 2, exclusive: { id: 'C4b' }, unlockable: false });
     expect(nodes.find((n) => n.id === 'C5')!.anyOf.map((r) => r.id)).toEqual(['C4a', 'C4b']);
     // 每个前置都指向树上真有的节点

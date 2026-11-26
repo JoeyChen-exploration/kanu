@@ -780,3 +780,6 @@ button.primary.danger { background: #b3202a; color: #fff; }
 .black-tag { background: #18181b; color: #e4e4e7; border: 1px solid #52525b; }
 .black-mark { background: #18181b; color: #fafafa; border: 1px solid #a1a1aa; }
 .kind-black .pack-art, .pack-art.kind-black { background: linear-gradient(160deg, #27272a, #09090b); color: #d4d4d8; }
+
+/* 彩蛋卡（VOID_CARDS）：卡面纯黑，图没加载出来也是黑的，不画占位 */
+.card-void .card-face { background: #000; }

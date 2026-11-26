@@ -190,6 +190,8 @@ async function main() {
   for (const style of ['standard', 'holo', 'ice', 'gold']) await write(`frames/${style}.webp`, frameSvg(style));
   for (const r of Object.keys(P.rarity)) await write(`rarity/${r}.webp`, raritySvg(r));
   await write('cards/back.webp', backSvg(), { quality: 88 });
+  // 彩蛋卡 GNG-01 打工人（2026-11-26）：纯黑卡面，玩家凑近看会在自己屏幕上看到自己的倒影。不加任何反光、划痕、文字
+  await write('cards/GNG-01.webp', svg(W, H, `<rect width="${W}" height="${H}" fill="#000000"/>`), { quality: 90 });
   for (const n of ['halftone', 'ink', 'misregister', 'holo', 'border', 'scratch', 'dust', 'gap']) await write(`loupe/${n}.webp`, loupeSvg(n));
   for (const lv of [1, 2, 3]) await write(`wear/${lv}.webp`, wearSvg(lv));
 }

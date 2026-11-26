@@ -1,7 +1,7 @@
 // 新手手册：一本可以左右翻页的小册子（顶栏 📖 打开，第一次进游戏自动打开）。
 // 数字全部从 balance.ts 读，调了数值手册跟着变。只讲公开规则，不写顾客心理价位怎么算、品相掉没掉这类隐藏信息。
 import { useRef, useState, type ReactNode } from 'react';
-import { POLICE, DEALER,
+import { BLACK_MARKET, POLICE, DEALER,
   ANNOUNCE, APPRAISAL, BINDER_KINDS, ERRATA, PHONE, GRAND_COLLECTOR, BINDERS, COUNTER, CUSTOMER, CUSTOMER_TYPES, EXCHANGE, LOOSE, PACKS, PITY, RARITIES, RARITY,
   RENT, SERIAL_LIMIT, SHOP_PRICE, SHOWCASE, STARTER_BINDER, STORE, STYLE, STYLES, UNGRADED_MULT, WHOLESALE, PAWN, type CustomerWants, } from '@kanu/shared/balance';
 import { Card, GameDayContext, fmt } from './Card.tsx';
@@ -87,6 +87,7 @@ const PAGES: Array<{ title: string; body: ReactNode }> = [
           <li>每种卡包就是一个系列，进货页能看到各稀有度的出货率。</li>
           <li><b>保底</b>：连续 {PITY.packs - 1} 包都没开出 {PITY.rarity} 或以上，第 {PITY.packs} 包必出一张 {PITY.rarity}。</li>
           <li>没拆的卡包可以先放着，开箱主播会来收。</li>
+          <li><b>黑市</b>（在柜台和黑市中间人成交 {BLACK_MARKET.unlockMiddlemanSales} 次才有门路）：一包 {PACKS.black.price}，稀有卡更多，所有系列的卡都可能出，但每张约 {PACKS.black.fakePpm / 10_000}% 是假卡、{PACKS.black.stolenPpm / 10_000}% 是赃物，没有保底，每天最多 {BLACK_MARKET.perDay} 包。拆出来的卡带"黑"字。</li>
           <li><b>电话批发</b>（买了电话 📞 才有）：一盒 {WHOLESALE.boxPacks} 包，每包打 {Math.round(WHOLESALE.discount * 10)} 折，每天只能订一盒。<b>隔日送达</b>：第二天送货员作为第一位客人来柜台，占一个客人名额，在柜台<b>收货付款</b>（不想要可以拒收，不扣钱）。便宜但<b>批发商不保证正品</b>，每张约 {WHOLESALE.fakePpm / 10_000}% 是假卡；拆出来的卡带"批"字，卖之前用放大镜看看。</li>
         </ul>
       </>

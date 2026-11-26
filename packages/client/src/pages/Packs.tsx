@@ -1,7 +1,7 @@
 // 进货页（DESIGN 4）：上面是库存里没拆的卡包，点了拆开、逐张翻牌；下面是电脑订货（5 种卡包，按包买，正常价、保证正品）。
 import { useEffect, useRef, useState } from 'react';
 import { PITY } from '@kanu/shared/balance';
-import type { BindersResponse, BuyBinderResponse, BuyPacksResponse, MeResponse, OpenPackResponse, SealedPacksResponse, StoreResponse } from '@kanu/shared/types';
+import type { BlackBuyResponse, BlackMarketResponse, BindersResponse, BuyBinderResponse, BuyPacksResponse, MeResponse, OpenPackResponse, SealedPacksResponse, StoreResponse } from '@kanu/shared/types';
 import { api, newIdempotencyKey } from '../api.ts';
 import { Card, CardBack, fmt } from '../Card.tsx';
 import { PackArt } from '../art.tsx';
@@ -18,12 +18,16 @@ export function Packs({ me, onChange }: { me: MeResponse; onChange: (patch: Part
   const [flipped, setFlipped] = useState<boolean[]>([]);
   const [busy, setBusy] = useState(false);
   const [showOdds, setShowOdds] = useState<string | null>(null);
+  /** 黑市（DESIGN 4）：解锁进度、今天还能买几包 */
+  const [black, setBlack] = useState<BlackMarketResponse | null>(null);
+  const [blackCount, setBlackCount] = useState(1);
   /** 购物车：卡包种类 → 几包 */
   const [cart, setCart] = useState<Record<string, number>>({});
   const [err, setErr] = useState('');
 
   const load = async () => {
-    const [s, p, b] = await Promise.all([api<StoreResponse>('/store'), api<SealedPacksResponse>('/packs'), api<BindersResponse>('/binders')]);
+    const [s, p, b, bm] = await Promise.all([api<StoreResponse>('/store'), api<SealedPacksResponse>('/packs'), api<BindersResponse>('/binders'), api<BlackMarketResponse>('/black')]);
+    setBlack(bm);
     setStore(s);
     setSealed(p);
     setBinders(b);
@@ -35,6 +39,13 @@ export function Packs({ me, onChange }: { me: MeResponse; onChange: (patch: Part
     setErr('');
     try { await fn(); } catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
   };
+
+  const buyBlack = () => run(async () => {
+    const r = await api<BlackBuyResponse>('/black/buy', { method: 'POST', body: { count: blackCount }, idempotencyKey: newIdempotencyKey() });
+    onChange({ credits: r.credits });
+    setBlackCount(1);
+    await load();
+  });
 
   const checkout = () => run(async () => {
     const items = Object.entries(cart).filter(([, n]) => n > 0).map(([seriesId, count]) => ({ seriesId, count }));
@@ -80,7 +91,7 @@ export function Packs({ me, onChange }: { me: MeResponse; onChange: (patch: Part
   if (tearing) {
     return (
       <section className="page">
-        <h2>{tearing.name}{tearing.wholesale && <span className="wholesale-tag">批发</span>}</h2>
+        <h2>{tearing.name}{tearing.wholesale && <span className="wholesale-tag">批发</span>}{tearing.black && <span className="wholesale-tag black-tag">黑市</span>}</h2>
         <PackTear pack={tearing} onTear={tearOpen} onDone={showTorn} onCancel={() => setTearing(null)} />
       </section>
     );
@@ -90,7 +101,7 @@ export function Packs({ me, onChange }: { me: MeResponse; onChange: (patch: Part
   if (opened) {
     return (
       <section className="page">
-        <h2>{opened.cards[0]?.seriesName}</h2>
+        <h2>{opened.cards[0]?.acquired === 'black' ? '黑市货' : opened.cards[0]?.seriesName}</h2>
         {opened.pityTriggered && <p className="pity-hit">保底触发！</p>}
         <div className="pack-cards">
           {opened.cards.map((c, i) => (
@@ -118,10 +129,10 @@ export function Packs({ me, onChange }: { me: MeResponse; onChange: (patch: Part
           <div key={`${g.seriesId}-${g.wholesale ? 'w' : 's'}`} className={`sealed kind-${g.kind}${g.wholesale ? ' wholesale' : ''}`}>
             <PackArt seriesId={g.seriesId} name={g.name} kind={g.kind} small box={g.wholesale} />
             <div className="sealed-body">
-              <b>{g.name}{g.wholesale && <span className="wholesale-tag">批发</span>}</b>
+              <b>{g.name}{g.wholesale && <span className="wholesale-tag">批发</span>}{g.black && <span className="wholesale-tag black-tag">黑市</span>}</b>
               <span className="hint">{g.ids.length} 包{g.wholesale ? ' · 批发商不保证正品，拆出来拿放大镜看看' : ''}</span>
             </div>
-            <button className="chip on" disabled={busy} onClick={() => setTearing({ id: g.ids[0]!, seriesId: g.seriesId, name: g.name, kind: g.kind, wholesale: g.wholesale })}>拆一包</button>
+            <button className="chip on" disabled={busy} onClick={() => setTearing({ id: g.ids[0]!, seriesId: g.seriesId, name: g.name, kind: g.kind, wholesale: g.wholesale, black: g.black })}>拆一包</button>
           </div>
         ))}
       </div>
@@ -151,6 +162,27 @@ export function Packs({ me, onChange }: { me: MeResponse; onChange: (patch: Part
           </div>
         ))}
       </div>
+      {black && (
+        <section className={`black-market${black.unlocked ? '' : ' locked'}`}>
+          <h2>🕶️ 黑市 <small>{black.unlocked ? (black.leftToday === null ? '测试账号不限购' : `今天还能买 ${black.leftToday} / ${black.perDay} 包`) : '还没门路'}</small></h2>
+          {!black.unlocked
+            ? <p className="hint">黑市不跟生人做买卖。在柜台和黑市中间人成交 {black.progress.target} 次，他们就会给你门路（现在 {black.progress.current} / {black.progress.target}）。</p>
+            : (
+              <>
+                <p className="hint">一包 {black.price} 信用点、5 张，稀有卡更多（{black.odds.filter((o) => ['SSR', 'UR', 'LR', 'MR'].includes(o.rarity)).map((o) => `${o.rarity} ${o.percent}%`).join(' · ')}），所有系列的卡都可能出。<b>不保证正品：每张约 {black.fakePct}% 是假卡、{black.stolenPct}% 是赃物</b>，没有保底。拆出来的卡带"黑"字，用放大镜看过再卖；赃物小心便衣和巡查。</p>
+                <div className="black-buy">
+                  <div className="stepper">
+                    <button aria-label="少一包" disabled={blackCount <= 1} onClick={() => setBlackCount(blackCount - 1)}>−</button>
+                    <span>{blackCount}</span>
+                    <button aria-label="多一包" disabled={black.leftToday !== null && blackCount >= black.leftToday} onClick={() => setBlackCount(blackCount + 1)}>+</button>
+                  </div>
+                  <button className="buy" disabled={busy || black.leftToday === 0 || me.credits < black.price * blackCount} onClick={buyBlack}>买 {blackCount} 包 · {fmt(black.price * blackCount)}</button>
+                </div>
+              </>
+            )}
+        </section>
+      )}
+
       <h2>用品 <small>卡册</small></h2>
       <p className="hint">卡要放进卡册才不会磨损；所有卡册的格数加起来就是你的库存上限。买了新卡册，桌面上的散卡会自动收进去。</p>
       <div className="store-list">

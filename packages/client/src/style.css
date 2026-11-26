@@ -771,3 +771,12 @@ button.primary.danger { background: #b3202a; color: #fff; }
 .hideout { margin-top: 12px; padding: 10px; border-radius: 12px; border: 1px dashed #4b5563; background: repeating-linear-gradient(135deg, #111318 0 10px, #15181f 10px 20px); }
 .hideout h2 { margin-top: 0; }
 .hideout .empty-slot { aspect-ratio: 63 / 88; display: grid; place-items: center; border-radius: 8px; border: 1px dashed #374151; color: var(--muted); font-size: 12px; }
+
+/* ---- 黑市（DESIGN 4） ---- */
+.black-market { margin-top: 14px; padding: 12px; border-radius: 12px; border: 1px solid #3f3f46; background: linear-gradient(160deg, #111114, #1c1022); }
+.black-market h2 { margin-top: 0; }
+.black-market.locked { opacity: 0.8; }
+.black-buy { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.black-tag { background: #18181b; color: #e4e4e7; border: 1px solid #52525b; }
+.black-mark { background: #18181b; color: #fafafa; border: 1px solid #a1a1aa; }
+.kind-black .pack-art, .pack-art.kind-black { background: linear-gradient(160deg, #27272a, #09090b); color: #d4d4d8; }

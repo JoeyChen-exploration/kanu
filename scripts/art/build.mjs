@@ -185,6 +185,73 @@ function wearSvg(level) {
   return svg(W, H, parts.join(''));
 }
 
+// ---------------- 派系徽记（256 透明）、关系等级（64 透明）、巡查 / 打点图标（128 透明），DESIGN 8.4 ----------------
+const FACTION_COLORS = { guild: ['#9cc3ff', '#3b6fb8', '#12284a'], black: ['#d9b3ff', '#6b3aa0', '#14081f'], collectors: ['#fff3c4', '#e8b84a', '#5a3a0a'], police: ['#e5edf7', '#5b7fa8', '#0f1c2e'] };
+const glowDef = (sd) => `<filter id="glow" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="${sd}" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>`;
+const ring = (n, r1, r2, c, rot = -Math.PI / 2) => Array.from({ length: n }, (_, i) => { const a = (i * 2 * Math.PI) / n + rot; const r = i % 2 ? r2 : r1; return `${(c + r * Math.cos(a)).toFixed(1)},${(c + r * Math.sin(a)).toFixed(1)}`; }).join(' ');
+function factionSvg(id) {
+  const [hi, mid, dark] = FACTION_COLORS[id];
+  const S = 256, c = S / 2;
+  const defs = `<radialGradient id="core" cx="0.5" cy="0.38" r="0.7">${stops([mid, dark, '#05030a'])}</radialGradient>
+    <linearGradient id="rim" x1="0" y1="0" x2="1" y2="1">${stops([hi, mid, hi])}</linearGradient>${glowDef(4)}`;
+  let body;
+  if (id === 'guild') {
+    // 盾牌 + 三根柱子的门楣：正规、体面
+    body = `<path d="M128 18 L222 50 V124 C222 184 180 220 128 240 C76 220 34 184 34 124 V50 Z" fill="url(#core)" stroke="url(#rim)" stroke-width="8" filter="url(#glow)"/>
+      <path d="M78 98 L128 70 L178 98 Z" fill="${hi}"/>
+      ${[92, 120, 148].map((x) => `<rect x="${x}" y="106" width="16" height="64" rx="3" fill="${hi}"/>`).join('')}
+      <rect x="74" y="176" width="108" height="12" rx="3" fill="${hi}"/>`;
+  } else if (id === 'black') {
+    // 六边形 + 半张面具：不问来路
+    body = `<polygon points="${ring(6, 108, 108, c)}" fill="url(#core)" stroke="url(#rim)" stroke-width="8" filter="url(#glow)"/>
+      <path d="M58 112 C78 88 108 92 128 106 C148 92 178 88 198 112 C192 146 166 158 146 146 L128 136 L110 146 C90 158 64 146 58 112 Z" fill="${hi}"/>
+      <ellipse cx="96" cy="120" rx="16" ry="9" fill="${dark}"/><ellipse cx="160" cy="120" rx="16" ry="9" fill="${dark}"/>
+      <path d="M100 186 Q128 172 156 186" fill="none" stroke="${hi}" stroke-width="6" stroke-linecap="round" opacity="0.6"/>`;
+  } else if (id === 'collectors') {
+    // 圆章 + 麦穗环 + 钻石：品相至上
+    const leaves = Array.from({ length: 7 }, (_, i) => {
+      const a = Math.PI * (0.62 + i * 0.1);
+      const x = c + 80 * Math.cos(a), y = c + 80 * Math.sin(a), deg = (a * 180) / Math.PI + 90;
+      return `<ellipse cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" rx="7" ry="15" transform="rotate(${deg.toFixed(1)} ${x.toFixed(1)} ${y.toFixed(1)})" fill="${hi}"/>`
+        + `<ellipse cx="${(2 * c - x).toFixed(1)}" cy="${y.toFixed(1)}" rx="7" ry="15" transform="rotate(${(-deg).toFixed(1)} ${(2 * c - x).toFixed(1)} ${y.toFixed(1)})" fill="${hi}"/>`;
+    }).join('');
+    body = `<circle cx="${c}" cy="${c}" r="108" fill="url(#core)" stroke="url(#rim)" stroke-width="8" filter="url(#glow)"/>${leaves}
+      <path d="M98 104 H158 L176 124 L128 182 L80 124 Z" fill="${hi}"/>
+      <path d="M80 124 H176 M108 104 L128 182 L148 104" fill="none" stroke="${mid}" stroke-width="4"/>`;
+  } else {
+    // 治安局：八角星警徽（隐藏关系，只在巡查 / 便衣场景用）
+    body = `<polygon points="${ring(16, 112, 84, c)}" fill="url(#core)" stroke="url(#rim)" stroke-width="7" stroke-linejoin="round" filter="url(#glow)"/>
+      <circle cx="${c}" cy="${c}" r="48" fill="none" stroke="${hi}" stroke-width="7"/>
+      <polygon points="${ring(10, 34, 14, c)}" fill="${hi}"/>`;
+  }
+  return svg(S, S, body, defs);
+}
+const TIERS = { hostile: '#ef4444', stranger: '#9ca3af', known: '#60a5fa', ally: '#4ade80' };
+function tierSvg(t) {
+  const col = TIERS[t];
+  const marks = {
+    hostile: `<path d="M22 22 L42 42 M42 22 L22 42" stroke="${col}" stroke-width="6" stroke-linecap="round"/>`,
+    stranger: `<path d="M25 25 C25 16 39 16 39 25 C39 31 32 31 32 38" fill="none" stroke="${col}" stroke-width="5" stroke-linecap="round"/><circle cx="32" cy="46" r="3.5" fill="${col}"/>`,
+    known: `<path d="M20 33 L28 41 L44 24" fill="none" stroke="${col}" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>`,
+    ally: `<polygon points="${ring(10, 19, 8, 32)}" fill="${col}"/>`,
+  };
+  return svg(64, 64, `<circle cx="32" cy="32" r="27" fill="#0b0d12" stroke="${col}" stroke-width="4" filter="url(#glow)"/>${marks[t]}`, glowDef(2));
+}
+function uiSvg(name) {
+  if (name === 'patrol') {
+    // 警灯：红蓝两半 + 光芒
+    return svg(128, 128, `<path d="M30 92 V64 C30 40 98 40 98 64 V92 Z" fill="#1f2937" stroke="#e5edf7" stroke-width="4"/>
+      <path d="M36 88 V64 C36 50 64 46 64 46 V88 Z" fill="#ef4444" filter="url(#glow)"/><path d="M92 88 V64 C92 50 64 46 64 46 V88 Z" fill="#3b82f6" filter="url(#glow)"/>
+      <rect x="22" y="92" width="84" height="14" rx="4" fill="#e5edf7"/>
+      <path d="M18 40 L6 30 M110 40 L122 30 M64 26 V10" stroke="#fbbf24" stroke-width="5" stroke-linecap="round"/>`, glowDef(3));
+  }
+  // 打点：信封里露出一枚金币（币面是 K）
+  return svg(128, 128, `<circle cx="76" cy="40" r="24" fill="#e8b84a" stroke="#fff3c4" stroke-width="4" filter="url(#glow)"/>
+    ${textPath('K', 76, 40, 24, 24, 'fill="#8a5a12"')}
+    <rect x="18" y="52" width="92" height="58" rx="6" fill="#d6c7a1" stroke="#5a3a0a" stroke-width="4"/>
+    <path d="M18 56 L64 88 L110 56" fill="none" stroke="#5a3a0a" stroke-width="4" stroke-linejoin="round"/>`, glowDef(3));
+}
+
 async function main() {
   console.log('生成代码类美术素材：');
   for (const style of ['standard', 'holo', 'ice', 'gold']) await write(`frames/${style}.webp`, frameSvg(style));
@@ -194,6 +261,9 @@ async function main() {
   await write('cards/GNG-01.webp', svg(W, H, `<rect width="${W}" height="${H}" fill="#000000"/>`), { quality: 90 });
   for (const n of ['halftone', 'ink', 'misregister', 'holo', 'border', 'scratch', 'dust', 'gap']) await write(`loupe/${n}.webp`, loupeSvg(n));
   for (const lv of [1, 2, 3]) await write(`wear/${lv}.webp`, wearSvg(lv));
+  for (const id of ['guild', 'black', 'collectors', 'police']) await write(`factions/${id}.webp`, factionSvg(id));
+  for (const t of Object.keys(TIERS)) await write(`factions/tier-${t}.webp`, tierSvg(t));
+  for (const n of ['patrol', 'bribe']) await write(`ui/${n}.webp`, uiSvg(n));
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });

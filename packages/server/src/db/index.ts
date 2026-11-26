@@ -268,6 +268,11 @@ const MIGRATIONS: string[] = [
   // 20：黑市（DESIGN 4）。黑市卡包挂在一个没有卡的系列 BLK 下（sealed_packs.source = 'black'），拆的时候从所有系列里抽卡。
   // allSeries 只列有卡的系列，所以电脑订货和批发都看不到它
   `INSERT OR IGNORE INTO series (id, name, kind) VALUES ('BLK', '黑市货', 'black');`,
+  // 21：派系（DESIGN 8.4）。三个派系的关系值 + 隐藏的治安关系（rep_police 绝不发给玩家）
+  `ALTER TABLE players ADD COLUMN rep_guild INTEGER NOT NULL DEFAULT 0;
+   ALTER TABLE players ADD COLUMN rep_black INTEGER NOT NULL DEFAULT 0;
+   ALTER TABLE players ADD COLUMN rep_collectors INTEGER NOT NULL DEFAULT 0;
+   ALTER TABLE players ADD COLUMN rep_police INTEGER NOT NULL DEFAULT 0;`,
 ];
 
 /** 营业日在 customers、daily_usage 里的键 */
@@ -326,6 +331,11 @@ export interface PlayerRow {
   blueprints: number;
   /** 任务栏里追踪的科技树节点 */
   tech_tracked: string | null;
+  /** 派系关系（DESIGN 8.4）；rep_police 是隐藏的治安关系 */
+  rep_guild: number;
+  rep_black: number;
+  rep_collectors: number;
+  rep_police: number;
   /** 这一轮从哪个营业日开始（破产后重算周数） */
   run_start_day: number;
   /** 买下店铺没有（1 = 是店主，不再交租） */
@@ -534,6 +544,9 @@ function createRepo(db: Database.Database) {
     adminExchanges: (status: string | null, limit = 100) =>
       (status ? db.prepare('SELECT * FROM exchanges WHERE status = ? ORDER BY id DESC LIMIT ?').all(status, limit) : db.prepare('SELECT * FROM exchanges ORDER BY id DESC LIMIT ?').all(limit)) as ExchangeRow[],
     adminSetDay: (discordId: string, day: number) => db.prepare('UPDATE players SET game_day = ?, day_customer_count = 0 WHERE discord_id = ?').run(day, discordId),
+    // ---- 派系（DESIGN 8.4） ----
+    setFactions: (discordId: string, f: { guild: number; black: number; collectors: number; police: number }) =>
+      db.prepare('UPDATE players SET rep_guild = ?, rep_black = ?, rep_collectors = ?, rep_police = ? WHERE discord_id = ?').run(f.guild, f.black, f.collectors, f.police, discordId),
     // ---- 便衣和巡查（DESIGN 6、8.3） ----
     markUndercover: (customerId: number) => db.prepare('UPDATE customers SET undercover = 1 WHERE id = ?').run(customerId),
     /** 库存和珍藏柜里的赃卡（巡查用；抵押、送评、卡贩台面上的不算） */

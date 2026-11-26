@@ -80,7 +80,44 @@ export const PACKS: Record<PackType, {
  * 解锁：设计里是黑市派系关系到"熟脸"；派系还没做，先用"和黑市中间人成交 unlockMiddlemanSales 次"代替。
  * 黑市包拆出来的卡带公开的"黑"字（acquired = black），来路不明，图鉴要送评封壳后才点亮。
  */
-export const BLACK_MARKET = { seriesId: 'BLK', perDay: 3, unlockMiddlemanSales: 6 };
+export const BLACK_MARKET = { seriesId: 'BLK', perDay: 3 };
+
+/**
+ * 派系（DESIGN 8.4，2026-11-27 上线）：三个派系 + 隐藏的治安关系，关系值 min～max，开局 0。
+ * 等级（按关系值）：敌对 ≤ hostileMax、陌生、熟脸 ≥ knownMin、盟友 ≥ allyMin。讨好一方通常会得罪另一方（deltas 里写好了）。
+ * 治安关系是隐藏数值（不发给玩家），只影响巡查和便衣出现的频率：倍数 = 1 − 治安 / 100 × policeSpan（关系最差 1.5 倍，最好 0.5 倍）。
+ * 奖励：正规商会盟友电脑订货 guildAlly 折扣和限购；黑市熟脸解锁黑市卡包；黑市盟友失窃登记表副本（每周查 registryPerWeek 张）；
+ * 收藏家协会盟友的每周高价收卡委托以后做。
+ */
+export type FactionId = 'guild' | 'black' | 'collectors';
+export const FACTIONS = {
+  min: -100, max: 100, hostileMax: -30, knownMin: 30, allyMin: 70,
+  list: [
+    { id: 'guild' as FactionId, name: '正规商会', contact: 'guild-rep', contactName: '正规商会代表', gain: '卖真卡给普通客人、举报卖赃物的卡贩', rival: '黑市' },
+    { id: 'black' as FactionId, name: '黑市', contact: 'black-fixer', contactName: '黑市接头人', gain: '卖卡给黑市中间人、买黑市卡包', rival: '正规商会、治安局' },
+    { id: 'collectors' as FactionId, name: '收藏家协会', contact: 'collector-rep', contactName: '收藏家协会干事', gain: '把 9 分以上的封壳卡卖给收藏家', rival: '无，但很难刷' },
+  ],
+  /** 每种行为对各派系（和隐藏的治安 police）的影响 */
+  deltas: {
+    realSale: { guild: 1 },
+    middlemanSale: { black: 5, guild: -1 },
+    blackPack: { black: 2, guild: -1, police: -1 },
+    collectorHighGrade: { collectors: 3 },
+    reportCorrect: { guild: 3, black: -3, police: 5 },
+    patrolBribe: { police: -10 },
+    patrolSurrender: { police: 2 },
+    undercoverBust: { police: -5 },
+  } as Record<string, Partial<Record<FactionId | 'police', number>>>,
+  /** 卖真卡加正规商会好感每个营业日最多几次 */
+  realSalePerDay: 3,
+  /** 收藏家协会认的"高品相"：封壳分数至少几分（黑标也算） */
+  collectorMinSlab: 9,
+  policeSpan: 0.5,
+  guildAlly: { storeDiscount: 0.9, storePacks: 2 },
+  registryPerWeek: 3,
+};
+
+/** 黑市解锁：黑市关系到熟脸（FACTIONS.knownMin）。原来派系没做时用"和中间人成交 6 次"代替，2026-11-27 换成正式条件 */
 
 /** 电脑订货（店里终端，DESIGN 4）：按包买、正常价、唯一保证正品；每个营业日限购（各种卡包合计） */
 export const STORE = { packsPerDay: 5 };

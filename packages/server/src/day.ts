@@ -5,6 +5,7 @@ import { POLICE, RENT, REPUTATION, SHOP_PRICE } from '@kanu/shared/balance';
 import { techEffects } from './game/tech.ts';
 import { runDay } from './game/rent.ts';
 import { bribeCost, rollPatrol, withDetect } from './game/police.ts';
+import { policeMultOf } from './factions.ts';
 import type { Deps } from './app.ts';
 import { nextRent } from './game/rent.ts';
 import { settleAppraisals } from './routes/appraisal.ts';
@@ -39,7 +40,8 @@ export function finishDay(deps: Deps, userId: string, now: number, extra: Record
   if (!repo.pendingPatrol(userId)) {
     // 藏匿室（S3b / S4b）里的赃卡按低查出率算；正经店（S3a）巡查来得少
     const stolen = withDetect(repo.stolenCards(userId), tech.hideoutDetectPpm);
-    const found = rollPatrol(deps.rng, stolen, tech.patrolMult);
+    // 隐藏的治安关系（DESIGN 8.4）也乘进去
+    const found = rollPatrol(deps.rng, stolen, tech.patrolMult * policeMultOf(repo, userId));
     if (found && found.length) {
       const bribe = bribeCost(found.map((id) => repo.cardView(id)?.price ?? 0));
       const id = repo.insertPatrol({ ownerId: userId, day, cards: found, bribe, now });

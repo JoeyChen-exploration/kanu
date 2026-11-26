@@ -784,3 +784,31 @@ button.primary.danger { background: #b3202a; color: #fff; }
 
 /* 彩蛋卡（VOID_CARDS）：卡面纯黑，图没加载出来也是黑的，不画占位 */
 .card-void .card-face { background: #000; }
+
+/* ---- 派系（DESIGN 8.4） ---- */
+.faction-panel { margin-top: 14px; }
+.faction-list { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+.faction { display: flex; gap: 10px; padding: 10px; border-radius: 12px; border: 1px solid #2a2f3a; background: #14171d; }
+.faction-guild { border-color: #3b5b8a; }
+.faction-black { border-color: #4a3a5a; background: linear-gradient(160deg, #111114, #1c1022); }
+.faction-collectors { border-color: #8a6d3b; }
+.faction-emblem { width: 48px; height: 48px; flex: none; display: grid; place-items: center; font-size: 30px; object-fit: contain; }
+.faction-body { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1; }
+.faction-body small { color: var(--muted); font-weight: normal; }
+.tier-tag { display: inline-flex; align-items: center; gap: 3px; font-size: 12px; padding: 1px 6px; border-radius: 999px; background: #262b36; font-weight: normal; }
+.tier-tag.tier-hostile { background: #4a1d1d; color: #fca5a5; }
+.tier-tag.tier-known { background: #1d3a4a; color: #93c5fd; }
+.tier-tag.tier-ally { background: #1d4a2c; color: #86efac; }
+.tier-icon { width: 14px; height: 14px; object-fit: contain; }
+.rep-bar { position: relative; height: 6px; border-radius: 3px; background: linear-gradient(90deg, #7f1d1d 0 35%, #374151 35% 65%, #1e3a5f 65% 85%, #14532d 85%); margin: 4px 0; }
+.rep-bar .mark { position: absolute; top: -2px; width: 1px; height: 10px; background: #9ca3af; }
+.rep-bar .zero { position: absolute; top: -1px; width: 1px; height: 8px; background: #e5e7eb; opacity: .5; }
+.rep-bar .dot { position: absolute; top: -3px; width: 12px; height: 12px; margin-left: -6px; border-radius: 50%; background: #fbbf24; box-shadow: 0 0 0 2px #14171d; }
+.perk { font-size: 12px; color: var(--muted); }
+.perk.on { color: #86efac; }
+.registry { margin-top: 12px; padding: 10px; border-radius: 12px; border: 1px dashed #6b7280; background: #16141c; }
+.registry h2 { margin-top: 0; }
+.registry-confirm { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.registry-confirm .card { width: 60px; }
+.faction-contact { display: inline-flex; align-items: center; gap: 6px; }
+.contact-mini { width: 24px; height: 24px; border-radius: 50%; object-fit: cover; }

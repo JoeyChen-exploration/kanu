@@ -166,7 +166,7 @@ export function Packs({ me, onChange }: { me: MeResponse; onChange: (patch: Part
         <section className={`black-market${black.unlocked ? '' : ' locked'}`}>
           <h2>🕶️ 黑市 <small>{black.unlocked ? (black.leftToday === null ? '测试账号不限购' : `今天还能买 ${black.leftToday} / ${black.perDay} 包`) : '还没门路'}</small></h2>
           {!black.unlocked
-            ? <p className="hint">黑市不跟生人做买卖。在柜台和黑市中间人成交 {black.progress.target} 次，他们就会给你门路（现在 {black.progress.current} / {black.progress.target}）。</p>
+            ? <p className="hint">黑市不跟生人做买卖。黑市关系到熟脸（{black.progress.target}）才给你门路，现在 {black.progress.current} / {black.progress.target}。在柜台把卡卖给黑市中间人最涨关系（店铺页看派系）。</p>
             : (
               <>
                 <p className="hint">一包 {black.price} 信用点、5 张，稀有卡更多（{black.odds.filter((o) => ['SSR', 'UR', 'LR', 'MR'].includes(o.rarity)).map((o) => `${o.rarity} ${o.percent}%`).join(' · ')}），所有系列的卡都可能出。<b>不保证正品：每张约 {black.fakePct}% 是假卡、{black.stolenPct}% 是赃物</b>，没有保底。拆出来的卡带"黑"字，用放大镜看过再卖；赃物小心便衣和巡查。</p>

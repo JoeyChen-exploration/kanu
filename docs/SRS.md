@@ -157,7 +157,7 @@ kanu/
 | FR-PACK-5 | 编号限定：每个卡牌模板全服最多 50 张，序列号从 1 递增，用数据库事务保证不重号；发完后该模板不再出编号限定，改按标准框 | MVP |
 | FR-PACK-6 | 开包先撕包（2026-11-25 用户定）：卡包放大，鼠标在顶部锯齿封口上横着滑过（手机按住拖过）滑过 75% 撕开，封口飞走后才请求服务器拆包，失败封口复原、卡包不消耗；留"直接撕开"按钮。之后卡牌从包里飞出、有翻牌动画；出 UR 及以上或编号限定时，通过 Bot 在播报频道发一条消息（玩家名、卡名、稀有度、风格） | MVP |
 | FR-PACK-7 | 黑市卡包：扣 200，按黑市概率表生成，每张独立判定 25% 假卡、20% 赃物；需要黑市派系"熟脸" | 第二阶段 |
-| FR-PACK-9 | 黑市卡包（DESIGN 4，2026-11-26）：`GET /api/black`（解锁进度、价格、爆率、假卡 / 赃物比例、今天还能买几包）、`POST /api/black/buy { count }`（幂等）。解锁先用"和黑市中间人成交 BLACK_MARKET.unlockMiddlemanSales 次"（派系做好后改成黑市关系"熟脸"）；每个营业日最多 BLACK_MARKET.perDay 包，和电脑订货分开算。卡包挂在没有卡的系列 BLK 下（迁移 20，sealed_packs.source = black），拆的时候按 PACKS.black 的爆率从所有系列里抽，fakePpm 假卡、stolenPpm 赃物，不计保底，acquired = black 公开标"黑"，图鉴不点亮 | 第二阶段 |
+| FR-PACK-9 | 黑市卡包（DESIGN 4，2026-11-26）：`GET /api/black`（解锁进度、价格、爆率、假卡 / 赃物比例、今天还能买几包）、`POST /api/black/buy { count }`（幂等）。解锁条件：黑市关系到熟脸（FACTIONS.knownMin，2026-11-27 起；之前临时用"和中间人成交 6 次"）；每个营业日最多 BLACK_MARKET.perDay 包，和电脑订货分开算。卡包挂在没有卡的系列 BLK 下（迁移 20，sealed_packs.source = black），拆的时候按 PACKS.black 的爆率从所有系列里抽，fakePpm 假卡、stolenPpm 赃物，不计保底，acquired = black 公开标"黑"，图鉴不点亮 | 第二阶段 |
 | FR-PACK-8 | 柜台收卡：卡贩顾客出售单张卡，玩家出价，成交价由卡贩的心理价位判定 | 第二阶段 |
 | FR-PACK-9 | 所有随机数在服务器用 `crypto.randomInt` 生成，前端不参与 | MVP |
 
@@ -210,7 +210,7 @@ kanu/
 | FR-CTR-9 | 卡贩（柜台收卡，DESIGN 4 / 6，2026-11-26）：点了科技树 G2 卡贩门路后，每位客人有 G2 的 dealerPpm（18%）概率换成卡贩，带 DEALER.cards 张卡摆在台面客人那一侧（卡挂在玩家名下、location = offered，不算库存、不能卖 / 抵押 / 送评，放大镜能看；卡贩走了就删）。卡属性全未知（fakePpm 假卡、stolenPpm 赃物），每张显示市场价；他心里的底价是市场价 × askPct（隐藏，不发给玩家）。`POST /api/counter/:id/buy { cardId, price }`（幂等）：够底价成交（扣信用点、进卡册 / 桌面、acquired = dealer 公开标"收"、图鉴不点亮），不够他还价、耐心减 1，用完就走；请走卡贩没收的卡他带走 | 第二阶段 |
 | FR-CTR-10 | 便衣（DESIGN 6，2026-11-26）：每位普通客人有 POLICE.undercoverPpm 概率是便衣，伪装成那一类客人（customers.undercover 隐藏，绝不发给玩家），开口有 tellPpm 概率说露破绽的台词。赃卡卖给便衣：卡没收、不给钱、罚款 max(fineMin, 市场价 × fineMult)（最多罚到 0）、信誉 −bustRepLoss，offer 返回 outcome = busted；卖别的卡照常 | 第二阶段 |
 | FR-CTR-11 | 举报卡贩（`POST /api/counter/:id/report`，幂等）：他台面上的货里有赃物就对了（奖金 = 赃卡市场价合计 × reportBonusPct，信誉 +reportRepGain，赃卡没收），没有就是错举（信誉 −falseReportRepLoss）；举报完他都会走 | 第二阶段 |
-| FR-CTR-12 | 治安巡查（DESIGN 8.3）：每次打烊都掷一次（POLICE.patrolPpm，不管有没有赃卡，免得泄露），库存和珍藏柜里每张赃卡 detectPpm 被查出（抵押、送评、卡贩台面上的不查）。查出就建 patrols 记录，柜台不放客人进门，玩家 `POST /api/patrol/:id/resolve { choice }`（幂等）：surrender 没收、信誉 −surrenderRepLoss；bribe 付市场价合计 × bribePct、卡留下。迁移 19。藏匿室（S3b / S4b）、治安关系以后接 | 第二阶段 |
+| FR-CTR-12 | 治安巡查（DESIGN 8.3）：每次打烊都掷一次（POLICE.patrolPpm，不管有没有赃卡，免得泄露），库存和珍藏柜里每张赃卡 detectPpm 被查出（抵押、送评、卡贩台面上的不查）。查出就建 patrols 记录，柜台不放客人进门，玩家 `POST /api/patrol/:id/resolve { choice }`（幂等）：surrender 没收、信誉 −surrenderRepLoss；bribe 付市场价合计 × bribePct、卡留下。迁移 19。藏匿室见 FR-TECH-6，隐藏的治安关系见 FR-FAC-1 | 第二阶段 |
 | FR-CTR-8 | 大藏家（DESIGN 8.1）：珍藏柜展示分 ≥ GRAND_COLLECTOR.minScore 时，每位进门的顾客有 min(maxPpm, 展示分 × ppmPerPoint) 的几率换成大藏家；只要 UR 以上，价格系数 2.8（富人 2 倍），耐心 2，识假很强 | MVP |
 
 ### 4.6 房租、破产、买店（RENT）
@@ -266,11 +266,21 @@ kanu/
 | FR-TECH-6 | 店面路线（2026-11-26，TECH-TREE 3.5）：开放 S2 装修（按时交租 1 次；每 7 个营业日信誉 +2，到 80 为止）、S3a 挂牌营业 / S3b 后门生意（二选一）、S4a 治安备案、S4b 地下仓。S3a：巡查来的概率减半，卖真卡给客人信誉 +1（每天最多 +3）；S3b：藏匿室 3 格（里面的赃卡查出率 20%），中间人按基准价 50% 收；S4a：每周（这一轮第 1–7、8–14……天）第一次被巡查查出，交出不扣信誉；S4b：藏匿室 6 格、查出率 10%。新里程碑从流水里数：rentPaid 按时交租（补交不算）、middlemanSales 和中间人成交、inspections 放大镜查验。藏匿室：`GET /api/hideout`、`POST /api/inventory/:id/hideout { on }`，location = hideout，不能卖、抵押、送评 | 第二阶段 |
 | FR-TECH-5 | 租金保证金（换蓝图只能动超过下次租金的部分）、"改换门庭"洗点、第二阶段节点（路线选择、卡贩 G2 等） | 第二阶段 |
 
+### 4.10.1 派系（FAC，DESIGN 8.4，2026-11-27）
+
+| 编号 | 需求 | MVP |
+| --- | --- | --- |
+| FR-FAC-1 | 迁移 21：players 加 rep_guild、rep_black、rep_collectors、rep_police（隐藏，绝不发给玩家）。纯函数 game/factions.ts：tierOf、applyFaction（按 FACTIONS.deltas 加减、夹在 −100～100）、policeMult。src/factions.ts 的 bumpFaction 在业务事务里改值并写 faction_<行为> 事件。接入点：柜台成交（middlemanSale、realSale 每天 FACTIONS.realSalePerDay 次、collectorHighGrade）、买黑市包、举报对了、巡查交出 / 打点、便衣抓到。巡查和便衣概率乘 policeMult | 第二阶段 |
+| FR-FAC-2 | `GET /api/factions`：三个派系的关系值、等级、怎么涨、对立面、奖励是否生效、黑市盟友这周还能查几次登记表；不返回治安关系 | 第二阶段 |
+| FR-FAC-3 | 奖励：黑市熟脸解锁黑市卡包（FR-PACK-9）；商会盟友电脑订货 × FACTIONS.guildAlly.storeDiscount、限购 + storePacks；黑市盟友 `POST /api/factions/registry { cardId }`（幂等）查一张自己名下的卡（含卡贩台面上的货）在不在失窃登记表上，返回 onRegistry，每周 FACTIONS.registryPerWeek 次（registry_check 事件计数） | 第二阶段 |
+| FR-FAC-4 | 前端：店铺页派系面板（徽记、等级、关系条、奖励）；库存页"失窃登记表"拖放区（黑市盟友才有），拖卡上去、按钮确认；手册加"派系"一节 | 第二阶段 |
+| FR-FAC-5 | 以后做：收藏家协会每周高价收卡委托、"完成套装"加好感、商会专属新系列先发、黑市专属 UR 卡包、派系联系人头像和台词 | 第四阶段 |
+
 ### 4.11 后续阶段（只列范围，开工前再细化）
 
-- 第二阶段：黑市卡包、卡贩、便衣与举报、治安巡查、藏匿室、信誉对顾客分布的影响、新闻事件。
+- 第二阶段：黑市卡包、卡贩、便衣与举报、治安巡查、藏匿室、派系（第一版，见 4.10.1）、信誉对顾客分布的影响、新闻事件。
 - 第三阶段：担保交易、集市（一口价和拍卖）、全服市场价、排行榜、赛季系统（赛季积分、赛季成就、星冕 / 星尘卡包、S 系列限定卡）和身份组发放（需要 Bot 有管理身份组权限）。
-- 第四阶段：图鉴与套装加成、派系、合成、执照、第二个系列、鉴定小游戏、限时活动。
+- 第四阶段：图鉴与套装加成、派系的后续奖励（FR-FAC-5）、合成、执照、第二个系列、鉴定小游戏、限时活动。
 
 ## 5. 数据需求
 

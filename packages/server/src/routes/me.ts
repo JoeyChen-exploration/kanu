@@ -3,7 +3,8 @@ import { techEffects } from '../game/tech.ts';
 import { rentStatus } from '../day.ts';
 import { isAdmin } from './admin.ts';
 import type { FastifyInstance } from 'fastify';
-import { STORE } from '@kanu/shared/balance';
+import { FACTIONS, STORE } from '@kanu/shared/balance';
+import { guildAlly } from '../factions.ts';
 import type { MeResponse } from '@kanu/shared/types';
 import { fail, type Deps } from '../app.ts';
 import { dayKey } from '../db/index.ts';
@@ -25,7 +26,7 @@ export function registerMeRoutes(app: FastifyInstance, deps: Deps, now: () => nu
       weekNo: player.week_no,
       wallet,
       pityCount: player.pity_count,
-      packsLeftToday: Math.max(0, STORE.packsPerDay + techEffects(deps.repo.techOwned(player.discord_id)).storePacksPerDay - used),
+      packsLeftToday: Math.max(0, STORE.packsPerDay + techEffects(deps.repo.techOwned(player.discord_id)).storePacksPerDay + (guildAlly(deps.repo, player.discord_id) ? FACTIONS.guildAlly.storePacks : 0) - used),
       gameDay: player.game_day,
       rent: rentStatus(deps, player.discord_id),
       devTools: deps.config.devUnlimitedIds.has(req.user.id),

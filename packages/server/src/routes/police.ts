@@ -3,6 +3,7 @@
 //     surrender 交出：查出的赃卡没收，信誉 −surrenderRepLoss
 //     bribe 打点：付查出那天定的打点费（市场价合计 × bribePct），卡留下
 import type { FastifyInstance } from 'fastify';
+import { bumpFaction } from '../factions.ts';
 import { POLICE, REPUTATION } from '@kanu/shared/balance';
 import type { PatrolResolveResponse } from '@kanu/shared/types';
 import { ApiError, fail, idempotencyKey, type Deps } from '../app.ts';
@@ -43,6 +44,7 @@ export function registerPoliceRoutes(app: FastifyInstance, deps: Deps, now: () =
       }
       repo.setCreditsReputation(userId, credits, reputation);
       repo.logEvent(userId, t, 'patrol_resolved', { patrol: p.id, choice, cards, bribe: choice === 'bribe' ? p.bribe : 0 });
+      bumpFaction(repo, userId, choice === 'bribe' ? 'patrolBribe' : 'patrolSurrender', t, player.game_day);
       const response: PatrolResolveResponse = { ok: true, choice, credits, reputation };
       repo.putIdempotent(userId, key, response, t);
       return response;

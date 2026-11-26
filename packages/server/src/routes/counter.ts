@@ -10,7 +10,7 @@
 // 心理价位、个人浮动、今天还剩几位都不出现在响应里。
 import { techEffects } from '../game/tech.ts';
 import type { FastifyInstance } from 'fastify';
-import { BINDER_PAGE_SIZE, BINDERS, CUSTOMER, PACKS, RARITIES, RARITY, RENT, REPUTATION, COUNTER, WHOLESALE, DEALER, POLICE, type BinderKind, type CustomerType, type Rarity } from '@kanu/shared/balance';
+import { BINDER_PAGE_SIZE, BINDERS, CUSTOMER, PACKS, RARITIES, RARITY, RENT, REPUTATION, COUNTER, WHOLESALE, DEALER, POLICE, FACTIONS, type BinderKind, type CustomerType, type Rarity } from '@kanu/shared/balance';
 import type { CardView, DealerBuyResponse, ReportResponse, CounterBinderPageResponse, CounterResponse, CustomerView, EligibleCardsResponse, EndDayResponse, OfferResponse, ReceiveResponse } from '@kanu/shared/types';
 import { ApiError, fail, idempotencyKey, type Deps } from '../app.ts';
 import { dayKey, type CustomerRow } from '../db/index.ts';
@@ -26,6 +26,7 @@ import { dealerAsk, evaluateDealerOffer, rollDealerCards } from '../game/dealer.
 import { rentDueToday, runDay } from '../game/rent.ts';
 import { rentForWeek } from '../game/price.ts';
 import { chance } from '../game/rng.ts';
+import { bumpFaction, policeMultOf } from '../factions.ts';
 
 const lines = loadLines();
 
@@ -147,7 +148,7 @@ export function registerCounterRoutes(app: FastifyInstance, deps: Deps, now: () 
       const rolled = rollCustomer(rng, { inventory: repo.sellableCards(ownerId).map(toSellable), packs: sellablePacks(ownerId), templates, series, typicalPrice, forceType, showcase });
       const c = { ...rolled, patience: rolled.patience + tech.patience };
       // 便衣（DESIGN 6）：伪装成这一类普通客人，玩家看不出类型；开口有一半概率露破绽（台词表 undercover）
-      const undercover = !forceType && CUSTOMER[c.type].mvp && c.type !== 'middleman' && chance(rng, POLICE.undercoverPpm);
+      const undercover = !forceType && CUSTOMER[c.type].mvp && c.type !== 'middleman' && chance(rng, Math.round(POLICE.undercoverPpm * policeMultOf(repo, ownerId)));
       const greetType = undercover && chance(rng, POLICE.tellPpm) ? 'undercover' : c.type;
       const newId = repo.insertCustomer({
         owner_id: ownerId, day_key: day, slot: 0, seat: rows.length, type: c.type, demand: JSON.stringify(c.demand), float: c.float,
@@ -303,6 +304,7 @@ export function registerCounterRoutes(app: FastifyInstance, deps: Deps, now: () 
       let stolen = false;
       let marketPrice = 0;
       let cardId: number | null = null;
+      let slabScore: string | null = null;
       let finish: () => Record<string, unknown>;
       if (item.packId !== undefined) {
         const sealed = repo.getSealed(ownerId, item.packId);
@@ -327,6 +329,7 @@ export function registerCounterRoutes(app: FastifyInstance, deps: Deps, now: () 
         authenticity = inst.authenticity;
         stolen = inst.origin === 'stolen';
         marketPrice = view.price;
+        slabScore = view.slab?.score ?? null;
         cardId = instanceId;
         finish = () => { repo.deleteCard(instanceId); return { card: instanceId, template: view.templateId, style: view.style }; };
       }
@@ -347,6 +350,7 @@ export function registerCounterRoutes(app: FastifyInstance, deps: Deps, now: () 
         repo.updateCustomer(c.id, { patience: 0, status: 'busted', line: say('undercover', 'bust'), counter_price: null });
         if (fine) repo.logCredits(ownerId, t, -fine, 'undercover_fine', credits, { customer: c.id, card: cardId });
         repo.logEvent(ownerId, t, 'undercover_bust', { customer: c.id, card: cardId, fine, repLoss: POLICE.bustRepLoss });
+        bumpFaction(repo, ownerId, 'undercoverBust', t, player.game_day);
         result = 'busted';
       } else if (outcome.kind === 'deal') {
         if (detectFake(rng, type, authenticity, false)) {
@@ -362,6 +366,13 @@ export function registerCounterRoutes(app: FastifyInstance, deps: Deps, now: () 
           repo.updateCustomer(c.id, { patience: c.patience, status: 'sold', line: say(type, 'deal'), counter_price: null });
           repo.logCredits(ownerId, t, outcome.price, 'sale', credits, { customer: c.id, type, ...sold });
           result = 'deal';
+          // 派系（DESIGN 8.4）：卖给中间人 → 黑市；卖真卡给普通客人 → 正规商会（每天有上限）；9 分以上封壳卖给收藏家 → 收藏家协会
+          if (type === 'middleman') bumpFaction(repo, ownerId, 'middlemanSale', t, player.game_day);
+          else if (item.instanceId !== undefined && authenticity === 'real' && !stolen
+            && repo.countEventsInDays(ownerId, 'faction_realSale', player.game_day, player.game_day) < FACTIONS.realSalePerDay) {
+            bumpFaction(repo, ownerId, 'realSale', t, player.game_day);
+          }
+          if (type === 'collector' && slabScore && (slabScore === 'BL' || Number(slabScore) >= FACTIONS.collectorMinSlab)) bumpFaction(repo, ownerId, 'collectorHighGrade', t, player.game_day);
           // 科技树 S3a 挂牌营业：卖真卡给客人信誉 +honestRep，每个营业日最多 honestRepPerDay 次
           const fx = techEffects(repo.techOwned(ownerId));
           if (fx.honestRep && item.instanceId !== undefined && authenticity === 'real' && reputation < REPUTATION.max
@@ -529,6 +540,7 @@ export function registerCounterRoutes(app: FastifyInstance, deps: Deps, now: () 
       releaseOffers(demand);
       repo.updateCustomer(c.id, { patience: 0, status: 'reported', line: say('dealer', correct ? 'busted' : 'false_report'), counter_price: null });
       repo.logEvent(userId, t, 'report_dealer', { customer: c.id, correct, bonus, stolen: stolen.length });
+      if (correct) bumpFaction(repo, userId, 'reportCorrect', t, player.game_day);
       const state = counterState(userId, t);
       const response: ReportResponse = { ok: true, correct, bonus, credits, reputation, next: state.current, done: state.done };
       repo.putIdempotent(userId, key, response, t);

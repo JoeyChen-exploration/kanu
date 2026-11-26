@@ -35,6 +35,7 @@ AI 不擅长透明背景和成套统一的小图标，所以这些不交给它�
 | 稀有度标识 | N / R / SR / SSR / UR / LR / MR 的角标 | 7 个 | 120 × 120，透明 | 代码 ✓ | MVP |
 | 卡背 | 开包翻牌前看到的背面 | 1 张 | 630 × 880 | 代码 ✓（以后可换 AI 底纹 + 代码加 K 标） | MVP |
 | 卡包包装 | 5 种卡包各一个包装 + 整盒包装（电话批发一盒 10 包） | 5 + 5 个 | 竖版，开包页主视觉 | AI 底图 + 后期加 Logo 和字 | MVP |
+| 黑市卡包包装 | 黑市卡包只有**一种**（不是每个系列一个黑市版）：所有系列的卡都可能出、到黑市"熟脸"才解锁。要和正规包明显不同：破旧、手写标签、胶带封口。没有整盒 | 1 个 | 竖版，和卡包包装同规格 | AI | MVP（第二阶段） |
 | 赛季卡包包装 | 星冕卡包（前 3 名）、星尘卡包（第 4 名以后） | 2 个 | 同上，要比普通卡包更华丽 | AI + 后期 | 后期 |
 | 赛季限定卡（S 系列） | 每个赛季 5 张限定卡的卡面 | 每季 5 张 | 同卡面规格 | AI | 后期 |
 | 封壳和标签 | 星港评级社的封壳外框（透明壳 + 顶部评分标签）、黑标版本、"错版"小标签、"拒评"印章 | 4 个 | 封壳和卡面同比例，透明；标签上的分数和文字由前端写 | 代码 | MVP |
@@ -47,9 +48,13 @@ AI 不擅长透明背景和成套统一的小图标，所以这些不交给它�
 | 卡册 | 4 种卡册的封面（简易、九宫格活页、防潮收藏、典藏皮面） | 4 | 封面竖版 | AI + 后期 | MVP |
 | 图鉴册 | 5 本图鉴册的封面（一个系列一本，典藏要更华丽） | 5 张 | 竖版 | AI + 后期 | MVP |
 | 珍藏柜 | 玻璃展示柜（1 / 2 / 3 级三个样子） | 3 张 | 横版 | AI | MVP |
-| UI 图标 | 信用点、金币、信誉、评级社、房租 / 日历、抵押、任务 | 约 10 个 | 小图标，透明，风格统一 | 代码 | MVP |
+| UI 图标 | 信用点、金币、信誉、评级社、房租 / 日历、抵押、任务；巡查提示条 `ui/patrol`、打点按钮 `ui/bribe` | 约 10 个 | 小图标，透明，风格统一 | 代码 | MVP |
+| 阵营徽记 | 正规商会、黑市、收藏家协会三个派系，加治安局（巡查提示条用） | 4 个 | 小图标，透明，风格统一 | 代码 | 第二阶段 |
+| 关系等级标识 | 敌对 / 陌生 / 熟脸 / 盟友 4 档，用颜色**和图形**区分（不只靠文字，色弱也能分清） | 4 个 | 小图标，透明 | 代码 | 第二阶段 |
+| 巡查和打点图标 | 治安局查店的提示条图标、"打点"按钮上的小图标（归进 UI 图标） | 2 个 | 小图标，透明 | 代码 | 第二阶段 |
 | 科技树图标 | 5 个分支图标 + 每个节点一个图标 | 5 + 32 个 | 小图标，透明 | 代码 | 分支和 MVP 的 6 个节点先做，其余后期 |
 | 科技树联系人 | 每条分支一位卖升级的 NPC（id 见下表） | 5 个 | 方形半身像，256 × 256，和顾客头像同规格 | AI | MVP |
+| 派系联系人 | 派系界面里的三位联系人 + 巡查时的治安局巡警（id 见下表） | 4 个 | 方形半身像，256 × 256，和顾客头像同规格 | AI | 第二阶段 |
 | 系列 Logo | 5 种卡包各一个标志 | 5 个 | 横版，透明 | 代码或后期（含文字） | MVP |
 | Activity 图标 | Discord 里 Activity 列表显示的应用图标 | 1 张 | 1024 × 1024 | **已完成**（暗物质 K） | MVP |
 | Activity 封面 | Activity 列表的封面图 | 1 张 | 按 Developer Portal 当前要求的尺寸 | 代码，沿用图标风格 | MVP |
@@ -67,6 +72,17 @@ AI 不擅长透明背景和成套统一的小图标，所以这些不交给它�
 | `courier7` | 货郎七号 | 进货 | 物流站的搬运机器人，自称有"第七个仓库"；也是电话批发的送货员（顾客头像 `customers/courier-*` 可以用同一个形象） |
 | `operator0` | 接线员零号台 | 电话 | 整条街的电话都从她的交换机过 |
 | `tam` | 房东塔姆先生 | 店面 | 收租准时，其他事一概不问 |
+
+**派系联系人 id**（文件名也是 `art/contacts/<id>.webp`；2026-11-26 定）。治安关系在设计里是**隐藏数值**（DESIGN 8.4，只影响巡查和便衣出现频率，玩家看不到），所以治安局**没有**关系等级显示，只有徽记和巡警头像：
+
+| id | 联系人 | 派系 | 出现在哪 |
+| --- | --- | --- | --- |
+| `guild-rep` | 正规商会代表 | 正规商会 | 派系界面 |
+| `black-fixer` | 黑市接头人 | 黑市 | 派系界面、进货页的黑市区 |
+| `collector-rep` | 收藏家协会干事 | 收藏家协会 | 派系界面 |
+| `patrol-officer` | 治安局巡警 | 治安局 | 巡查查店时的提示 |
+
+便衣伪装成普通顾客，不用单独画。
 
 ## 卡面安全区
 
@@ -145,12 +161,14 @@ cyberpunk trading card art, concept art, dystopian space station, subtle violet 
 | 卡背 | `art/cards/back.webp` |
 | 卡框 | `art/frames/<风格>.webp`：`standard` `holo` `ice` `gold` `dark` `serial` |
 | 稀有度角标 | `art/rarity/<稀有度>.webp`：`N` `R` `SR` `SSR` `UR` `LR` `MR` |
-| 卡包包装 | `art/packs/<系列编号>.webp`、整盒 `art/packs/<系列编号>-box.webp` |
+| 卡包包装 | `art/packs/<系列编号>.webp`、整盒 `art/packs/<系列编号>-box.webp`；黑市卡包 `art/packs/BLK.webp`（只有一种，没有整盒） |
 | 顾客头像 | `art/customers/<类型>-<1~3>.webp`，如 `art/customers/rich-1.webp`（类型名见 `balance.ts` 的 `CUSTOMER_TYPES`，送货员是 `courier`） |
-| 联系人头像 | `art/contacts/<id>.webp`：`adeng` `glasses` `courier7` `operator0` `tam` |
+| 联系人头像 | `art/contacts/<id>.webp`：科技树 `adeng` `glasses` `courier7` `operator0` `tam`；派系 `guild-rep` `black-fixer` `collector-rep` `patrol-officer` |
 | 放大镜细节 | `art/loupe/<名字>.webp`：`halftone` `ink` `misregister` `holo` `border` `scratch` `dust` `gap` |
 | 磨损 | `art/wear/<档位>.webp`：`1`（落灰）`2`（划痕）`3`（卷角） |
 | 封壳 | `art/slab/<名字>.webp`：`case`（透明壳 + 顶部标签）`case-black`（黑标）`tag-error`（错版小标签）`stamp-reject`（拒评印章） |
+| 阵营徽记 | `art/factions/<id>.webp`：`guild`（正规商会）`black`（黑市）`collectors`（收藏家协会）`police`（治安局） |
+| 关系等级 | `art/factions/tier-<档>.webp`：`hostile`（敌对）`stranger`（陌生）`known`（熟脸）`ally`（盟友） |
 | Activity 图标和封面 | `art/brand/icon-1024.png`（已放）、`art/brand/cover.png`（只用于上传 Developer Portal，游戏里不加载；PNG、不限体积，`art:check` 跳过这个目录） |
 | 其他 | `art/scenes/` `art/ui/` `art/items/` `art/binders/` `art/collection/` `art/showcase/` `art/tech/` `art/logos/`，文件名用小写英文、数字、短横线 |
 
@@ -186,7 +204,7 @@ cyberpunk trading card art, concept art, dystopian space station, subtle violet 
 - 只收 `.webp` / `.png`，扩展名要和文件内容一致；同一张图 `.webp` 和 `.png` 只能留一个。
 - 必须放在 `art/<类别>/` 下面一层，类别和文件名按上面的命名表：卡编号要在 `content/series/*.json`（`art-src/cards.json`）里，顾客类型要在 `CUSTOMER_TYPES` 里，风格、稀有度、放大镜细节、联系人、封壳只能是表里那几个名字。
 - 尺寸：卡面、卡背、卡框、磨损 630 × 880；稀有度角标正方形；顾客头像、联系人、放大镜细节 256 × 256；卡包包装竖版；场景横版、至少 1920 × 1080。
-- 透明通道：卡框、稀有度角标、放大镜细节、磨损、封壳、UI 图标、道具、科技树图标、Logo 必须带。
+- 透明通道：卡框、稀有度角标、放大镜细节、磨损、封壳、阵营徽记和关系等级、UI 图标、道具、科技树图标、Logo 必须带。
 - 体积：场景 ≤ 300 KB，其余 ≤ 150 KB。
 - `art/brand/` 只用来上传 Developer Portal，整个目录跳过不检查。
 - 最后打印 MVP 各类图的进度（比如"卡面 12 / 100"）。

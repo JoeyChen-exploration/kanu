@@ -37,6 +37,8 @@ describe('派系纯函数（DESIGN 8.4）', () => {
   it('等级门槛、加减夹在范围内、治安倍数 0.5～1.5', () => {
     expect([tierOf(-31), tierOf(-30), tierOf(0), tierOf(29), tierOf(30), tierOf(69), tierOf(70)]).toEqual(['hostile', 'hostile', 'stranger', 'stranger', 'known', 'known', 'ally']);
     const zero = { guild: 0, black: 0, collectors: 0, police: 0 };
+    expect(applyFaction(zero, 'reportCorrect').black).toBe(-15);
+    expect(applyFaction(zero, 'reportFalse').black).toBe(-5);
     expect(applyFaction(zero, 'middlemanSale', 2)).toEqual({ guild: -2, black: 10, collectors: 0, police: 0 });
     expect(applyFaction({ ...zero, police: -95 }, 'patrolBribe').police).toBe(FACTIONS.min);
     expect([policeMult(-100), policeMult(0), policeMult(100)]).toEqual([1.5, 1, 0.5]);
@@ -98,7 +100,7 @@ describe('派系接口（DESIGN 8.4）', () => {
     expect(rep(repo).police).toBe(-10);
     const b = repo.insertPatrol({ ownerId: UID, day: 1, cards: [], bribe: 100, now: NOW });
     const res = await app.inject({ method: 'POST', url: `/api/patrol/${b}/resolve`, headers: { ...h, ...idem() }, payload: { choice: 'surrender' } });
-    expect(rep(repo).police).toBe(-8);
+    expect(rep(repo)).toMatchObject({ police: -8, black: -5 });
     expect(findKeys(res.json(), HIDDEN)).toEqual([]);
   });
 

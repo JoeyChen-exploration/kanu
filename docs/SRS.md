@@ -274,6 +274,7 @@ kanu/
 | FR-FAC-2 | `GET /api/factions`：三个派系的关系值、等级、怎么涨、对立面、奖励是否生效、黑市盟友这周还能查几次登记表；不返回治安关系 | 第二阶段 |
 | FR-FAC-3 | 奖励：黑市熟脸解锁黑市卡包（FR-PACK-9）；商会盟友电脑订货 × FACTIONS.guildAlly.storeDiscount、限购 + storePacks；黑市盟友 `POST /api/factions/registry { cardId }`（幂等）查一张自己名下的卡（含卡贩台面上的货）在不在失窃登记表上，返回 onRegistry，每周 FACTIONS.registryPerWeek 次（registry_check 事件计数） | 第二阶段 |
 | FR-FAC-4 | 前端：店铺页派系面板（徽记、等级、关系条、奖励）；库存页"失窃登记表"拖放区（黑市盟友才有），拖卡上去、按钮确认；手册加"派系"一节 | 第二阶段 |
+| FR-FAC-6 | 黑市追杀：game/factions.ts vendettaOf（warn / ultimatum / hunted，门槛在 FACTIONS.vendetta）。finishDay 在评级社之后、巡查之前掷 hitPpm，命中就 wipeForRestart + restartRun（等同破产），黑市关系设为 afterHit，写 black_hit 流水和事件，跳过巡查；EndDayResponse.vendetta 带阶段或 hit。`GET /api/factions` 返回 vendetta { stage, tribute, hitPct }；`POST /api/factions/tribute`（幂等）在最后通牒以后交摆平费（当前周摊位费 × tributeRentMult），黑市关系回到 tributeTo，写 black_tribute 流水 | 第二阶段 |
 | FR-FAC-5 | 以后做：收藏家协会每周高价收卡委托、"完成套装"加好感、商会专属新系列先发、黑市专属 UR 卡包、派系联系人头像和台词 | 第四阶段 |
 
 ### 4.11 后续阶段（只列范围，开工前再细化）

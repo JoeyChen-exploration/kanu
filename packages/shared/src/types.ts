@@ -310,6 +310,8 @@ export interface EndDayResponse {
   /** 打烊后巡查来了：查出赃卡要处理（patrol），没查出东西（patrolClean） */
   patrol?: PatrolView | null;
   patrolClean?: boolean;
+  /** 黑市追杀（DESIGN 8.4）：warn 警告、ultimatum 最后通牒、hunted 被盯上了、hit 被清理（等同破产，已经从头开始） */
+  vendetta?: 'warn' | 'ultimatum' | 'hunted' | 'hit' | null;
 }
 
 /** 房租状态（FR-RENT-6）：首页、店铺页显示 */
@@ -675,6 +677,15 @@ export interface FactionsResponse {
   thresholds: { hostileMax: number; knownMin: number; allyMin: number; min: number; max: number };
   /** 黑市盟友：这周还能查几次失窃登记表；没到盟友是 null */
   registryLeft: number | null;
+  /** 黑市追杀阶段；到了最后通牒可以交摆平费（tribute） */
+  vendetta: { stage: 'warn' | 'ultimatum' | 'hunted'; tribute: number | null; hitPct: number } | null;
+}
+/** POST /api/factions/tribute（幂等）：交摆平费，黑市关系回到 FACTIONS.vendetta.tributeTo */
+export interface TributeResponse {
+  ok: true;
+  credits: number;
+  paid: number;
+  black: number;
 }
 /** POST /api/factions/registry { cardId }（幂等）：黑市盟友查一张卡在不在失窃登记表上 */
 export interface RegistryResponse {

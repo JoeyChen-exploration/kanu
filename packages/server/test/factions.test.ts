@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { CUSTOMER, FACTIONS, PACKS, STORE } from '@kanu/shared/balance';
-import type { FactionsResponse, RegistryResponse, StoreResponse } from '@kanu/shared/types';
+import { CUSTOMER, FACTIONS, PACKS, PLAYER, STORE } from '@kanu/shared/balance';
+import type { CounterResponse, EndDayResponse, FactionsResponse, RegistryResponse, StoreResponse, TributeResponse } from '@kanu/shared/types';
 import { dayKey } from '../src/db/index.ts';
-import { applyFaction, policeMult, tierOf } from '../src/game/factions.ts';
+import { applyFaction, policeMult, tierOf, vendettaOf } from '../src/game/factions.ts';
+import { rentForWeek } from '../src/game/price.ts';
+import { seeded } from '../src/game/rng.ts';
 import { HIDDEN_KEYS, NOW, findKeys, idem, login, setup } from './helpers.ts';
 
 const UID = '123456789012345678';
@@ -131,5 +133,61 @@ describe('派系接口（DESIGN 8.4）', () => {
     expect(((await check(legit)).json() as RegistryResponse).onRegistry).toBe(false);
     await check(legit);
     expect((await check(legit)).json().code).toBe('weekly_limit');
+  });
+});
+
+describe('黑市追杀（DESIGN 8.4）', () => {
+  /** 接待完今天的客人、打烊 */
+  const endDay = async (app: App, h: H) => {
+    const counter = async () => (await app.inject({ method: 'GET', url: '/api/counter', headers: h })).json() as CounterResponse;
+    let s = await counter();
+    while (s.current) { await app.inject({ method: 'POST', url: `/api/counter/${s.current.id}/dismiss`, headers: h }); s = await counter(); }
+    return (await app.inject({ method: 'POST', url: '/api/day/end', headers: { ...h, ...idem() } })).json() as EndDayResponse;
+  };
+
+  it('阶段：−60 警告、−80 最后通牒、−100 被盯上', () => {
+    expect([vendettaOf(-59), vendettaOf(-60), vendettaOf(-80), vendettaOf(-99), vendettaOf(-100)]).toEqual([null, 'warn', 'ultimatum', 'ultimatum', 'hunted']);
+  });
+
+  it('打烊时带上追杀阶段；被盯上后迟早被清理：等同破产，珍藏柜保留，黑市关系回到 afterHit', async () => {
+    const { app, repo } = setup({ rng: seeded(5) });
+    cleanup = () => app.close();
+    const h = await login(app);
+    repo.db.prepare('UPDATE players SET credits = 100000000, shop_owned = 1, rep_black = ?').run(FACTIONS.vendetta.warnMax);
+    expect((await endDay(app, h)).vendetta).toBe('warn');
+    const kept = repo.insertCard({ templateId: 'NEO-17', ownerId: UID, authenticity: 'real', grade: '7', origin: 'legit', style: 'standard', serialNo: null, now: NOW });
+    repo.setLocation(kept, 'showcase');
+    const lost = repo.insertCard({ templateId: 'NEO-17', ownerId: UID, authenticity: 'real', grade: '7', origin: 'legit', style: 'standard', serialNo: null, now: NOW });
+    repo.db.prepare('UPDATE players SET rep_black = ?').run(FACTIONS.vendetta.hitMax);
+    let end: EndDayResponse | null = null;
+    for (let i = 0; i < 60; i += 1) {
+      end = await endDay(app, h);
+      if (end.vendetta === 'hit') break;
+      expect(end.vendetta).toBe('hunted');
+    }
+    expect(end!.vendetta).toBe('hit');
+    expect(end!.patrol ?? null).toBeNull();
+    const p = repo.getPlayer(UID)!;
+    expect(p).toMatchObject({ credits: PLAYER.restartCredits, shop_owned: 0, rep_black: FACTIONS.vendetta.afterHit, run_start_day: end!.day });
+    expect(repo.ownedInstance(UID, kept)).toBeTruthy();
+    expect(repo.ownedInstance(UID, lost)).toBeFalsy();
+    expect((await endDay(app, h)).vendetta).not.toBe('hit');
+  });
+
+  it('最后通牒可以交摆平费（当前周摊位费），黑市关系回到 tributeTo；没到最后通牒不能交', async () => {
+    const { app, repo } = setup();
+    cleanup = () => app.close();
+    const h = await login(app);
+    const tribute = () => app.inject({ method: 'POST', url: '/api/factions/tribute', headers: { ...h, ...idem() } });
+    repo.db.prepare('UPDATE players SET credits = 100000, rep_black = ?').run(FACTIONS.vendetta.warnMax);
+    expect((await factions(app, h)).vendetta).toEqual({ stage: 'warn', tribute: null, hitPct: 25 });
+    expect((await tribute()).json().code).toBe('not_needed');
+    repo.db.prepare('UPDATE players SET rep_black = ?').run(FACTIONS.vendetta.ultimatumMax);
+    const cost = rentForWeek(1);
+    expect((await factions(app, h)).vendetta).toEqual({ stage: 'ultimatum', tribute: cost, hitPct: 25 });
+    const r = (await tribute()).json() as TributeResponse;
+    expect(r).toEqual({ ok: true, credits: 100000 - cost, paid: cost, black: FACTIONS.vendetta.tributeTo });
+    expect(repo.getPlayer(UID)!.rep_black).toBe(FACTIONS.vendetta.tributeTo);
+    expect((await factions(app, h)).vendetta).toBeNull();
   });
 });

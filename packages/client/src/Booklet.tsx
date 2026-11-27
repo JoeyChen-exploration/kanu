@@ -259,6 +259,7 @@ const PAGES: Array<{ title: string; body: ReactNode }> = [
           {FACTIONS.list.map((f) => <li key={f.id}><b>{f.name}</b>：{f.gain}会涨；得罪：{f.rival}。</li>)}
           <li>卖真卡给普通客人涨商会关系，每个营业日最多算 {FACTIONS.realSalePerDay} 次。</li>
           <li><b>奖励</b>：黑市熟脸才卖你黑市卡包；黑市盟友给你一份失窃登记表副本，每周能查 {FACTIONS.registryPerWeek} 张卡是不是赃物（库存页，把卡拖上去）；正规商会盟友电脑订货 {FACTIONS.guildAlly.storeDiscount * 10} 折、每天多订 {FACTIONS.guildAlly.storePacks} 包。</li>
+          <li><b>别把黑市逼急了</b>：黑市关系掉到 {FACTIONS.vendetta.warnMax} 会收到警告，{FACTIONS.vendetta.ultimatumMax} 下最后通牒（店铺页可以交一笔摆平费，相当于这周的摊位费，关系回到 {FACTIONS.vendetta.tributeTo}），掉到 {FACTIONS.vendetta.hitMax} 以后每次打烊有 {FACTIONS.vendetta.hitPpm / 10_000}% 被黑市"清理"——等于破产，从头开始，只剩珍藏柜。举报卡贩最得罪黑市。</li>
         </ul>
       </>
     ),

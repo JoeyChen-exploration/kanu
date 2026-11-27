@@ -812,3 +812,11 @@ button.primary.danger { background: #b3202a; color: #fff; }
 .registry-confirm .card { width: 60px; }
 .faction-contact { display: inline-flex; align-items: center; gap: 6px; }
 .contact-mini { width: 24px; height: 24px; border-radius: 50%; object-fit: cover; }
+/* ---- 黑市追杀（DESIGN 8.4） ---- */
+.vendetta { display: flex; gap: 10px; align-items: flex-start; padding: 10px; margin-bottom: 8px; border-radius: 12px; border: 1px solid #7f1d1d; background: linear-gradient(160deg, #1a0d10, #120a16); }
+.vendetta p { margin: 4px 0 8px; color: #fca5a5; font-size: 13px; }
+.vendetta-warn { border-color: #78350f; }
+.vendetta-warn p { color: #fcd34d; }
+.vendetta-hunted { border-color: #ef4444; box-shadow: 0 0 12px #ef444455; }
+.vendetta-emblem { width: 40px; height: 40px; flex: none; font-size: 26px; object-fit: contain; }
+.vendetta-actions { display: inline-flex; gap: 8px; }

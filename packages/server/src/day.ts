@@ -1,16 +1,18 @@
 // 打烊结算（FR-CTR-2、FR-RENT-1～3）：打烊、欠租交上后、破产重开后都走这一步。只能在事务里调用。
-// 顺序：桌面散卡磨损 → 进入下一天 → 过了赎回期的抵押卡归房东 → 评级社出结果 → 巡查（DESIGN 8.3）。
+// 顺序：桌面散卡磨损 → 进入下一天 → 过了赎回期的抵押卡归房东 → 评级社出结果 → 黑市追杀（DESIGN 8.4）→ 巡查（DESIGN 8.3）。
 import type { AppraisalOutcome, PatrolView, RentStatus } from '@kanu/shared/types';
-import { POLICE, RENT, REPUTATION, SHOP_PRICE } from '@kanu/shared/balance';
+import { FACTIONS, PLAYER, POLICE, RENT, REPUTATION, SHOP_PRICE } from '@kanu/shared/balance';
+import { chance } from './game/rng.ts';
+import { vendettaOf, type Vendetta } from './game/factions.ts';
 import { techEffects } from './game/tech.ts';
 import { runDay } from './game/rent.ts';
 import { bribeCost, rollPatrol, withDetect } from './game/police.ts';
-import { policeMultOf } from './factions.ts';
+import { factionValues, policeMultOf } from './factions.ts';
 import type { Deps } from './app.ts';
 import { nextRent } from './game/rent.ts';
 import { settleAppraisals } from './routes/appraisal.ts';
 
-export function finishDay(deps: Deps, userId: string, now: number, extra: Record<string, unknown> = {}): { day: number; appraisals: AppraisalOutcome[]; forfeited: number; patrol: PatrolView | null; patrolClean: boolean } {
+export function finishDay(deps: Deps, userId: string, now: number, extra: Record<string, unknown> = {}): { day: number; appraisals: AppraisalOutcome[]; forfeited: number; patrol: PatrolView | null; patrolClean: boolean; vendetta: Vendetta | 'hit' | null } {
   const { repo } = deps;
   const player = repo.getPlayer(userId)!;
   const tech = techEffects(repo.techOwned(userId));
@@ -34,10 +36,21 @@ export function finishDay(deps: Deps, userId: string, now: number, extra: Record
   }
   repo.logEvent(userId, now, 'day_end', { day: player.game_day, worn, forfeited, ...extra });
   const appraisals = settleAppraisals(deps, userId, day, now);
+  // 黑市追杀（DESIGN 8.4）：关系到底以后每次打烊掷一次，被"清理"等同破产（珍藏柜保留）。破产重开那次不算
+  let vendetta: Vendetta | 'hit' | null = extra.bankrupt ? null : vendettaOf(repo.getPlayer(userId)!.rep_black);
+  if (vendetta === 'hunted' && chance(deps.rng, FACTIONS.vendetta.hitPpm)) {
+    const before = repo.getPlayer(userId)!;
+    const wiped = repo.wipeForRestart(userId);
+    repo.restartRun(userId, PLAYER.restartCredits, day);
+    repo.setFactions(userId, { ...factionValues(repo, userId), black: FACTIONS.vendetta.afterHit });
+    repo.logCredits(userId, now, PLAYER.restartCredits - before.credits, 'black_hit', PLAYER.restartCredits, { ...wiped });
+    repo.logEvent(userId, now, 'black_hit', { day, ...wiped, owned: before.shop_owned === 1, blackAfter: FACTIONS.vendetta.afterHit });
+    vendetta = 'hit';
+  }
   // 巡查：每次打烊都掷一次（不管有没有赃卡，免得"来没来巡查"本身泄露你手上有没有赃物）
   let patrol: PatrolView | null = null;
   let patrolClean = false;
-  if (!repo.pendingPatrol(userId)) {
+  if (vendetta !== 'hit' && !repo.pendingPatrol(userId)) {
     // 藏匿室（S3b / S4b）里的赃卡按低查出率算；正经店（S3a）巡查来得少
     const stolen = withDetect(repo.stolenCards(userId), tech.hideoutDetectPpm);
     // 隐藏的治安关系（DESIGN 8.4）也乘进去
@@ -52,7 +65,7 @@ export function finishDay(deps: Deps, userId: string, now: number, extra: Record
       repo.logEvent(userId, now, 'patrol_clean', { day });
     }
   }
-  return { day, appraisals, forfeited, patrol, patrolClean };
+  return { day, appraisals, forfeited, patrol, patrolClean, vendetta };
 }
 
 /** 等处理的巡查（查出的赃卡只给公开信息） */

@@ -11,6 +11,7 @@ import { cryptoRng } from './rng.ts';
 import { buildApp } from './app.ts';
 import { retryPendingExchanges } from './routes/exchange.ts';
 import { runBackup } from './backup.ts';
+import { newsTick } from './news.ts';
 
 loadEnvFile();
 const config = loadConfig();
@@ -19,7 +20,7 @@ const series = importAllSeries(repo);
 if (!series.includes(config.currentSeries)) throw new Error(`CURRENT_SERIES=${config.currentSeries} 不在已导入的系列里（${series.join(', ')}）`);
 
 const wallet = createWalletClient(config.wallet);
-const app = buildApp({
+const appDeps = {
   config,
   repo,
   sessions: createSessionCodec(config.sessionSecret),
@@ -29,7 +30,9 @@ const app = buildApp({
   notifier: createDiscordNotifier({ botToken: config.botToken, channelId: config.announceChannelId }),
   currentSeries: config.currentSeries,
   now: () => Date.now() + config.devTimeOffsetMs,
-});
+  news: { rng: cryptoRng },
+};
+const app = buildApp(appDeps);
 if (config.devTimeOffsetMs) app.log.warn(`开发时钟偏移 ${config.devTimeOffsetMs / 3600e3} 小时（DEV_TIME_OFFSET_HOURS）`);
 
 // 幂等记录只留 48 小时（SRS 第 5 节）。正式的定时任务框架在 M5 做，这里先每小时清一次
@@ -58,6 +61,9 @@ void retryExchanges();
 const backup = () => runBackup(repo, config.backupDir, Date.now())
   .then((r) => app.log.info(`[backup] ${r.file}${r.removed.length ? `，清掉旧备份 ${r.removed.length} 份` : ''}`))
   .catch((e: Error) => app.log.error(`[backup] 备份失败：${e.message}`));
+// 空间站日报：没人玩也要到点发到频道，每分钟检查一次
+const newsTimer = setInterval(() => { try { newsTick(appDeps, Date.now() + config.devTimeOffsetMs); } catch (e) { app.log.error(`[news] ${(e as Error).message}`); } }, 60e3);
+newsTimer.unref();
 const backupTimer = setInterval(backup, BACKUP.everyHours * 3600e3);
 backupTimer.unref();
 void backup();

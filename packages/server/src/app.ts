@@ -25,6 +25,8 @@ import { registerExchangeRoutes } from './routes/exchange.ts';
 import { registerAdminRoutes } from './routes/admin.ts';
 import { registerPoliceRoutes } from './routes/police.ts';
 import { registerFactionRoutes } from './routes/factions.ts';
+import { registerNewsRoutes } from './routes/news.ts';
+import { newsTick } from './news.ts';
 import { createBinderService, type BinderService } from './binders.ts';
 
 export interface Deps {
@@ -39,6 +41,8 @@ export interface Deps {
   /** 正规卡包开哪个系列 */
   currentSeries: string;
   now?: () => number;
+  /** 空间站日报（DESIGN 8.2）：传了才会到点自动发新闻（线上传 cryptoRng；测试默认不开，免得打乱别的测试） */
+  news?: { rng: Rng } | false;
   /** 卡册服务；不传就由 buildApp 用 repo 和 rng 建一个 */
   binders?: BinderService;
 }
@@ -76,6 +80,9 @@ export function buildApp(input: Deps) {
     const h = req.headers.authorization;
     req.user = h?.startsWith('Bearer ') ? deps.sessions.verify(h.slice(7), now()) : null;
   });
+
+  // 空间站日报：到点发新闻、换日刷新新闻效果（市场价、顾客、巡查都读缓存）
+  app.addHook('onRequest', async () => { newsTick(deps, now()); });
 
   // 维护开关（NFR-MAINT-3）：写接口一律 503
   app.addHook('onRequest', async (req, reply) => {
@@ -120,6 +127,7 @@ export function buildApp(input: Deps) {
   registerAdminRoutes(app, deps, now);
   registerPoliceRoutes(app, deps, now);
   registerFactionRoutes(app, deps, now);
+  registerNewsRoutes(app, deps, now);
 
   app.setErrorHandler((err, req, reply) => {
     if (err instanceof ApiError) return fail(reply, err.status, err.code, err.message);

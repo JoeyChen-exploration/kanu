@@ -277,6 +277,15 @@ kanu/
 | FR-FAC-6 | 黑市追杀：game/factions.ts vendettaOf（warn / ultimatum / hunted，门槛在 FACTIONS.vendetta）。finishDay 在评级社之后、巡查之前掷 hitPpm，命中就 wipeForRestart + restartRun（等同破产），黑市关系设为 afterHit，写 black_hit 流水和事件，跳过巡查；EndDayResponse.vendetta 带阶段或 hit。`GET /api/factions` 返回 vendetta { stage, tribute, hitPct }；`POST /api/factions/tribute`（幂等）在最后通牒以后交摆平费（当前周摊位费 × tributeRentMult），黑市关系回到 tributeTo，写 black_tribute 流水 | 第二阶段 |
 | FR-FAC-5 | 以后做：收藏家协会每周高价收卡委托、"完成套装"加好感、商会专属新系列先发、黑市专属 UR 卡包、派系联系人头像和台词 | 第四阶段 |
 
+### 4.10.2 新闻（NEWS，DESIGN 8.2，2026-11-27）
+
+| 编号 | 需求 | MVP |
+| --- | --- | --- |
+| FR-NEWS-1 | 迁移 22：news 表（date 悉尼日、模板、kind、target、文案、source official / rumor、real 隐藏、mult、start_date / end_date、manual）。纯函数 game/news.ts：rollNews（按 NEWS.kindPpm 抽种类、按模板替换系列名 / 标签、rumorPpm × rumorFakePpm 定真假）、newsEffects（同系列价格相乘、标签去重、巡查取最大） | 第二阶段 |
+| FR-NEWS-2 | src/news.ts newsTick：每个请求（onRequest）和每分钟的定时器调用；deps.news 开着、悉尼时间 ≥ NEWS.hour、今天还没有自动日报就在事务里发一条并播报到频道；换日或发新闻后刷新 repo 里的效果缓存。效果：toCardView 的市场价 × 系列新闻系数；rollCustomer 的 hotTags；巡查和便衣 × policeMult。测试默认不开自动日报 | 第二阶段 |
+| FR-NEWS-3 | `GET /api/news`：最近 NEWS.keepDays 天的新闻，只给 id、日期、标题、正文、来源、影响日期，不给真假和数值。前端顶栏 📰 日报浮窗 | 第二阶段 |
+| FR-ADMIN-6 | `GET /api/admin/news`（带真假和数值、模板、系列、标签）、`POST /api/admin/news { templateId?, target?, real?, source? }` 手动发一条并播报（已上线，管理页按钮以后加） | 第二阶段 |
+
 ### 4.11 后续阶段（只列范围，开工前再细化）
 
 - 第二阶段：黑市卡包、卡贩、便衣与举报、治安巡查、藏匿室、派系（第一版，见 4.10.1）、信誉对顾客分布的影响、新闻事件。
@@ -405,7 +414,7 @@ Authorization: Bearer ${WANGCAI_CONTROL_SECRET}
 | 每 10 分钟 | 兑换单重试 | MVP |
 | 每小时 | 鉴定机构和送评到期的出结果 | MVP |
 | 每天 03:00 | 备份数据库；清理 48 小时前的幂等记录 | MVP |
-| 每天 08:00 | 新闻 | 第二阶段 |
+| 每天 08:00 | 新闻（2026-11-27 上线：每分钟检查一次 + 每个请求顺便检查） | 第二阶段 |
 | 每天 23:59 | 市场价收市 | 第三阶段 |
 | 赛季末 | 按赛季积分发星冕 / 星尘卡包和身份组；不清空任何数据 | 第三阶段 |
 

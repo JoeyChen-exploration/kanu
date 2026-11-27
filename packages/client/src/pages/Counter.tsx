@@ -57,6 +57,11 @@ export function Counter({ onChange, onGo }: { onChange: (patch: Partial<MeRespon
       if (r.forfeited) notes.push(`${r.forfeited} 张抵押的卡过了赎回期，归房东了`);
       if (r.patrol) notes.push(`治安巡查来了，查出 ${r.patrol.cards.length} 张赃卡`);
       else if (r.patrolClean) notes.push('治安巡查来店里转了一圈，什么都没查出来');
+      // 黑市追杀（DESIGN 8.4）
+      if (r.vendetta === 'hit') notes.unshift('打烊锁门的时候，几个人从暗处走了出来……你被黑市"清理"了。店没了，只剩珍藏柜里的卡，一切从头开始');
+      else if (r.vendetta === 'hunted') notes.push('回家路上总觉得有人跟着你（黑市盯上你了，去店铺页看看）');
+      else if (r.vendetta === 'ultimatum') notes.push('黑市带话：拿钱来摆平，不然后果自负（店铺页）');
+      else if (r.vendetta === 'warn') notes.push('门缝里塞进来一张纸条："最近话挺多啊。"');
       setMsg(notes.join('；'));
       await load();
     } catch (e) {

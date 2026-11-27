@@ -22,5 +22,15 @@ export function applyFaction(values: FactionValues, kind: keyof typeof FACTIONS.
   return out;
 }
 
+export type Vendetta = 'warn' | 'ultimatum' | 'hunted';
+/** 黑市追杀的阶段（只看黑市关系）：null 平安、warn 警告、ultimatum 最后通牒、hunted 每次打烊可能被清理 */
+export function vendettaOf(black: number): Vendetta | null {
+  const v = FACTIONS.vendetta;
+  if (black <= v.hitMax) return 'hunted';
+  if (black <= v.ultimatumMax) return 'ultimatum';
+  if (black <= v.warnMax) return 'warn';
+  return null;
+}
+
 /** 治安关系对巡查和便衣出现频率的倍数：最差 1 + span，最好 1 − span */
 export const policeMult = (police: number) => 1 - (clamp(police) / FACTIONS.max) * FACTIONS.policeSpan;

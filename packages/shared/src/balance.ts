@@ -115,6 +115,12 @@ export const FACTIONS = {
   policeSpan: 0.5,
   guildAlly: { storeDiscount: 0.9, storePacks: 2 },
   registryPerWeek: 3,
+  /**
+   * 黑市追杀（2026-11-27 用户定）：黑市关系 ≤ warnMax 打烊时收到警告，≤ ultimatumMax 最后通牒（可以交摆平费，
+   * 关系回到 tributeTo），≤ hitMax 之后每次打烊有 hitPpm 被黑市"清理"，结果等同破产（从头开始，珍藏柜保留），
+   * 黑市关系回到 afterHit（仇算清了，但还是敌对）。摆平费 = 这一轮当前周的摊位费 × tributeRentMult。
+   */
+  vendetta: { warnMax: -60, ultimatumMax: -80, hitMax: -100, hitPpm: 250_000, afterHit: -50, tributeTo: -50, tributeRentMult: 1 },
 };
 
 /** 黑市解锁：黑市关系到熟脸（FACTIONS.knownMin）。原来派系没做时用"和中间人成交 6 次"代替，2026-11-27 换成正式条件 */

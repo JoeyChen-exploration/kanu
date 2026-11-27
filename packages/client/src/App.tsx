@@ -140,7 +140,7 @@ function Shop({ me, onChange, onGo }: { me: MeResponse; onChange: (p: Partial<Me
       <p className="hint">去"进货"开包，再到"柜台"把卡卖给顾客。不清楚规则就点 📖 看新手手册。</p>
       <RentPanel onChange={onChange} />
       <ExchangePanel onChange={onChange} />
-      <FactionPanel />
+      <FactionPanel onChange={onChange} />
       <button className="secondary shop-tech" onClick={() => onGo('tech')}>🔧 打开科技树：升级你的店</button>
       {me.devTools && <DevTools onChange={onChange} />}
     </section>

@@ -212,8 +212,8 @@ export function registerCounterRoutes(app: FastifyInstance, deps: Deps, now: () 
         rentPaid = { amount, week };
       }
       // 打烊结算：散卡磨损、进入下一天、过期抵押归房东、评级社出结果
-      const { day, appraisals, forfeited, patrol, patrolClean } = finishDay(deps, userId, t, { customers: today.length });
-      const response: EndDayResponse = { ok: true, day, appraisals, rentPaid, forfeited, patrol, patrolClean };
+      const { day, appraisals, forfeited, patrol, patrolClean, vendetta } = finishDay(deps, userId, t, { customers: today.length });
+      const response: EndDayResponse = { ok: true, day, appraisals, rentPaid, forfeited, patrol, patrolClean, vendetta };
       repo.putIdempotent(userId, key, response, now());
       return response;
     })();

@@ -1,0 +1,15 @@
+{
+  "note": "空间站日报的新闻模板（DESIGN 8.2）。kind：price_up / price_down（{series} 换成系列名）、demand（{tag} 换成标签）、police。数值在 balance.NEWS，这里只写文案。改了要重启。",
+  "templates": [
+    { "id": "reprint", "kind": "price_down", "title": "《{series}》将重印", "body": "厂商宣布下月加印《{series}》，手里囤货的炒卡客开始抛售。" },
+    { "id": "fakes-flood", "kind": "price_down", "title": "大批《{series}》仿品流入下层区", "body": "治安局称近期查获多批《{series}》仿制卡，收藏家纷纷观望。" },
+    { "id": "streamer-dump", "kind": "price_down", "title": "知名主播清仓《{series}》", "body": "开箱主播「闪电猫」直播中宣布退坑，一口气挂出上百张《{series}》。" },
+    { "id": "plate-fire", "kind": "price_up", "title": "《{series}》印版毁于仓库火灾", "body": "据说《{series}》的原始印版在星港三号仓的火灾里烧毁，以后再也印不出来了。" },
+    { "id": "auction-record", "kind": "price_up", "title": "上层区拍卖会天价成交《{series}》", "body": "一张高分封壳的《{series}》在上层区拍出天价，下层区的卡店电话被打爆。" },
+    { "id": "anime-adapt", "kind": "price_up", "title": "《{series}》要拍动画了", "body": "空间站最大的制片厂宣布改编《{series}》，粉丝连夜排队收卡。" },
+    { "id": "tag-craze", "kind": "demand", "title": "上层区兴起收藏「{tag}」系卡", "body": "带「{tag}」标签的卡突然成了抢手货，来店里点名要的客人会多起来。" },
+    { "id": "tag-expo", "kind": "demand", "title": "「{tag}」主题展下周开幕", "body": "星港展览馆要办「{tag}」主题卡牌展，不少人想趁机凑一套。" },
+    { "id": "crackdown", "kind": "police", "title": "治安局开展专项行动", "body": "下层区卡牌市场将迎来为期数日的严打，巡查和便衣都会更频繁。" },
+    { "id": "theft-wave", "kind": "police", "title": "失窃案频发，治安局加派人手", "body": "最近接连有卡店被盗，治安局表示会加强巡查。来路不明的货最近别碰。" }
+  ]
+}

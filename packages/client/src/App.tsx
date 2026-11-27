@@ -17,6 +17,7 @@ import { TechPage } from './TechTree.tsx';
 import { RentPanel } from './RentPanel.tsx';
 import { ExchangePanel } from './ExchangePanel.tsx';
 import { FactionPanel } from './FactionPanel.tsx';
+import { NewsPaper } from './NewsPaper.tsx';
 
 type State =
   | { kind: 'loading'; text: string }
@@ -34,6 +35,8 @@ export function App() {
   const [booklet, setBooklet] = useState(bookletUnseen);
   /** 电话（道具浮窗）：送评、以后订货 */
   const [phone, setPhone] = useState(false);
+  /** 空间站日报（DESIGN 8.2） */
+  const [paper, setPaper] = useState(false);
   const started = useRef(false);
 
   const loadMe = async () => setState({ kind: 'ready', me: await api<MeResponse>('/me') });
@@ -75,8 +78,10 @@ export function App() {
         <span className="topbar-day">第 {me.gameDay} 天</span>
         <button className="topbar-book" onClick={() => setBooklet(true)} aria-label="新手手册">📖</button>
         <button className="topbar-book topbar-phone" onClick={() => setPhone(!phone)} aria-label="电话">📞</button>
+        <button className="topbar-book topbar-news" onClick={() => setPaper(!paper)} aria-label="日报">📰</button>
       </header>
       {booklet && <Booklet onClose={() => setBooklet(false)} />}
+      {paper && <NewsPaper onClose={() => setPaper(false)} />}
       {phone && <Phone onClose={() => setPhone(false)} onChange={patchMe} />}
       <QuestBar onGo={(t) => setTab(t as Tab)} onChange={patchMe} />
       <main className="content">

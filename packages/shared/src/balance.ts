@@ -83,6 +83,27 @@ export const PACKS: Record<PackType, {
 export const BLACK_MARKET = { seriesId: 'BLK', perDay: 3 };
 
 /**
+ * 新闻（DESIGN 8.2，2026-11-27 上线）：每天悉尼时间 hour 点发一条空间站日报，全服共用，Bot 同时发到频道。
+ * 影响从发布的第二天起算 days 天（给玩家一天时间囤货或抛售）。rumorPpm 的新闻来源标"小道消息"，
+ * 其中 rumorFakePpm 是假的（没有效果；真假是隐藏属性），合起来约 15% 是谣言。
+ *   price_up / price_down：一个系列的市场价 × priceUp / priceDown 区间里的随机倍数（新闻系数，DESIGN 9.2）
+ *   demand：带某个标签的顾客需求翻倍（顾客多一次 tagChance 点名这个标签）
+ *   police：巡查和便衣出现率 × policeMult
+ */
+export const NEWS = {
+  hour: 8,
+  rumorPpm: 300_000,
+  rumorFakePpm: 500_000,
+  days: [1, 3] as [number, number],
+  kindPpm: { price_up: 250_000, price_down: 250_000, demand: 300_000, police: 200_000 },
+  priceUp: [1.2, 1.5] as [number, number],
+  priceDown: [0.7, 0.85] as [number, number],
+  policeMult: 2,
+  /** 日报页显示最近几天 */
+  keepDays: 7,
+};
+
+/**
  * 派系（DESIGN 8.4，2026-11-27 上线）：三个派系 + 隐藏的治安关系，关系值 min～max，开局 0。
  * 等级（按关系值）：敌对 ≤ hostileMax、陌生、熟脸 ≥ knownMin、盟友 ≥ allyMin。讨好一方通常会得罪另一方（deltas 里写好了）。
  * 治安关系是隐藏数值（不发给玩家），只影响巡查和便衣出现的频率：倍数 = 1 − 治安 / 100 × policeSpan（关系最差 1.5 倍，最好 0.5 倍）。

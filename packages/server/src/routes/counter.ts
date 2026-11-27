@@ -145,10 +145,10 @@ export function registerCounterRoutes(app: FastifyInstance, deps: Deps, now: () 
         return { day: player.game_day, current: cur ? view(cur) : null, served: rows.filter((c) => c.status !== 'waiting').map(view), done: false, arrears: player.rent_due > 0 ? { amount: player.rent_due, week: player.rent_week } : null };
       }
       // 科技树 C1 霓虹招牌：所有顾客耐心 +1
-      const rolled = rollCustomer(rng, { inventory: repo.sellableCards(ownerId).map(toSellable), packs: sellablePacks(ownerId), templates, series, typicalPrice, forceType, showcase });
+      const rolled = rollCustomer(rng, { inventory: repo.sellableCards(ownerId).map(toSellable), packs: sellablePacks(ownerId), templates, series, typicalPrice, forceType, showcase, hotTags: repo.newsEffects().hotTags });
       const c = { ...rolled, patience: rolled.patience + tech.patience };
       // 便衣（DESIGN 6）：伪装成这一类普通客人，玩家看不出类型；开口有一半概率露破绽（台词表 undercover）
-      const undercover = !forceType && CUSTOMER[c.type].mvp && c.type !== 'middleman' && chance(rng, Math.round(POLICE.undercoverPpm * policeMultOf(repo, ownerId)));
+      const undercover = !forceType && CUSTOMER[c.type].mvp && c.type !== 'middleman' && chance(rng, Math.round(POLICE.undercoverPpm * policeMultOf(repo, ownerId) * repo.newsEffects().policeMult));
       const greetType = undercover && chance(rng, POLICE.tellPpm) ? 'undercover' : c.type;
       const newId = repo.insertCustomer({
         owner_id: ownerId, day_key: day, slot: 0, seat: rows.length, type: c.type, demand: JSON.stringify(c.demand), float: c.float,

@@ -273,6 +273,24 @@ const MIGRATIONS: string[] = [
    ALTER TABLE players ADD COLUMN rep_black INTEGER NOT NULL DEFAULT 0;
    ALTER TABLE players ADD COLUMN rep_collectors INTEGER NOT NULL DEFAULT 0;
    ALTER TABLE players ADD COLUMN rep_police INTEGER NOT NULL DEFAULT 0;`,
+  // 22：新闻（DESIGN 8.2）。real 是隐藏属性（小道消息是真是假），绝不发给玩家
+  `CREATE TABLE news (
+     id         INTEGER PRIMARY KEY,
+     date       TEXT NOT NULL,
+     template   TEXT NOT NULL,
+     kind       TEXT NOT NULL,
+     target     TEXT,
+     title      TEXT NOT NULL,
+     body       TEXT NOT NULL,
+     source     TEXT NOT NULL,
+     real       INTEGER NOT NULL,
+     mult       REAL NOT NULL,
+     start_date TEXT NOT NULL,
+     end_date   TEXT NOT NULL,
+     manual     INTEGER NOT NULL DEFAULT 0,
+     created_at INTEGER NOT NULL
+   );
+   CREATE INDEX news_date ON news (date);`,
 ];
 
 /** 营业日在 customers、daily_usage 里的键 */
@@ -460,6 +478,11 @@ function createRepo(db: Database.Database) {
 
   const viewSql = db.prepare<[number], CardViewRow>(`${q.cardsWithTemplate} WHERE i.id = ?`);
 
+  /** 新闻效果（DESIGN 8.2）的缓存：src/news.ts 每个悉尼日、每次发新闻时刷新。市场价按系列乘新闻系数 */
+  let newsFx: NewsEffects = { seriesMult: {}, hotTags: [], policeMult: 1 };
+  let newsDay: string | null = null;
+  const view = (r: CardViewRow) => toCardView(r, newsFx.seriesMult[r.series_id] ?? 1);
+
   const repo = {
     db,
     getPlayer: (id: string) => q.getPlayer.get(id) ?? null,
@@ -544,6 +567,20 @@ function createRepo(db: Database.Database) {
     adminExchanges: (status: string | null, limit = 100) =>
       (status ? db.prepare('SELECT * FROM exchanges WHERE status = ? ORDER BY id DESC LIMIT ?').all(status, limit) : db.prepare('SELECT * FROM exchanges ORDER BY id DESC LIMIT ?').all(limit)) as ExchangeRow[],
     adminSetDay: (discordId: string, day: number) => db.prepare('UPDATE players SET game_day = ?, day_customer_count = 0 WHERE discord_id = ?').run(day, discordId),
+    // ---- 新闻（DESIGN 8.2） ----
+    insertNews: (n: { date: string; template: string; kind: string; target: string | null; title: string; body: string; source: string; real: boolean; mult: number; startDate: string; endDate: string; manual: boolean; now: number }) =>
+      Number(db.prepare('INSERT INTO news (date, template, kind, target, title, body, source, real, mult, start_date, end_date, manual, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+        .run(n.date, n.template, n.kind, n.target, n.title, n.body, n.source, n.real ? 1 : 0, n.mult, n.startDate, n.endDate, n.manual ? 1 : 0, n.now).lastInsertRowid),
+    /** 这一天的自动日报发了没有 */
+    autoNewsOn: (date: string) => !!db.prepare('SELECT 1 FROM news WHERE date = ? AND manual = 0').get(date),
+    /** fromDate 以来的新闻（新的在前），含隐藏的 real，只给服务器和管理页用 */
+    newsSince: (fromDate: string) => db.prepare('SELECT * FROM news WHERE date >= ? ORDER BY id DESC').all(fromDate) as NewsRow[],
+    /** today 这天生效的真新闻 */
+    activeNews: (today: string) => db.prepare('SELECT * FROM news WHERE real = 1 AND start_date <= ? AND end_date >= ? ORDER BY id').all(today, today) as NewsRow[],
+    setNewsEffects: (day: string, fx: NewsEffects) => { newsDay = day; newsFx = fx; },
+    newsEffects: () => newsFx,
+    newsEffectsDay: () => newsDay,
+
     // ---- 派系（DESIGN 8.4） ----
     setFactions: (discordId: string, f: { guild: number; black: number; collectors: number; police: number }) =>
       db.prepare('UPDATE players SET rep_guild = ?, rep_black = ?, rep_collectors = ?, rep_police = ? WHERE discord_id = ?').run(f.guild, f.black, f.collectors, f.police, discordId),
@@ -591,7 +628,7 @@ function createRepo(db: Database.Database) {
     /** 抵押中的卡（公开信息），按 id 给 */
     pawnedCards(ownerId: string): CardView[] {
       const rows = db.prepare(`${q.cardsWithTemplate} WHERE i.owner_id = ? AND i.location = 'pawned'`).all(ownerId) as CardViewRow[];
-      return rows.map(toCardView);
+      return rows.map(view);
     },
     /** 破产清空：珍藏柜以外的卡（库存、抵押中、送评中）、没拆的卡包、没送到的批发订单 */
     wipeForRestart(ownerId: string) {
@@ -637,7 +674,7 @@ function createRepo(db: Database.Database) {
       db.prepare("SELECT * FROM card_instances WHERE owner_id = ? AND location = 'grading' AND ready_day <= ? ORDER BY id").all(ownerId, day) as InstanceRow[],
     gradingCards(ownerId: string): CardView[] {
       const rows = db.prepare(`${q.cardsWithTemplate} WHERE i.owner_id = ? AND i.location = 'grading' ORDER BY i.id`).all(ownerId) as CardViewRow[];
-      return rows.map(toCardView);
+      return rows.map(view);
     },
     /** 评级社出结果后回到库存（调用方再放进卡册或桌面）：封壳（评分、分项、错版公开）或拒评标记 */
     backFromGrading: (cardId: number, fields: { slab?: { score: string; subgrades: unknown; errata: boolean }; rejected?: boolean }) =>
@@ -677,7 +714,7 @@ function createRepo(db: Database.Database) {
     // ---- 读给玩家看的卡牌：只有公开信息 ----
     cardView: (id: number): CardView | null => {
       const row = viewSql.get(id);
-      return row ? toCardView(row) : null;
+      return row ? view(row) : null;
     },
     inventory(ownerId: string, opts: { rarity?: string; location?: CardLocation; page: number; pageSize: number }) {
       const where = ['i.owner_id = ?'];
@@ -688,7 +725,7 @@ function createRepo(db: Database.Database) {
       const total = (db.prepare(`SELECT COUNT(*) AS n FROM card_instances i JOIN card_templates t ON t.id = i.template_id WHERE ${w}`).get(...args) as { n: number }).n;
       const rows = db.prepare(`${q.cardsWithTemplate} WHERE ${w} ORDER BY i.id DESC LIMIT ? OFFSET ?`)
         .all(...args, opts.pageSize, (opts.page - 1) * opts.pageSize) as CardViewRow[];
-      return { total, cards: rows.map(toCardView) };
+      return { total, cards: rows.map(view) };
     },
     ownedInstance: (ownerId: string, id: number) =>
       (db.prepare('SELECT * FROM card_instances WHERE id = ? AND owner_id = ?').get(id, ownerId) as InstanceRow | undefined) ?? null,
@@ -699,7 +736,7 @@ function createRepo(db: Database.Database) {
     /** 能拿去柜台卖的卡：卡册、桌面、珍藏柜里的都能卖（2026-11-17 用户定：珍藏柜只防抵押、防清空，不防卖） */
     sellableCards(ownerId: string, limit = 1000): CardView[] {
       const rows = db.prepare(`${q.cardsWithTemplate} WHERE i.owner_id = ? AND i.location IN ('inventory', 'showcase') ORDER BY i.id DESC LIMIT ?`).all(ownerId, limit) as CardViewRow[];
-      return rows.map(toCardView);
+      return rows.map(view);
     },
     deleteCard: (id: number) => db.prepare('DELETE FROM card_instances WHERE id = ?').run(id),
     setCreditsReputation: (discordId: string, credits: number, reputation: number) =>
@@ -721,11 +758,11 @@ function createRepo(db: Database.Database) {
     /** 珍藏柜里的卡（公开信息），最值钱的在前 */
     /** 某个位置上的卡（公开信息），比如藏匿室 */
     cardsAt(ownerId: string, location: CardLocation): CardView[] {
-      return (db.prepare(`${q.cardsWithTemplate} WHERE i.owner_id = ? AND i.location = ? ORDER BY i.id`).all(ownerId, location) as CardViewRow[]).map(toCardView);
+      return (db.prepare(`${q.cardsWithTemplate} WHERE i.owner_id = ? AND i.location = ? ORDER BY i.id`).all(ownerId, location) as CardViewRow[]).map(view);
     },
     showcaseCards(ownerId: string): CardView[] {
       const rows = db.prepare(`${q.cardsWithTemplate} WHERE i.owner_id = ? AND i.location = 'showcase' ORDER BY i.id`).all(ownerId) as CardViewRow[];
-      return rows.map(toCardView).sort((a, b) => b.price - a.price);
+      return rows.map(view).sort((a, b) => b.price - a.price);
     },
     updateCustomer: (id: number, c: { patience: number; status: string; line: string; counter_price: number | null }) =>
       db.prepare('UPDATE customers SET patience = ?, status = ?, line = ?, counter_price = ? WHERE id = ?').run(c.patience, c.status, c.line, c.counter_price, id),
@@ -743,16 +780,16 @@ function createRepo(db: Database.Database) {
     /** 散放在桌面上的卡（在库存里、不在任何卡册里），最值钱的排前面由调用方排 */
     looseCards(ownerId: string): CardView[] {
       const rows = db.prepare(`${q.cardsWithTemplate} WHERE i.owner_id = ? AND i.location = 'inventory' AND i.binder_id IS NULL ORDER BY i.id`).all(ownerId) as CardViewRow[];
-      return rows.map(toCardView);
+      return rows.map(view);
     },
     /** 一本卡册里的全部卡（按稀有度从高到低），柜台按顾客需要重新排 */
     allBinderCards(binderId: number): CardView[] {
       const rows = db.prepare(`${q.cardsWithTemplate} WHERE i.binder_id = ? AND i.location = 'inventory' ORDER BY ${BINDER_ORDER}`).all(binderId) as CardViewRow[];
-      return rows.map(toCardView);
+      return rows.map(view);
     },
     binderCards(binderId: number, page: number, pageSize: number): CardView[] {
       const rows = db.prepare(`${q.cardsWithTemplate} WHERE i.binder_id = ? ORDER BY ${BINDER_ORDER} LIMIT ? OFFSET ?`).all(binderId, pageSize, (page - 1) * pageSize) as CardViewRow[];
-      return rows.map(toCardView);
+      return rows.map(view);
     },
     /** 磨损：只改隐藏的品相，不发给玩家 */
     setGrade: (cardId: number, grade: string) => db.prepare('UPDATE card_instances SET grade = ? WHERE id = ?').run(grade, cardId),
@@ -822,7 +859,7 @@ interface CardViewRow {
 }
 
 /** 唯一一个把卡牌交给玩家的出口：字段白名单，隐藏属性根本不在 CardViewRow 里 */
-function toCardView(r: CardViewRow): CardView {
+function toCardView(r: CardViewRow, newsMult = 1): CardView {
   return {
     id: r.id,
     templateId: r.template_id,
@@ -838,7 +875,7 @@ function toCardView(r: CardViewRow): CardView {
     binderId: r.binder_id,
     looseSinceDay: r.location === 'inventory' && r.binder_id === null ? r.loose_since_day : null,
     // 只有封壳后公开的评分参与定价（FR-APPR-5）
-    price: publicPrice({ rarity: r.rarity, style: r.style, publicGrade: r.slab_score ? (r.slab_score === 'BL' ? 'BL' : Number(r.slab_score) as Grade) : null, publicErrata: r.slab_errata === 1 }),
+    price: publicPrice({ rarity: r.rarity, style: r.style, publicGrade: r.slab_score ? (r.slab_score === 'BL' ? 'BL' : Number(r.slab_score) as Grade) : null, publicErrata: r.slab_errata === 1 }, { news: newsMult }),
     createdAt: r.created_at,
     slab: r.slab_score ? { score: r.slab_score, subgrades: JSON.parse(r.slab_subgrades ?? '{}') as Record<string, number>, errata: r.slab_errata === 1 } : null,
     gradeRejected: r.grade_rejected === 1,
@@ -848,3 +885,9 @@ function toCardView(r: CardViewRow): CardView {
 }
 
 export type Repo = ReturnType<typeof openDb>;
+
+export interface NewsRow {
+  id: number; date: string; template: string; kind: string; target: string | null; title: string; body: string;
+  source: 'official' | 'rumor'; real: number; mult: number; start_date: string; end_date: string; manual: number; created_at: number;
+}
+export interface NewsEffects { seriesMult: Record<string, number>; hotTags: string[]; policeMult: number }

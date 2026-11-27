@@ -111,6 +111,8 @@ export function rollCustomer(rng: Rng, input: {
   forceType?: CustomerType;
   /** 珍藏柜展示分的效果：预算和心理价位（float）一起乘 priceMult，耐心加 patienceBonus */
   showcase?: { priceMult: number; patienceBonus: number };
+  /** 新闻（DESIGN 8.2）带火的标签：没点名标签的客人再多一次 tagChance 点名其中一个 */
+  hotTags?: string[];
 }): RolledCustomer {
   const type = input.forceType ?? pickPpm(rng, MVP_TYPES, (t) => CUSTOMER[t].ppm);
   const wants = CUSTOMER[type].wants;
@@ -139,6 +141,8 @@ export function rollCustomer(rng: Rng, input: {
       const tags = own ? own.tags : [...new Set(input.templates.flatMap((x) => x.tags))];
       if (tags.length) tag = tags[rng.int(tags.length)]!;
     }
+    const hot = input.hotTags ?? [];
+    if (tag === null && type !== 'middleman' && hot.length && chance(rng, wants.tagChance)) tag = hot[rng.int(hot.length)]!;
     demand = { kind: 'card', rarities: wants.rarities, tag, templateId: null, templateName: null };
     const ref = own?.price ?? input.typicalPrice(wants.rarities);
     refPrice = ref;

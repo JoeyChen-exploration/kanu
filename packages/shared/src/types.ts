@@ -694,3 +694,28 @@ export interface RegistryResponse {
   onRegistry: boolean;
   registryLeft: number;
 }
+
+/** 空间站日报的一条新闻（DESIGN 8.2）。真假是隐藏属性，不在这里 */
+export interface NewsView {
+  id: number;
+  /** 发布的悉尼日 */
+  date: string;
+  title: string;
+  body: string;
+  /** official 空间站日报；rumor 小道消息（可能是假的） */
+  source: 'official' | 'rumor';
+  /** 影响哪几天（悉尼日，含首尾）；假新闻也照样写，不泄露真假 */
+  startDate: string;
+  endDate: string;
+}
+/** GET /api/news */
+export interface NewsResponse {
+  ok: true;
+  /** 今天（悉尼日） */
+  today: string;
+  /** 最近 NEWS.keepDays 天，新的在前 */
+  items: NewsView[];
+}
+/** 管理页：带隐藏的真假和数值 */
+export interface AdminNewsItem extends NewsView { kind: string; target: string | null; real: boolean; mult: number; manual: boolean; template: string }
+export interface AdminNewsResponse { ok: true; items: AdminNewsItem[]; templates: Array<{ id: string; kind: string; title: string }>; series: Array<{ id: string; name: string }>; tags: string[] }

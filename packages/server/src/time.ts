@@ -4,6 +4,10 @@ const dayFmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Sydney', 
 /** 悉尼日历日，'YYYY-MM-DD' */
 export const sydneyDay = (now: number) => dayFmt.format(new Date(now));
 
+const hourFmt = new Intl.DateTimeFormat('en-GB', { timeZone: 'Australia/Sydney', hour: '2-digit', hourCycle: 'h23' });
+/** 悉尼时间几点（0–23） */
+export const sydneyHour = (now: number) => Number(hourFmt.format(new Date(now)));
+
 const weekdayFmt = new Intl.DateTimeFormat('en-US', { timeZone: 'Australia/Sydney', weekday: 'short' });
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 

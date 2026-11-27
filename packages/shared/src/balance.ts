@@ -103,9 +103,11 @@ export const FACTIONS = {
     middlemanSale: { black: 5, guild: -1 },
     blackPack: { black: 2, guild: -1, police: -1 },
     collectorHighGrade: { collectors: 3 },
-    reportCorrect: { guild: 3, black: -3, police: 5 },
+    // 黑市睚眦必报（2026-11-27 用户定）：举报对了 −15，错举也 −5（报了警就是报了警），巡查时交出赃卡 −5
+    reportCorrect: { guild: 3, black: -15, police: 5 },
+    reportFalse: { black: -5 },
     patrolBribe: { police: -10 },
-    patrolSurrender: { police: 2 },
+    patrolSurrender: { police: 2, black: -5 },
     undercoverBust: { police: -5 },
   } as Record<string, Partial<Record<FactionId | 'police', number>>>,
   /** 卖真卡加正规商会好感每个营业日最多几次 */

@@ -540,7 +540,7 @@ export function registerCounterRoutes(app: FastifyInstance, deps: Deps, now: () 
       releaseOffers(demand);
       repo.updateCustomer(c.id, { patience: 0, status: 'reported', line: say('dealer', correct ? 'busted' : 'false_report'), counter_price: null });
       repo.logEvent(userId, t, 'report_dealer', { customer: c.id, correct, bonus, stolen: stolen.length });
-      if (correct) bumpFaction(repo, userId, 'reportCorrect', t, player.game_day);
+      bumpFaction(repo, userId, correct ? 'reportCorrect' : 'reportFalse', t, player.game_day);
       const state = counterState(userId, t);
       const response: ReportResponse = { ok: true, correct, bonus, credits, reputation, next: state.current, done: state.done };
       repo.putIdempotent(userId, key, response, t);
